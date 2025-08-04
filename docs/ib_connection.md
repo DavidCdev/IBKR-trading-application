@@ -1316,3 +1316,34 @@ The system successfully handles:
 - ✅ Test-verified functionality with 100% success rates
 
 This implementation serves as a complete reference for building robust IB trading systems with bracket order management and realistic market integration. 
+
+
+
+### New Features (2024)
+
+- **Historical Data Fetching**:  
+  Fetch historical 1-minute bar data for any contract (stock, option, etc.) via the event bus.
+  - **Event:** `market_data.request_historical`
+  - **Emits:** `market_data.historical_update`
+- **FX Rate Auto-Subscription & Calculation**:  
+  If the account base currency differs from the underlying’s currency, the system automatically subscribes to the relevant FX rate (e.g., USD.CAD), calculates both direct and reciprocal rates, and emits them for display.
+  - **Event:** `fx.request_rate`
+  - **Emits:** `fx.rate_update`
+
+### Example Usage
+
+```python
+# Fetch historical 1-minute bars for AAPL
+event_bus.emit('market_data.request_historical', {
+    'symbol': 'AAPL',
+    'secType': 'STK',
+    'duration': '1 D',
+    'barSize': '1 min'
+})
+
+# Request FX rate between account and underlying currency
+event_bus.emit('fx.request_rate', {
+    'underlying_symbol': 'AAPL',
+    'underlying_currency': 'USD'
+})
+```

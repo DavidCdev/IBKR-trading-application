@@ -303,6 +303,8 @@ class IBConnectionManager:
             'cancel_order': self._handle_cancel_order,
             'get_active_contract_status': self._handle_get_active_contract_status,
             'test_event': self._handle_test_event,
+            'market_data.request_historical': self._handle_request_historical_data,
+            'fx.request_rate': self._handle_request_fx_rate,
         }
 
         # Event mapping for legacy compatibility - automatically transforms old events to new format
@@ -354,6 +356,10 @@ class IBConnectionManager:
         # Register legacy compatibility handlers - maintains backward compatibility
         for legacy_event, (new_event, transformer) in self._event_mappings.items():
             self.event_bus.on(legacy_event, self._create_legacy_handler(new_event, transformer))
+        
+        # Register new handlers for historical data and FX rate
+        self.event_bus.on('market_data.request_historical', self._handle_request_historical_data)
+        self.event_bus.on('fx.request_rate', self._handle_request_fx_rate)
         
         logger.debug("Event bus handlers registered")
     
@@ -2474,3 +2480,116 @@ class IBConnectionManager:
             
         except Exception as e:
             logger.error(f"Error handling commission report: {e}", exc_info=True)
+
+    # === FX RATE MANAGEMENT ===
+
+    async def _handle_request_fx_rate(self, data: dict):
+        """
+        Handle FX rate subscription and calculation.
+        If account base currency != underlying currency, subscribe to FX rate and calculate direct/reciprocal rates.
+        Emits 'fx.rate_update' event with both rates.
+        """
+        # Determine base and quote currencies
+        account_currency = self._connection_params.get('account_currency')
+        underlying_symbol = data.get('underlying_symbol', self._underlying_symbol)
+        underlying_currency = data.get('underlying_currency', 'USD')
+        
+        if not account_currency:
+            # Try to get from config or IB
+            account_currency = str(self.config_manager.get('connection', 'base_currency', 'USD') or 'USD')
+        if not underlying_currency:
+            underlying_currency = 'USD'
+        
+        if account_currency == underlying_currency:
+            # No FX needed
+            fx_rate = 1.0
+            reciprocal_rate = 1.0
+            self.event_bus.emit('fx.rate_update', {
+                'pair': f'{account_currency}.{underlying_currency}',
+                'rate': fx_rate,
+                'reciprocal_rate': reciprocal_rate,
+                'timestamp': datetime.now().isoformat(),
+                'note': 'No FX conversion needed.'
+            })
+            return
+        
+        # Subscribe to FX rate (e.g., USD.CAD)
+        pair = f'{account_currency}{underlying_currency}'
+        reverse_pair = f'{underlying_currency}{account_currency}'
+        fx_contract = self._create_contract_from_data({'symbol': pair, 'secType': 'CASH', 'exchange': 'IDEALPRO'})
+        reverse_fx_contract = self._create_contract_from_data({'symbol': reverse_pair, 'secType': 'CASH', 'exchange': 'IDEALPRO'})
+        
+        # Subscribe to both directions for safety
+        ticker = self.ib.reqMktData(fx_contract, '', False, False)
+        reverse_ticker = self.ib.reqMktData(reverse_fx_contract, '', False, False)
+        await asyncio.sleep(1)  # Wait for price update
+        
+        fx_rate = ticker.last if ticker.last and not util.isNan(ticker.last) else ticker.close
+        reciprocal_rate = reverse_ticker.last if reverse_ticker.last and not util.isNan(reverse_ticker.last) else reverse_ticker.close
+        
+        # Calculate reciprocal if only one is available
+        if fx_rate and not reciprocal_rate:
+            reciprocal_rate = 1.0 / fx_rate if fx_rate else None
+        elif reciprocal_rate and not fx_rate:
+            fx_rate = 1.0 / reciprocal_rate if reciprocal_rate else None
+        
+        self.event_bus.emit('fx.rate_update', {
+            'pair': pair,
+            'rate': fx_rate,
+            'reciprocal_pair': reverse_pair,
+            'reciprocal_rate': reciprocal_rate,
+            'timestamp': datetime.now().isoformat()
+        })
+        # Optionally cancel market data after fetch
+        self.ib.cancelMktData(fx_contract)
+        self.ib.cancelMktData(reverse_fx_contract)
+
+    # === HISTORICAL DATA MANAGEMENT ===
+
+    @require_connection('market_data.historical_error')
+    @handle_errors('market_data.historical_update', 'market_data.historical_error')
+    async def _handle_request_historical_data(self, data: dict):
+        """
+        Fetch historical 1-minute bar data for a contract.
+        Emits 'market_data.historical_update' with the bar data.
+        Example data: {'symbol': 'AAPL', 'secType': 'STK', 'duration': '1 D', 'barSize': '1 min'}
+        """
+        contract = self._create_contract_from_data(data.get('contract', data))
+        if not contract:
+            raise ValueError(f"Could not create contract from data: {data}")
+        qualified = await self.ib.qualifyContractsAsync(contract)
+        if not qualified or qualified[0] is None:
+            raise ValueError(f"Could not qualify contract: {contract}")
+        qualified_contract = qualified[0]
+        duration = data.get('duration', '1 D')
+        bar_size = data.get('barSize', '1 min')
+        what_to_show = data.get('whatToShow', 'TRADES')
+        use_rth = data.get('useRTH', 1)
+        
+        bars = await self.ib.reqHistoricalDataAsync(
+            qualified_contract,
+            endDateTime='',
+            durationStr=duration,
+            barSizeSetting=bar_size,
+            whatToShow=what_to_show,
+            useRTH=use_rth,
+            formatDate=1
+        )
+        # Convert bars to serializable format
+        bar_data = [
+            {
+                'date': bar.date,
+                'open': bar.open,
+                'high': bar.high,
+                'low': bar.low,
+                'close': bar.close,
+                'volume': bar.volume
+            } for bar in bars
+        ]
+        return {
+            'symbol': qualified_contract.symbol,
+            'secType': qualified_contract.secType,
+            'conId': qualified_contract.conId,
+            'bars': bar_data,
+            'count': len(bar_data)
+        }
