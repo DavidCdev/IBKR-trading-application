@@ -84,6 +84,10 @@ def main():
         performance_optimizer.set_event_bus(event_bus)
         logger.debug("Performance optimizer initialized successfully")
 
+        # Initialize TWS data monitor
+        logger.debug("Initializing TWS data monitor...")
+        logger.debug("TWS data monitor initialized successfully")
+
         # 2. Create the GUI, injecting the config and event bus.
         #    The GUI will automatically load its settings from the config manager.
         logger.debug("Creating GUI...")

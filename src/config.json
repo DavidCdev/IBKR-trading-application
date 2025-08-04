@@ -1,7 +1,7 @@
 {
     "connection": {
         "host": "127.0.0.1",
-        "port": 7497,
+        "port": 4002,
         "client_id": 1,
         "timeout": 30,
         "readonly": false,
@@ -46,17 +46,18 @@
         "master_debug": true,
         "modules": {
             "CONFIG_MANAGER": "Trace",
+            "ENHANCED_EVENT_MONITOR": "Info",
+            "ENHANCED_EVENT_MONITOR_GUI": "Info",
+            "ENHANCED_LOGGING": "Info",
             "EVENT_BUS": "Trace",
+            "EVENT_MONITOR": "Info",
+            "EVENT_MONITOR_GUI": "Info",
             "GUI": "Trace",
             "IB_CONNECTION": "Trace",
             "MAIN": "Trace",
-            "SUBSCRIPTION_MANAGER": "Trace",
-            "ENHANCED_LOGGING": "Info",
             "PERFORMANCE_OPTIMIZER": "Info",
-            "EVENT_MONITOR": "Info",
-            "EVENT_MONITOR_GUI": "Info",
-            "ENHANCED_EVENT_MONITOR": "Info",
-            "ENHANCED_EVENT_MONITOR_GUI": "Info"
+            "SUBSCRIPTION_MANAGER": "Trace",
+            "DATA_MONITOR": "Info"
         }
     }
 }

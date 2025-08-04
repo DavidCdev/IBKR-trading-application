@@ -82,6 +82,10 @@ class SubscriptionManager:
         """
         logger.info("Initializing SubscriptionManager")
         
+        # Start background thread to monitor for noon resubscription
+        threading.Thread(target=self._noon_resubscription_monitor, daemon=True).start()
+
+
         self.event_bus = event_bus
         self.config_manager = config_manager
         self.config = SubscriptionConfig(
@@ -109,6 +113,21 @@ class SubscriptionManager:
         
         logger.info("SubscriptionManager initialized successfully")
     
+    def _noon_resubscription_monitor(self):
+        """Monitor system time and trigger resubscription at 12:00:00 PM EST."""
+        est = pytz.timezone(self.config.market_timezone)
+        already_triggered = False
+        while True:
+            now = datetime.now(est)
+            if now.hour == 12 and now.minute == 0 and now.second == 0:
+                if not already_triggered:
+                    logger.info("Noon EST reached, triggering resubscription to 1DTE contracts")
+                    self._select_and_subscribe_options()
+                    already_triggered = True
+            else:
+                already_triggered = False
+            time.sleep(1)
+
     def _register_event_handlers(self):
         """Register all event handlers for subscription management."""
         logger.debug("Registering event handlers")
@@ -428,41 +447,33 @@ class SubscriptionManager:
         # Fallback to nearest expiration
         return sorted_expirations[0] if sorted_expirations else None
     
-    def _select_strike_price(self, expiration: str) -> Optional[float]:
-        """Select strike price closest to underlying price that's ITM."""
-        if not self.underlying_price:
-            return None
-        
-        # Filter options for the target expiration
-        expiration_options = [
-            opt for opt in self.options_chain 
-            if opt.get('expiration') == expiration
-        ]
-        
-        if not expiration_options:
-            return None
-        
-        # Find ITM options closest to underlying price
-        itm_options = []
-        
-        for option in expiration_options:
-            strike = option.get('strike', 0)
-            option_type = option.get('right', '').upper()
-            
-            if option_type in ['C', 'CALL'] and strike < self.underlying_price:
-                itm_options.append((strike, 'CALL'))
-            elif option_type in ['P', 'PUT'] and strike > self.underlying_price:
-                itm_options.append((strike, 'PUT'))
-        
-        if not itm_options:
-            logger.warning("No ITM options found")
-            return None
-        
-        # Find strike closest to underlying price
-        closest_strike = min(itm_options, key=lambda x: abs(x[0] - self.underlying_price))
-        logger.info(f"Selected strike: {closest_strike[0]} ({closest_strike[1]})")
-        
-        return closest_strike[0]
+        def _select_strike_price(self, expiration: str) -> Optional[float]:
+            """Select strike price by rounding underlying price to nearest integer."""
+            if not self.underlying_price:
+                return None
+
+            # Round to nearest integer
+            rounded_strike = round(self.underlying_price)
+
+            # Check if this strike exists in the options chain for the given expiration
+            expiration_options = [
+                opt for opt in self.options_chain
+                if opt.get('expiration') == expiration and opt.get('strike') == rounded_strike
+            ]
+            if expiration_options:
+                logger.info(f"Selected rounded strike: {rounded_strike}")
+                return rounded_strike
+            else:
+                # Fallback: find the closest available strike
+                all_strikes = [
+                    opt.get('strike') for opt in self.options_chain
+                    if opt.get('expiration') == expiration and opt.get('strike') is not None
+                ]
+                if not all_strikes:
+                    return None
+                closest_strike = min(all_strikes, key=lambda x: abs(x - self.underlying_price))
+                logger.info(f"Rounded strike not found, using closest: {closest_strike}")
+                return closest_strike
     
     def _subscribe_to_options(self, expiration: str, strike: float):
         """Subscribe to call and put options for the selected expiration and strike."""
@@ -1033,4 +1044,4 @@ class SubscriptionManager:
             'active_contracts_count': len([ac for ac in self.active_contracts if ac.is_active]),
             'current_subscriptions_count': len(self.current_subscriptions),
             'options_chain_count': len(self.options_chain)
-        } 
+        }
