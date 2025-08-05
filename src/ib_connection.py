@@ -80,6 +80,7 @@ from functools import wraps
 from ib_async import IB, Contract, Order, Trade, Ticker, Stock, Option, Forex
 from ib_async import MarketOrder, LimitOrder, StopOrder, util, ExecutionFilter
 from ib_async.objects import Fill, CommissionReport, PnL, AccountValue
+import config_manager
 from logger import get_logger
 from enhanced_logging import log_connection_state, log_performance
 from event_bus import EventBus, EventPriority
@@ -175,6 +176,7 @@ class IBConnectionContext:
     
     def __init__(self, ib_connection):
         self.ib_connection = ib_connection
+        # self.config = config_manager
         self._entered = False
     
     async def __aenter__(self):
@@ -318,6 +320,7 @@ class IBConnectionManager:
         }
         
         self._register_ib_callbacks()
+        print("Starting to subscribe to events")
         self._subscribe_to_events()
         
         logger.info("IBConnectionManager Initialized")

@@ -1,7 +1,7 @@
 {
     "connection": {
         "host": "127.0.0.1",
-        "port": 4002,
+        "port": 7499,
         "client_id": 1,
         "timeout": 30,
         "readonly": false,
@@ -46,6 +46,7 @@
         "master_debug": true,
         "modules": {
             "CONFIG_MANAGER": "Trace",
+            "DATA_MONITOR": "Info",
             "ENHANCED_EVENT_MONITOR": "Info",
             "ENHANCED_EVENT_MONITOR_GUI": "Info",
             "ENHANCED_LOGGING": "Info",
@@ -56,8 +57,7 @@
             "IB_CONNECTION": "Trace",
             "MAIN": "Trace",
             "PERFORMANCE_OPTIMIZER": "Info",
-            "SUBSCRIPTION_MANAGER": "Trace",
-            "DATA_MONITOR": "Info"
+            "SUBSCRIPTION_MANAGER": "Trace"
         }
     }
 }

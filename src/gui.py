@@ -74,7 +74,7 @@ class IBTradingGUI:
                 }
             }
             self.config_manager = MockConfigManager(mock_config_data)
-            standalone_mode = True 
+            standalone_mode = False 
             logger.info("Running in standalone mode with mock config.")
         else:
             self.config_manager = config_manager
@@ -123,7 +123,7 @@ class IBTradingGUI:
         self._load_preferences_from_config() # Load initial config
         if standalone_mode:
             logger.debug("Populating with fake data for standalone mode")
-            self._populate_with_fake_data()
+            # self._populate_with_fake_data()
             # Force GUI update to ensure data is displayed
             self.root.update()
         

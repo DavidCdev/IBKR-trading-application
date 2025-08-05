@@ -86,7 +86,7 @@ class ConfigManager:
         default_config = {
             "connection": {
                 "host": "127.0.0.1",
-                "port": 7497,
+                "port": 7499,
                 "client_id": 1
             },
             "trading": {

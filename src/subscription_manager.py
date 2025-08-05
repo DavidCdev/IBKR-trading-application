@@ -82,15 +82,16 @@ class SubscriptionManager:
         """
         logger.info("Initializing SubscriptionManager")
         
-        # Start background thread to monitor for noon resubscription
-        threading.Thread(target=self._noon_resubscription_monitor, daemon=True).start()
-
-
         self.event_bus = event_bus
         self.config_manager = config_manager
         self.config = SubscriptionConfig(
             underlying_symbol=config_manager.get('trading', 'underlying_symbol', 'SPY')
         )
+        print("SubscriptionManager: config", self.config)
+
+        # Start background thread to monitor for noon resubscription
+        threading.Thread(target=self._noon_resubscription_monitor, daemon=True).start()
+
         
         # State management
         self.state = SubscriptionState.DISCONNECTED
