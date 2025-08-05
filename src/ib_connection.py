@@ -952,15 +952,14 @@ class IBConnectionManager:
                 
                 # Check if we've exceeded max attempts
                 if connection_attempts >= max_attempts:
+
                     logger.error(f"Maximum connection attempts ({max_attempts}) reached. Stopping reconnection.")
-                    
+
                     # Log max attempts reached
-                    log_connection_state(connection_id, "error", 
-                                       self._connection_params['host'], 
-                                       self._connection_params['port'],
-                                       error_message=f"Maximum connection attempts ({max_attempts}) reached",
-                                       retry_count=connection_attempts)
-                    
+                    log_connection_state(connection_id, "error", self._connection_params['host'],
+                            self._connection_params['port'],
+                            error_message=f"Maximum connection attempts ({max_attempts}) reached", retry_count=connection_attempts)
+
                     self.event_bus.emit('ib.error', {
                         'message': f'Maximum connection attempts reached after {max_attempts} attempts',
                         'connection_attempts': connection_attempts
@@ -2188,13 +2187,20 @@ class IBConnectionManager:
             self.connection_attempts = 0
             
             # Emit connection success event
+            # connection_data = {
+            #     'host': self.config.get('connection', 'host', '127.0.0.1'),
+            #     'port': self.config.get('connection', 'port', 7497),
+            #     'client_id': self.config.get('connection', 'client_id', 1),
+            #     'timestamp': datetime.now().isoformat()
+            # }
+            
             connection_data = {
-                'host': self.config.get('connection', 'host', '127.0.0.1'),
-                'port': self.config.get('connection', 'port', 7497),
-                'client_id': self.config.get('connection', 'client_id', 1),
+                'host': self.config_manager.get('connection', 'host', '127.0.0.1'),
+                'port': self.config_manager.get('connection', 'port', 7497),
+                'client_id': self.config_manager.get('connection', 'client_id', 1),
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             self.event_bus.emit('ib.connected', connection_data, priority=EventPriority.HIGH)
             
             # Immediately request account data
@@ -2211,9 +2217,9 @@ class IBConnectionManager:
             
             # Emit disconnection event
             disconnection_data = {
-                'host': self.config.get('connection', 'host', '127.0.0.1'),
-                'port': self.config.get('connection', 'port', 7497),
-                'client_id': self.config.get('connection', 'client_id', 1),
+                'host': self.config_manager.get('connection', 'host', '127.0.0.1'),
+                'port': self.config_manager.get('connection', 'port', 7497),
+                'client_id': self.config_manager.get('connection', 'client_id', 1),
                 'timestamp': datetime.now().isoformat()
             }
             

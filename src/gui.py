@@ -559,6 +559,7 @@ class IBTradingGUI:
         except (ValueError, TypeError):
             # This handles cases where the value is '-' or invalid
             logger.debug(f"Could not parse PnL value: '{pnl_usd_str}'")
+            self.active_contract_vars['pnl_usd'].set("N/A")
             pass 
 
         if hasattr(self, 'active_contract_labels'):
