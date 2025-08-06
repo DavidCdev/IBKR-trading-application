@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>784</width>
-    <height>642</height>
+    <width>824</width>
+    <height>637</height>
    </rect>
   </property>
   <property name="font">
@@ -1250,28 +1250,6 @@ QPushButton:pressed {
      </layout>
     </item>
    </layout>
-  </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>784</width>
-     <height>21</height>
-    </rect>
-   </property>
-   <widget class="QMenu" name="menuMain">
-    <property name="title">
-     <string>Main</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuSetting">
-    <property name="title">
-     <string>Setting</string>
-    </property>
-   </widget>
-   <addaction name="menuMain"/>
-   <addaction name="menuSetting"/>
   </widget>
   <widget class="QStatusBar" name="statusbar">
    <property name="layoutDirection">
