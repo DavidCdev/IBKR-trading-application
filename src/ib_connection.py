@@ -71,7 +71,6 @@ IMPORTANT UPDATES:
 """
 
 import asyncio
-import logging
 import time
 from datetime import date, timedelta, datetime
 from typing import Dict, List, Optional, Any, Union, Callable
@@ -1555,41 +1554,41 @@ class IBConnectionManager:
         symbol = data.get('symbol', '')
         quantity = data.get('totalQuantity', 0)
         limit_price = data.get('lmtPrice', 0)
-        
+
         if not symbol or quantity <= 0 or limit_price <= 0:
             raise ValueError("Invalid sell order data")
-        
+
         logger.info(f"Selling position: {quantity} of {symbol} @ ${limit_price}")
-        
+
         # Cancel any existing bracket orders for this symbol
         await self._cancel_bracket_orders_for_symbol(symbol)
-        
+
         # Create contract for the sell order
         contract = Contract()
         contract.symbol = symbol
         contract.secType = 'STK'
         contract.exchange = 'SMART'
         contract.currency = 'USD'
-        
+
         # Place the primary limit sell order
         sell_order = LimitOrder(
             action='SELL',
             totalQuantity=quantity,
             lmtPrice=limit_price
         )
-        
+
         sell_trade = self.ib.placeOrder(contract, sell_order)
-        
+
         # Store order ID for tests
         self.last_order_id = sell_order.orderId
-        
+
         self._pending_orders[sell_order.orderId] = {
             'contract': contract,
             'order': sell_order,
             'trade': sell_trade,
             'type': 'position_exit'
         }
-        
+
         logger.info(f"Successfully placed sell order {sell_order.orderId} for {symbol}.")
         return True
 
@@ -1616,7 +1615,7 @@ class IBConnectionManager:
                 if pos.contract.conId == contract.conId:
                     current_position = pos.position
                     break
-            
+
             if current_position == 0:
                 logger.info(f"Chaser: Position for {contract.localSymbol} is already 0. No action needed.")
                 if original_trade.order.permId: # Check if order is still cancellable
@@ -1654,35 +1653,35 @@ class IBConnectionManager:
         order_id = data.get('order_id')
         if not order_id:
             raise ValueError("No order_id provided for cancellation")
-        
+
         open_trades = self.ib.openTrades()
-        
+
         for trade in open_trades:
             if (hasattr(trade, 'order') and
                 hasattr(trade.order, 'orderId') and
                 trade.order.orderId == order_id):
-                
+
                 self.ib.cancelOrder(trade.order)
                 logger.info(f"Cancelled order: {order_id}")
-                
+
                 if order_id in self._pending_orders:
                     del self._pending_orders[order_id]
-                
+
                 return True
-        
+
         logger.warning(f"Order {order_id} not found in open orders")
         return False
-    
+
     async def _cancel_bracket_orders_for_position(self, active_contract: ActiveContract):
         """Cancel bracket orders associated with a position."""
         orders_to_cancel = []
-        
+
         # Method 1: Try to get order IDs from active contract
         if active_contract.stop_loss_order_id:
             orders_to_cancel.append(active_contract.stop_loss_order_id)
         if active_contract.take_profit_order_id:
             orders_to_cancel.append(active_contract.take_profit_order_id)
-        
+
         # Method 2: If no order IDs in active contract, try to find bracket orders by parent ID
         if not orders_to_cancel and active_contract.parent_order_id:
             bracket_info = self._bracket_orders.get(active_contract.parent_order_id, {})
@@ -1693,24 +1692,24 @@ class IBConnectionManager:
                     orders_to_cancel.append(stop_loss_id)
                 if take_profit_id:
                     orders_to_cancel.append(take_profit_id)
-        
+
         # Method 3: Find all bracket orders for this symbol
         if not orders_to_cancel:
             open_trades = self.ib.openTrades()
             for trade in open_trades:
                 order = trade.order
                 contract = trade.contract
-                
+
                 # Check if this is a bracket order for the same symbol
                 if (hasattr(order, 'parentId') and order.parentId and
                     hasattr(contract, 'symbol') and contract.symbol == active_contract.contract.symbol):
                     orders_to_cancel.append(order.orderId)
                     logger.info(f"Found bracket order to cancel: {order.orderId} (parent: {order.parentId})")
-        
+
         # Cancel the orders
         open_trades = self.ib.openTrades()
         cancelled_count = 0
-        
+
         for order_id in orders_to_cancel:
             for trade in open_trades:
                 if (hasattr(trade, 'order') and
@@ -1724,33 +1723,33 @@ class IBConnectionManager:
                     except Exception as e:
                         logger.warning(f"Error cancelling order {order_id}: {e}")
                     break
-        
+
         # Clean up tracking
         if active_contract.parent_order_id and active_contract.parent_order_id in self._bracket_orders:
             del self._bracket_orders[active_contract.parent_order_id]
             logger.info(f"Cleaned up bracket order tracking for parent: {active_contract.parent_order_id}")
-        
+
         logger.info(f"Cancelled {cancelled_count} bracket orders for position")
         return cancelled_count
     
     async def _cancel_bracket_orders_for_symbol(self, symbol: str):
         """Cancel all bracket orders for a specific symbol."""
         logger.info(f"Cancelling bracket orders for symbol: {symbol}")
-        
+
         open_trades = self.ib.openTrades()
         orders_to_cancel = []
-        
+
         # Find all bracket orders for this symbol
         for trade in open_trades:
             order = trade.order
             contract = trade.contract
-            
+
             # Check if this is a bracket order for the specified symbol
             if (hasattr(order, 'parentId') and order.parentId and
                 hasattr(contract, 'symbol') and contract.symbol == symbol):
                 orders_to_cancel.append(order.orderId)
                 logger.info(f"Found bracket order to cancel: {order.orderId} (parent: {order.parentId})")
-        
+
         # Cancel the orders
         cancelled_count = 0
         for order_id in orders_to_cancel:
@@ -1766,31 +1765,31 @@ class IBConnectionManager:
                     except Exception as e:
                         logger.warning(f"Error cancelling order {order_id}: {e}")
                     break
-        
+
         # Clean up tracking for this symbol
         symbols_to_remove = []
         for parent_id, bracket_info in self._bracket_orders.items():
             if bracket_info.get('contract', '').startswith(symbol):
                 symbols_to_remove.append(parent_id)
-        
+
         for parent_id in symbols_to_remove:
             del self._bracket_orders[parent_id]
             logger.info(f"Cleaned up bracket order tracking for parent: {parent_id}")
-        
+
         logger.info(f"Cancelled {cancelled_count} bracket orders for {symbol}")
         return cancelled_count
-    
+
     async def _cancel_all_bracket_orders(self):
         """
         Cancel all bracket orders in the system.
         This is useful for cleanup operations.
         """
         logger.info("Cancelling all bracket orders...")
-        
+
         # Get all open orders
         open_trades = self.ib.openTrades()
         bracket_orders_cancelled = 0
-        
+
         for trade in open_trades:
             order = trade.order
             if hasattr(order, 'parentId') and order.parentId:  # This is a bracket order
@@ -1801,7 +1800,7 @@ class IBConnectionManager:
                     await asyncio.sleep(0.5)  # Small delay between cancellations
                 except Exception as e:
                     logger.warning(f"Failed to cancel bracket order {order.orderId}: {e}")
-        
+
         logger.info(f"Cancelled {bracket_orders_cancelled} bracket orders")
         return bracket_orders_cancelled
     
@@ -1812,7 +1811,7 @@ class IBConnectionManager:
     async def _handle_get_positions(self, data: Optional[Dict] = None):
         """Enhanced positions handler with comprehensive data."""
         positions = self.ib.positions()
-        
+
         position_data = []
         for pos in positions:
             # Extract contract information explicitly
@@ -1825,7 +1824,7 @@ class IBConnectionManager:
                 'tradingClass': getattr(pos.contract, 'tradingClass', ''),
                 'conId': getattr(pos.contract, 'conId', 0)
             }
-            
+
             pos_info = {
                 'contract': contract_info,
                 'position': pos.position,
@@ -1837,19 +1836,19 @@ class IBConnectionManager:
                 'realizedPNL': getattr(pos, 'realizedPNL', None)
             }
             position_data.append(pos_info)
-        
+
         # Store for tests
         self.positions = position_data
-        
+
         logger.debug(f"Retrieved {len(position_data)} positions")
         return {'positions': position_data}
-    
+
     @require_connection()
     @handle_errors('open_orders_update')
     async def _handle_get_open_orders(self, data: Optional[Dict] = None):
         """Enhanced open orders handler."""
         open_trades = self.ib.openTrades()
-        
+
         order_data = []
         for trade in open_trades:
             order_info = {
@@ -1859,20 +1858,20 @@ class IBConnectionManager:
                 'log': [util.tree(log) for log in trade.log] if hasattr(trade, 'log') else []
             }
             order_data.append(order_info)
-        
+
         # Store for tests
         self.open_orders = order_data
-        
+
         logger.debug(f"Retrieved {len(order_data)} open orders")
         return {'orders': order_data}
-    
+
     @handle_errors('active_contract_status_update')
     async def _handle_get_active_contract_status(self, data: Optional[Dict] = None):
         """Enhanced active contract status with comprehensive data."""
         active_contracts_info = []
-        
+
         for symbol, contract in self._active_contracts.items():
-            if contract.is_active and (not self._underlying_symbol or 
+            if contract.is_active and (not self._underlying_symbol or
                                       (getattr(contract.contract, 'symbol', None) == self._underlying_symbol)):
                 contract_info = {
                     'symbol': symbol,
@@ -1887,15 +1886,17 @@ class IBConnectionManager:
                     'has_take_profit': contract.take_profit_order_id is not None,
                     'is_active': contract.is_active
                 }
+
                 active_contracts_info.append(contract_info)
-        
+                print("active_contracts is ", active_contracts_info)
+
         status_data = {
             'has_active_contracts': len(active_contracts_info) > 0,
             'active_trade_flag': self._active_trade_flag,
             'underlying_symbol': self._underlying_symbol,
             'active_contracts': active_contracts_info
         }
-        
+
         return status_data
     
     @handle_errors('test_event_response')
