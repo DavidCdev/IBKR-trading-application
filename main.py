@@ -5,13 +5,15 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 from dataclasses import dataclass
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QDialog, QTableWidgetItem
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
+from PyQt5 import QtWidgets
 
 from ui.ib_trading_gui import Ui_MainWindow
 from ui.settings_gui import Ui_PreferencesDialog
 
 from utils.ib_connection import IBDataCollector
+from utils.config_manager import AppConfig
 
 # Configure logging
 logging.basicConfig(
@@ -23,37 +25,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-@dataclass
-class AppConfig:
-    """Application configuration"""
-    ib_host: str = '127.0.0.1'
-    ib_port: int = 7497
-    ib_client_id: int = 1
-    data_collection_interval: int = 60  # seconds
-    max_reconnect_attempts: int = 5
-    reconnect_delay: int = 5  # seconds
-    
-    @classmethod
-    def load_from_file(cls, config_path: str = 'config.json') -> 'AppConfig':
-        """Load configuration from JSON file"""
-        try:
-            if Path(config_path).exists():
-                with open(config_path, 'r') as f:
-                    config_data = json.load(f)
-                return cls(**config_data)
-        except Exception as e:
-            logger.warning(f"Failed to load config from {config_path}: {e}")
-        
-        return cls()
-    
-    def save_to_file(self, config_path: str = 'config.json'):
-        """Save configuration to JSON file"""
-        try:
-            with open(config_path, 'w') as f:
-                json.dump(self.__dict__, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save config to {config_path}: {e}")
 
 
 class DataCollectorWorker(QObject):
@@ -147,11 +118,91 @@ class DataCollectorWorker(QObject):
             logger.error(f"Error during cleanup: {e}")
 
 class Settings_Form(QDialog):
-    def __init__(self):
+    def __init__(self, config: AppConfig = None):
         super().__init__()
         self.ui = Ui_PreferencesDialog()
         self.ui.setupUi(self)
-
+        self.config = config
+        if self.config:
+            self.load_config_values()
+    
+    def load_config_values(self):
+        """Load configuration values into the UI"""
+        try:
+            # Load connection settings
+            if self.config.connection:
+                self.ui.hostEdit.setText(str(self.config.connection.get("host", "127.0.0.1")))
+                self.ui.portEdit.setText(str(self.config.connection.get("port", 7497)))
+                self.ui.clientIdEdit.setText(str(self.config.connection.get("client_id", 1)))
+            
+            # Load trading settings
+            if self.config.trading:
+                self.ui.underlyingSymbolEdit.setText(str(self.config.trading.get("underlying_symbol", "QQQ")))
+                self.ui.tradeDeltaEdit.setText(str(self.config.trading.get("trade_delta", 0.05)))
+                self.ui.maxTradeValueEdit.setText(str(self.config.trading.get("max_trade_value", 475.0)))
+                self.ui.runnerEdit.setText(str(self.config.trading.get("runner", 1)))
+                
+                # Load risk levels into table
+                risk_levels = self.config.trading.get("risk_levels", [])
+                table = self.ui.riskLevelsTable
+                
+                # Set table row count to match risk levels
+                if len(risk_levels) > table.rowCount():
+                    table.setRowCount(len(risk_levels))
+                
+                for row, risk_level in enumerate(risk_levels):
+                    # Ensure items exist in table cells
+                    for col in range(4):
+                        if not table.item(row, col):
+                            table.setItem(row, col, QtWidgets.QTableWidgetItem())
+                    
+                    # Set values
+                    table.item(row, 0).setText(str(risk_level.get("loss_threshold", "")))
+                    table.item(row, 1).setText(str(risk_level.get("account_trade_limit", "")))
+                    table.item(row, 2).setText(str(risk_level.get("stop_loss", "")))
+                    table.item(row, 3).setText(str(risk_level.get("profit_gain", "")))
+            
+            # Load debug settings
+            if self.config.debug:
+                self.ui.masterDebugCheckBox.setChecked(self.config.debug.get("master_debug", True))
+                
+                # Load module log levels
+                modules = self.config.debug.get("modules", {})
+                
+                # Set combo box values
+                if "MAIN" in modules:
+                    self._set_combo_text(self.ui.mainLogLevelCombo, modules["MAIN"])
+                if "GUI" in modules:
+                    self._set_combo_text(self.ui.guiLogLevelCombo, modules["GUI"])
+                if "EVENT_BUS" in modules:
+                    self._set_combo_text(self.ui.eventBusLogLevelCombo, modules["EVENT_BUS"])
+                if "SUBSCRIPTION_MANAGER" in modules:
+                    self._set_combo_text(self.ui.subscriptionManagerLogLevelCombo, modules["SUBSCRIPTION_MANAGER"])
+                    
+        except Exception as e:
+            logger.error(f"Error loading config values into UI: {e}")
+    
+    def _set_combo_text(self, combo, text):
+        """Helper method to set combo box text"""
+        try:
+            # Map common log level names
+            level_mapping = {
+                "Trace": "DEBUG",
+                "Info": "INFO", 
+                "Debug": "DEBUG",
+                "Warning": "WARNING",
+                "Error": "ERROR",
+                "Critical": "CRITICAL"
+            }
+            
+            # Use mapping if available, otherwise use text as-is
+            mapped_text = level_mapping.get(text, text.upper())
+            
+            index = combo.findText(mapped_text)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        except Exception as e:
+            logger.warning(f"Could not set combo text '{text}': {e}")
 
 class IB_Trading_APP(QMainWindow):
     def __init__(self):
@@ -178,11 +229,14 @@ class IB_Trading_APP(QMainWindow):
         
         # Setup UI
         self.setup_ui()
-        
+        self.setting_ui = Settings_Form(self.config)
+
         # Start data collection
         self.worker_thread.start()
 
-    
+        self.setting_ui.ui.cancelButton.clicked.connect(self._close_setting_form)
+        self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
+
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("IB Trading Application")
@@ -201,10 +255,87 @@ class IB_Trading_APP(QMainWindow):
         
     def show_setting_ui(self):
         """Show the settings dialog"""
-        self.setting_ui = Settings_Form()
+        # Reload config values into UI before showing
+        if hasattr(self.setting_ui, 'load_config_values'):
+            self.setting_ui.load_config_values()
         self.setting_ui.exec_()
+
+    def _close_setting_form(self):
+        self.setting_ui.close()
         
-    
+    def _save_setting_form(self):
+        """Save all settings from the preferences UI to the config file"""
+        try:
+            # Get connection settings
+            self.config.connection.update({
+                "host": self.setting_ui.ui.hostEdit.text(),
+                "port": int(self.setting_ui.ui.portEdit.text()),
+                "client_id": int(self.setting_ui.ui.clientIdEdit.text())
+            })
+            
+            # Get trading settings
+            self.config.trading.update({
+                "underlying_symbol": self.setting_ui.ui.underlyingSymbolEdit.text(),
+                "trade_delta": float(self.setting_ui.ui.tradeDeltaEdit.text()),
+                "max_trade_value": float(self.setting_ui.ui.maxTradeValueEdit.text()),
+                "runner": int(self.setting_ui.ui.runnerEdit.text())
+            })
+            
+            # Get risk levels from table
+            risk_levels = []
+            table = self.setting_ui.ui.riskLevelsTable
+            for row in range(table.rowCount()):
+                risk_level = {}
+                # Check if cells exist and have text
+                loss_threshold_item = table.item(row, 0)
+                account_trade_limit_item = table.item(row, 1)
+                stop_loss_item = table.item(row, 2)
+                profit_gain_item = table.item(row, 3)
+                
+                risk_level["loss_threshold"] = loss_threshold_item.text() if loss_threshold_item and loss_threshold_item.text() != "-" else ""
+                risk_level["account_trade_limit"] = account_trade_limit_item.text() if account_trade_limit_item and account_trade_limit_item.text() != "-" else ""
+                risk_level["stop_loss"] = stop_loss_item.text() if stop_loss_item and stop_loss_item.text() != "-" else ""
+                risk_level["profit_gain"] = profit_gain_item.text() if profit_gain_item and profit_gain_item.text() != "-" else ""
+                
+                risk_levels.append(risk_level)
+            
+            self.config.trading["risk_levels"] = risk_levels
+            
+            # Get debug settings
+            self.config.debug.update({
+                "master_debug": self.setting_ui.ui.masterDebugCheckBox.isChecked()
+            })
+            
+            # Get module log levels
+            module_levels = {}
+            if hasattr(self.setting_ui.ui, 'mainLogLevelCombo'):
+                module_levels["MAIN"] = self.setting_ui.ui.mainLogLevelCombo.currentText()
+            if hasattr(self.setting_ui.ui, 'guiLogLevelCombo'):
+                module_levels["GUI"] = self.setting_ui.ui.guiLogLevelCombo.currentText()
+            if hasattr(self.setting_ui.ui, 'eventBusLogLevelCombo'):
+                module_levels["EVENT_BUS"] = self.setting_ui.ui.eventBusLogLevelCombo.currentText()
+            if hasattr(self.setting_ui.ui, 'subscriptionManagerLogLevelCombo'):
+                module_levels["SUBSCRIPTION_MANAGER"] = self.setting_ui.ui.subscriptionManagerLogLevelCombo.currentText()
+            
+            self.config.debug["modules"].update(module_levels)
+            
+            # Save to file
+            self.config.save_to_file()
+            
+            # Close the settings dialog
+            self.setting_ui.close()
+            
+            logger.info("Settings saved successfully")
+            
+        except Exception as e:
+            logger.error(f"Error saving settings: {e}")
+            QMessageBox.critical(
+                self.setting_ui,
+                "Error",
+                f"Failed to save settings: {str(e)}"
+            )
+        
+
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
         try:
