@@ -344,30 +344,30 @@ class IBDataCollector:
             spy_price = await self.get_spy_price()
             print(f"SPY Price: ${spy_price}")
 
-            # Get account metrics
-            print("Getting account metrics...")
-            account_df = await self.get_account_metrics()
-
-            # Get option chain
-            print("Getting option chain...")
-            options_df = await self.get_option_chain()
-            print(f"Retrieved {len(options_df)} option contracts")
-
-            # Get active positions
-            print("Getting active positions...")
-            positions_df = await self.get_active_positions()
-            print(f"Retrieved {len(positions_df)} active positions")
-
-            # Get trade statistics
-            print("Getting trade statistics...")
-            stats_df = await self.get_trade_statistics()
+            # # Get account metrics
+            # print("Getting account metrics...")
+            # account_df = await self.get_account_metrics()
+            #
+            # # Get option chain
+            # print("Getting option chain...")
+            # options_df = await self.get_option_chain()
+            # print(f"Retrieved {len(options_df)} option contracts")
+            #
+            # # Get active positions
+            # print("Getting active positions...")
+            # positions_df = await self.get_active_positions()
+            # print(f"Retrieved {len(positions_df)} active positions")
+            #
+            # # Get trade statistics
+            # print("Getting trade statistics...")
+            # stats_df = await self.get_trade_statistics()
 
             return {
                 'spy_price': spy_price,
-                'options': options_df,
-                'positions': positions_df,
-                'account': account_df,
-                'statistics': stats_df
+                # 'options': options_df,
+                # 'positions': positions_df,
+                # 'account': account_df,
+                # 'statistics': stats_df
             }
 
         except Exception as e:

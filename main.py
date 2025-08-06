@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 
 from ui.ib_trading_gui import Ui_MainWindow
-from src.ib_connection import IBDataCollector
+from utils.ib_connection import IBDataCollector
 
 # Configure logging
 logging.basicConfig(

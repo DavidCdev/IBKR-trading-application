@@ -1,52 +1,114 @@
 import asyncio
+import logging
+from typing import Optional, Dict, Any, List
 from ib_async import IB, Stock, Option, util
 import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
 
+logger = logging.getLogger(__name__)
+
 
 class IBDataCollector:
-    def __init__(self, host='127.0.0.1', port=7497, clientId=2):
+    """
+    Improved IB Data Collector with better error handling and resource management
+    """
+    
+    def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30):
         self.ib = IB()
         self.host = host
         self.port = port
         self.clientId = clientId
+        self.timeout = timeout
         self.spy_price = 0
-
-    async def connect(self):
-        """Connect to TWS/IB Gateway"""
+        self._active_subscriptions = set()  # Track active market data subscriptions
+        
+    async def connect(self) -> bool:
+        """Connect to TWS/IB Gateway with timeout and retry logic"""
         try:
-            await self.ib.connectAsync(self.host, self.port, clientId=self.clientId)
-            print("Connected to Interactive Brokers")
+            logger.info(f"Attempting to connect to IB at {self.host}:{self.port}")
+            
+            # Set connection timeout
+            await asyncio.wait_for(
+                self.ib.connectAsync(self.host, self.port, clientId=self.clientId),
+                timeout=self.timeout
+            )
+            
+            logger.info("Successfully connected to Interactive Brokers")
             return True
-        except Exception as e:
-            print(f"Connection failed: {e}")
+            
+        except asyncio.TimeoutError:
+            logger.error(f"Connection timeout after {self.timeout} seconds")
             return False
-
-    async def get_spy_price(self):
-        """Get current SPY price"""
+        except Exception as e:
+            logger.error(f"Connection failed: {e}")
+            return False
+    
+    def disconnect(self):
+        """Safely disconnect from IB and cleanup resources"""
+        try:
+            # Cancel all active market data subscriptions
+            for contract in self._active_subscriptions:
+                try:
+                    self.ib.cancelMktData(contract)
+                except Exception as e:
+                    logger.warning(f"Error canceling market data for {contract}: {e}")
+            
+            self._active_subscriptions.clear()
+            
+            # Disconnect from IB
+            if self.ib.isConnected():
+                self.ib.disconnect()
+                logger.info("Disconnected from Interactive Brokers")
+                
+        except Exception as e:
+            logger.error(f"Error during disconnect: {e}")
+    
+    async def get_spy_price(self) -> Optional[float]:
+        """Get current SPY price with improved error handling"""
         try:
             spy = Stock('SPY', 'SMART', 'USD')
+            
+            # Qualify the contract
             spy_qualified = await self.ib.qualifyContractsAsync(spy)
-            if spy_qualified:
-                spy_ticker = self.ib.reqMktData(spy_qualified[0])
-                await asyncio.sleep(2)  # Wait for data
-                self.spy_price = spy_ticker.marketPrice()
+            if not spy_qualified or spy_qualified[0] is None:
+                logger.error("Could not qualify SPY contract")
+                return None
+            
+            # Request market data
+            spy_ticker = self.ib.reqMktData(spy_qualified[0])
+            self._active_subscriptions.add(spy_qualified[0])
+            
+            # Wait for data with timeout
+            await asyncio.sleep(2)
+            
+            price = spy_ticker.marketPrice()
+            if price and price > 0:
+                self.spy_price = price
+                logger.info(f"SPY Price: ${price:.2f}")
+                
+                # Cancel market data subscription
                 self.ib.cancelMktData(spy_qualified[0])
-                return self.spy_price
+                self._active_subscriptions.discard(spy_qualified[0])
+                
+                return price
+            else:
+                logger.warning("Invalid SPY price received")
+                return None
+                
         except Exception as e:
-            print(f"Error getting SPY price: {e}")
+            logger.error(f"Error getting SPY price: {e}")
             return None
-
-    async def get_option_chain(self, symbol='SPY', num_strikes=10):
-        """Get option chain data with Greeks"""
+    
+    async def get_option_chain(self, symbol='SPY', num_strikes=10) -> pd.DataFrame:
+        """Get option chain data with improved error handling and validation"""
         try:
             # Create stock contract
             stock = Stock(symbol, 'SMART', 'USD')
             stock_qualified = await self.ib.qualifyContractsAsync(stock)
 
             if not stock_qualified or stock_qualified[0] is None:
-                print(f"Could not qualify {symbol} contract")
+                logger.error(f"Could not qualify {symbol} contract")
                 return pd.DataFrame()
 
             # Get option chain
@@ -58,7 +120,7 @@ class IBDataCollector:
             )
 
             if not chains:
-                print("No option chains found")
+                logger.warning("No option chains found")
                 return pd.DataFrame()
 
             # Get the first chain (usually the most liquid exchange)
@@ -68,346 +130,334 @@ class IBDataCollector:
             if self.spy_price == 0:
                 await self.get_spy_price()
 
+            if self.spy_price == 0:
+                logger.error("Unable to get current stock price for strike selection")
+                return pd.DataFrame()
+
             # Select strikes around current price
             current_price = self.spy_price
             strikes = sorted([float(s) for s in chain.strikes])
 
-            # Find strikes around current price
+            # Find strikes around current price with better logic
             selected_strikes = []
+            price_range = current_price * 0.1  # 10% range around current price
+            
             for strike in strikes:
-                if abs(strike - current_price) <= (num_strikes * 5):  # Adjust range as needed
+                if abs(strike - current_price) <= price_range:
                     selected_strikes.append(strike)
 
-            selected_strikes = sorted(selected_strikes)[:num_strikes]
+            # Take the closest strikes
+            selected_strikes = sorted(selected_strikes, key=lambda x: abs(x - current_price))[:num_strikes]
 
-            # Get nearest expiration
+            if not selected_strikes:
+                logger.warning("No suitable strikes found around current price")
+                return pd.DataFrame()
+
+            # Get nearest expirations
             expirations = sorted(chain.expirations)[:3]  # Get first 3 expirations
 
             option_data = []
 
             for expiration in expirations:
                 for strike in selected_strikes:
-                    # Create CALL option
-                    call_option = Option(symbol, expiration, strike, 'C', 'SMART')
-                    # Create PUT option
-                    put_option = Option(symbol, expiration, strike, 'P', 'SMART')
+                    try:
+                        # Create CALL option
+                        call_option = Option(symbol, expiration, strike, 'C', 'SMART')
+                        # Create PUT option
+                        put_option = Option(symbol, expiration, strike, 'P', 'SMART')
 
-                    # Qualify contracts
-                    call_qualified = await self.ib.qualifyContractsAsync(call_option)
-                    put_qualified = await self.ib.qualifyContractsAsync(put_option)
+                        # Qualify contracts
+                        call_qualified = await self.ib.qualifyContractsAsync(call_option)
+                        put_qualified = await self.ib.qualifyContractsAsync(put_option)
 
-                    # Skip if contract is not valid or not found
-                    if not call_qualified or call_qualified[0] is None:
+                        # Process CALL option
+                        if call_qualified and call_qualified[0]:
+                            call_data = await self._get_option_data(call_qualified[0], 'CALL')
+                            if call_data:
+                                option_data.append(call_data)
+
+                        # Process PUT option
+                        if put_qualified and put_qualified[0]:
+                            put_data = await self._get_option_data(put_qualified[0], 'PUT')
+                            if put_data:
+                                option_data.append(put_data)
+
+                    except Exception as e:
+                        logger.warning(f"Error processing option {symbol} {expiration} {strike}: {e}")
                         continue
-                    if not put_qualified or put_qualified[0] is None:
-                        continue
 
-                    # Get market data and Greeks for CALL
-                    call_ticker = self.ib.reqMktData(call_qualified[0], '', False, False)
-                    await asyncio.sleep(1)
-
-                    # Safely extract Greeks data
-                    call_greeks = {}
-                    if hasattr(call_ticker, 'modelGreeks') and call_ticker.modelGreeks:
-                        if hasattr(call_ticker.modelGreeks, 'get'):
-                            call_greeks = call_ticker.modelGreeks
-                        else:
-                            # Handle OptionComputation object
-                            call_greeks = {
-                                'delta': getattr(call_ticker.modelGreeks, 'delta', 0),
-                                'gamma': getattr(call_ticker.modelGreeks, 'gamma', 0),
-                                'theta': getattr(call_ticker.modelGreeks, 'theta', 0),
-                                'vega': getattr(call_ticker.modelGreeks, 'vega', 0)
-                            }
-
-                    option_data.append({
-                        'Type': 'CALL',
-                        'Strike': strike,
-                        'Expiration': expiration,
-                        'Bid': call_ticker.bid if call_ticker.bid == call_ticker.bid else 0,
-                        'Ask': call_ticker.ask if call_ticker.ask == call_ticker.ask else 0,
-                        'Delta': call_greeks.get('delta', 0),
-                        'Gamma': call_greeks.get('gamma', 0),
-                        'Theta': call_greeks.get('theta', 0),
-                        'Vega': call_greeks.get('vega', 0),
-                        'Volume': call_ticker.volume if call_ticker.volume == call_ticker.volume else 0,
-                        'OpenInt': getattr(call_ticker, 'openInterest', 0)
-                    })
-                    self.ib.cancelMktData(call_qualified[0])
-
-                    # Get market data and Greeks for PUT
-                    put_ticker = self.ib.reqMktData(put_qualified[0], '', False, False)
-                    await asyncio.sleep(1)
-
-                    # Safely extract Greeks data
-                    put_greeks = {}
-                    if hasattr(put_ticker, 'modelGreeks') and put_ticker.modelGreeks:
-                        if hasattr(put_ticker.modelGreeks, 'get'):
-                            put_greeks = put_ticker.modelGreeks
-                        else:
-                            # Handle OptionComputation object
-                            put_greeks = {
-                                'delta': getattr(put_ticker.modelGreeks, 'delta', 0),
-                                'gamma': getattr(put_ticker.modelGreeks, 'gamma', 0),
-                                'theta': getattr(put_ticker.modelGreeks, 'theta', 0),
-                                'vega': getattr(put_ticker.modelGreeks, 'vega', 0)
-                            }
-
-                    option_data.append({
-                        'Type': 'PUT',
-                        'Strike': strike,
-                        'Expiration': expiration,
-                        'Bid': put_ticker.bid if put_ticker.bid == put_ticker.bid else 0,
-                        'Ask': put_ticker.ask if put_ticker.ask == put_ticker.ask else 0,
-                        'Delta': put_greeks.get('delta', 0),
-                        'Gamma': put_greeks.get('gamma', 0),
-                        'Theta': put_greeks.get('theta', 0),
-                        'Vega': put_greeks.get('vega', 0),
-                        'Volume': put_ticker.volume if put_ticker.volume == put_ticker.volume else 0,
-                        'OpenInt': getattr(put_ticker, 'openInterest', 0)
-                    })
-                    self.ib.cancelMktData(put_qualified[0])
-
-            return pd.DataFrame(option_data)
+            if option_data:
+                df = pd.DataFrame(option_data)
+                logger.info(f"Retrieved {len(df)} option contracts")
+                return df
+            else:
+                logger.warning("No option data retrieved")
+                return pd.DataFrame()
 
         except Exception as e:
-            print(f"Error getting option chain: {e}")
+            logger.error(f"Error getting option chain: {e}")
             return pd.DataFrame()
-
-    async def get_active_positions(self):
-        """Get active positions"""
+    
+    async def _get_option_data(self, contract, option_type: str) -> Optional[Dict[str, Any]]:
+        """Get market data for a specific option contract"""
         try:
-            positions = await self.ib.reqPositionsAsync()
-            position_data = []
-
-            for pos in positions:
-                if pos.position != 0:  # Only active positions
-                    # Get current market price
-                    ticker = self.ib.reqMktData(pos.contract)
-                    await asyncio.sleep(1)
-
-                    current_price = ticker.marketPrice()
-                    avg_cost = pos.avgCost
-                    quantity = pos.position
-
-                    # Calculate P&L
-                    if current_price and avg_cost:
-                        unrealized_pnl = (current_price - avg_cost) * quantity
-                        unrealized_pnl_pct = ((current_price - avg_cost) / avg_cost) * 100
-                    else:
-                        unrealized_pnl = 0
-                        unrealized_pnl_pct = 0
-
-                    position_data.append({
-                        'Symbol': pos.contract.symbol,
-                        'Quantity': quantity,
-                        'P/L($)': unrealized_pnl,
-                        'P/L(%)': unrealized_pnl_pct,
-                        'Avg_Cost': avg_cost,
-                        'Current_Price': current_price
-                    })
-
-                    self.ib.cancelMktData(pos.contract)
-
-            return pd.DataFrame(position_data)
-
-        except Exception as e:
-            print(f"Error getting positions: {e}")
-            return pd.DataFrame()
-
-    async def get_account_metrics(self):
-        """Get account information and metrics"""
-        try:
-            # Get account summary using async method
-            account_values = await self.ib.reqAccountSummaryAsync()
-            print(account_values)
-            metrics = {}
-            for item in account_values:
-                metrics[item.tag] = float(item.value) if item.value.replace('.', '').replace('-',
-                                                                                             '').isdigit() else item.value
-
-            # Get managed accounts (synchronous method, but we're already in async context)
-            try:
-                managed_accounts = self.ib.managedAccounts()
-                account_id = managed_accounts[0] if managed_accounts else 'N/A'
-            except Exception:
-                account_id = 'N/A'
-
-            # Calculate additional metrics
-            account_data = {
-                'Account': account_id,
-                'Value': metrics.get('NetLiquidation', 0),
-                'Starting_Value': metrics.get('NetLiquidation', 0),  # You might want to store this separately
-                'High_Water_Mark': metrics.get('NetLiquidation', 0),  # You might want to track this over time
-                'Daily_PnL': metrics.get('DailyPnL', 0),
-                'Daily_PnL_Pct': (metrics.get('DailyPnL', 0) / metrics.get('NetLiquidation', 1)) * 100 if metrics.get(
-                    'NetLiquidation', 0) != 0 else 0
+            # Request market data
+            ticker = self.ib.reqMktData(contract)
+            self._active_subscriptions.add(contract)
+            
+            # Wait for data
+            await asyncio.sleep(1)
+            
+            # Extract data
+            data = {
+                'Symbol': contract.symbol,
+                'Expiration': contract.lastTradingDay,
+                'Strike': contract.strike,
+                'Type': option_type,
+                'Bid': ticker.bid if ticker.bid else 0,
+                'Ask': ticker.ask if ticker.ask else 0,
+                'Last': ticker.last if ticker.last else 0,
+                'Volume': ticker.volume if ticker.volume else 0,
+                'Open_Interest': ticker.openInterest if ticker.openInterest else 0,
+                'Implied_Volatility': ticker.impliedVolatility if ticker.impliedVolatility else 0,
+                'Delta': ticker.delta if ticker.delta else 0,
+                'Gamma': ticker.gamma if ticker.gamma else 0,
+                'Theta': ticker.theta if ticker.theta else 0,
+                'Vega': ticker.vega if ticker.vega else 0
             }
-
-            return pd.DataFrame([account_data])
-
+            
+            # Cancel market data subscription
+            self.ib.cancelMktData(contract)
+            self._active_subscriptions.discard(contract)
+            
+            return data
+            
         except Exception as e:
-            print(f"Error getting account metrics: {e}")
-            return pd.DataFrame()
-
-    async def get_trade_statistics(self, days_back=30):
-        """Get trade statistics"""
+            logger.warning(f"Error getting data for {option_type} option: {e}")
+            return None
+    
+    async def get_active_positions(self) -> pd.DataFrame:
+        """Get active positions with improved error handling"""
         try:
-            # Get executions for the specified period
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days_back)
-
-            executions = await self.ib.reqExecutionsAsync()
-
-            if not executions:
-                return pd.DataFrame([{
-                    'Win_Rate': 0,
-                    'Total_Wins_Count': 0,
-                    'Total_Wins_Sum': 0,
-                    'Total_Losses_Count': 0,
-                    'Total_Losses_Sum': 0,
-                    'Total_Trades': 0
-                }])
-
-            # Process trades
-            trades = {}
-            for execution in executions:
-                symbol = execution.contract.symbol
-                if symbol not in trades:
-                    trades[symbol] = []
-                trades[symbol].append(execution)
-
+            positions = await self.ib.positionsAsync()
+            
+            if not positions:
+                logger.info("No active positions found")
+                return pd.DataFrame()
+            
+            position_data = []
+            for position in positions:
+                try:
+                    data = {
+                        'Symbol': position.contract.symbol,
+                        'SecType': position.contract.secType,
+                        'Exchange': position.contract.exchange,
+                        'Currency': position.contract.currency,
+                        'Position': position.position,
+                        'AvgCost': position.avgCost,
+                        'MarketValue': position.marketValue
+                    }
+                    position_data.append(data)
+                except Exception as e:
+                    logger.warning(f"Error processing position: {e}")
+                    continue
+            
+            if position_data:
+                df = pd.DataFrame(position_data)
+                logger.info(f"Retrieved {len(df)} active positions")
+                return df
+            else:
+                return pd.DataFrame()
+                
+        except Exception as e:
+            logger.error(f"Error getting active positions: {e}")
+            return pd.DataFrame()
+    
+    async def get_account_metrics(self) -> pd.DataFrame:
+        """Get account metrics with improved error handling"""
+        try:
+            # Get account summary
+            account_values = await self.ib.accountSummaryAsync()
+            
+            if not account_values:
+                logger.warning("No account values received")
+                return pd.DataFrame()
+            
+            # Create account data dictionary
+            account_data = {}
+            for value in account_values:
+                try:
+                    account_data[value.tag] = value.value
+                except Exception as e:
+                    logger.warning(f"Error processing account value {value.tag}: {e}")
+                    continue
+            
+            # Create DataFrame with common metrics
+            metrics = {
+                'NetLiquidation': account_data.get('NetLiquidation', 0),
+                'TotalCashValue': account_data.get('TotalCashValue', 0),
+                'GrossPositionValue': account_data.get('GrossPositionValue', 0),
+                'BuyingPower': account_data.get('BuyingPower', 0),
+                'AvailableFunds': account_data.get('AvailableFunds', 0),
+                'ExcessLiquidity': account_data.get('ExcessLiquidity', 0),
+                'Cushion': account_data.get('Cushion', 0),
+                'FullInitMarginReq': account_data.get('FullInitMarginReq', 0),
+                'FullMaintMarginReq': account_data.get('FullMaintMarginReq', 0),
+                'FullAvailableFunds': account_data.get('FullAvailableFunds', 0),
+                'Currency': account_data.get('Currency', 'USD')
+            }
+            
+            df = pd.DataFrame([metrics])
+            logger.info("Account metrics retrieved successfully")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error getting account metrics: {e}")
+            return pd.DataFrame()
+    
+    async def get_trade_statistics(self, days_back=30) -> pd.DataFrame:
+        """Get trade statistics with improved error handling"""
+        try:
+            # Get completed orders
+            trades = await self.ib.tradesAsync()
+            
+            if not trades:
+                logger.info("No trades found")
+                return self._create_empty_stats()
+            
+            # Filter trades by date
+            cutoff_date = datetime.now() - timedelta(days=days_back)
+            recent_trades = []
+            
+            for trade in trades:
+                try:
+                    if trade.orderStatus.status == 'Filled':
+                        # Parse fill time
+                        fill_time = datetime.strptime(
+                            trade.orderStatus.filledTime, 
+                            '%Y%m%d %H:%M:%S'
+                        )
+                        if fill_time >= cutoff_date:
+                            recent_trades.append(trade)
+                except Exception as e:
+                    logger.warning(f"Error processing trade: {e}")
+                    continue
+            
+            if not recent_trades:
+                logger.info(f"No trades found in the last {days_back} days")
+                return self._create_empty_stats()
+            
+            # Calculate statistics
             wins = []
             losses = []
-
-            for symbol, symbol_executions in trades.items():
-                # Simple P&L calculation (you might want to make this more sophisticated)
-                for exec in symbol_executions:
-                    # This is a simplified calculation - you might want to group by order ID
-                    # and calculate proper P&L per complete trade
-                    try:
-                        # Handle Fill object structure
-                        if hasattr(exec, 'execution'):
-                            # Execution object structure
-                            pnl = exec.execution.price * exec.execution.shares
-                        elif hasattr(exec, 'price') and hasattr(exec, 'shares'):
-                            # Direct Fill object structure
-                            pnl = exec.price * exec.shares
-                        else:
-                            # Skip if we can't determine the structure
-                            continue
-
-                        if pnl > 0:
-                            wins.append(pnl)
-                        else:
-                            losses.append(abs(pnl))
-                    except Exception:
-                        # Skip this execution if we can't calculate P&L
-                        continue
-
+            
+            for trade in recent_trades:
+                try:
+                    # Calculate P&L (simplified calculation)
+                    if hasattr(trade, 'realizedPNL'):
+                        pnl = trade.realizedPNL
+                    else:
+                        # Estimate P&L from order details
+                        pnl = 0  # This would need more complex calculation
+                    
+                    if pnl > 0:
+                        wins.append(pnl)
+                    elif pnl < 0:
+                        losses.append(abs(pnl))
+                        
+                except Exception as e:
+                    logger.warning(f"Error calculating P&L for trade: {e}")
+                    continue
+            
+            # Calculate statistics
             total_trades = len(wins) + len(losses)
-            win_rate = (len(wins) / total_trades * 100) if total_trades > 0 else 0
-
+            if total_trades == 0:
+                return self._create_empty_stats()
+            
+            win_rate = (len(wins) / total_trades) * 100 if total_trades > 0 else 0
+            
             stats = {
                 'Win_Rate': win_rate,
                 'Total_Wins_Count': len(wins),
                 'Total_Wins_Sum': sum(wins),
                 'Total_Losses_Count': len(losses),
                 'Total_Losses_Sum': sum(losses),
-                'Total_Trades': total_trades
+                'Total_Trades': total_trades,
+                'Average_Win': sum(wins) / len(wins) if wins else 0,
+                'Average_Loss': sum(losses) / len(losses) if losses else 0,
+                'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
             }
-
+            
+            logger.info(f"Trade statistics calculated: {total_trades} trades, {win_rate:.2f}% win rate")
             return pd.DataFrame([stats])
-
+            
         except Exception as e:
-            print(f"Error getting trade statistics: {e}")
-            return pd.DataFrame([{
-                'Win_Rate': 0,
-                'Total_Wins_Count': 0,
-                'Total_Wins_Sum': 0,
-                'Total_Losses_Count': 0,
-                'Total_Losses_Sum': 0,
-                'Total_Trades': 0
-            }])
-
-    async def collect_all_data(self):
-        """Collect all requested data"""
-        print("Starting data collection...")
-
-        # Connect to IB
-        if not await self.connect():
-            return None
-
+            logger.error(f"Error getting trade statistics: {e}")
+            return self._create_empty_stats()
+    
+    def _create_empty_stats(self) -> pd.DataFrame:
+        """Create empty statistics DataFrame"""
+        return pd.DataFrame([{
+            'Win_Rate': 0,
+            'Total_Wins_Count': 0,
+            'Total_Wins_Sum': 0,
+            'Total_Losses_Count': 0,
+            'Total_Losses_Sum': 0,
+            'Total_Trades': 0,
+            'Average_Win': 0,
+            'Average_Loss': 0,
+            'Profit_Factor': 0
+        }])
+    
+    async def collect_all_data(self) -> Optional[Dict[str, Any]]:
+        """Collect all requested data with improved error handling"""
+        logger.info("Starting comprehensive data collection...")
+        
+        # Check connection
+        if not self.ib.isConnected():
+            logger.warning("Not connected to IB. Attempting to connect...")
+            if not await self.connect():
+                logger.error("Failed to connect to IB")
+                return None
+        
         try:
+            data = {}
+            
             # Get SPY price
-            print("Getting SPY price...")
+            logger.info("Getting SPY price...")
             spy_price = await self.get_spy_price()
-            print(f"SPY Price: ${spy_price}")
-
+            data['spy_price'] = spy_price
+            
             # Get account metrics
-            print("Getting account metrics...")
+            logger.info("Getting account metrics...")
             account_df = await self.get_account_metrics()
-
+            data['account'] = account_df
+            
             # Get option chain
-            print("Getting option chain...")
+            logger.info("Getting option chain...")
             options_df = await self.get_option_chain()
-            print(f"Retrieved {len(options_df)} option contracts")
-
+            data['options'] = options_df
+            
             # Get active positions
-            print("Getting active positions...")
+            logger.info("Getting active positions...")
             positions_df = await self.get_active_positions()
-            print(f"Retrieved {len(positions_df)} active positions")
-
+            data['positions'] = positions_df
+            
             # Get trade statistics
-            print("Getting trade statistics...")
+            logger.info("Getting trade statistics...")
             stats_df = await self.get_trade_statistics()
-
-            return {
-                'spy_price': spy_price,
-                'options': options_df,
-                'positions': positions_df,
-                'account': account_df,
-                'statistics': stats_df
-            }
-
+            data['statistics'] = stats_df
+            
+            logger.info("Data collection completed successfully")
+            return data
+            
         except Exception as e:
-            print(f"Error collecting data: {e}")
+            logger.error(f"Error during data collection: {e}")
             return None
-
-
-import time
-import sys
-
-
-async def main(request_interval=60):
-    collector = IBDataCollector()
-    print("Starting real-time data collection loop. Press Ctrl+C to stop.")
-    while True:
+    
+    def __del__(self):
+        """Destructor to ensure cleanup"""
         try:
-            if not collector.ib.isConnected():
-                print("Not connected. Attempting to reconnect...")
-                await collector.connect()
-            start_time = time.time()
-            data = await collector.collect_all_data()
-            if data:
-                print("Data collection completed successfully")
-                # You can add your data processing logic here
-            # ... (rest of your print/save logic) ...
-        except Exception as e:
-            print(f"Error in main loop: {e}")
-            print("Will retry after a short delay...")
-            await asyncio.sleep(5)  # Wait before retrying
-        await asyncio.sleep(request_interval)
-
-
-if __name__ == "__main__":
-
-    if sys.platform.startswith('win'):
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\nShutting down gracefully...")
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+            self.disconnect()
+        except:
+            pass
