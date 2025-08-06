@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 from dataclasses import dataclass
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QDialog
 from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QObject
 
 from ui.ib_trading_gui import Ui_MainWindow
+from ui.settings_gui import Ui_PreferencesDialog
+
 from utils.ib_connection import IBDataCollector
 
 # Configure logging
@@ -144,13 +146,19 @@ class DataCollectorWorker(QObject):
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
 
+class Settings_Form(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.ui = Ui_PreferencesDialog()
+        self.ui.setupUi(self)
+
 
 class IB_Trading_APP(QMainWindow):
     def __init__(self):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
-        
+
         # Load configuration
         self.config = AppConfig.load_from_file()
         
@@ -173,6 +181,7 @@ class IB_Trading_APP(QMainWindow):
         
         # Start data collection
         self.worker_thread.start()
+
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -181,10 +190,20 @@ class IB_Trading_APP(QMainWindow):
         # Set initial connection status
         self.update_connection_status(False)
         
+        # Connect settings button
+        if hasattr(self.ui, 'pushButton_settings'):
+            self.ui.pushButton_settings.clicked.connect(self.show_setting_ui)
+        
         # Setup refresh timer for UI updates
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.refresh_ui)
         self.refresh_timer.start(1000)  # Update every second
+        
+    def show_setting_ui(self):
+        """Show the settings dialog"""
+        self.setting_ui = Settings_Form()
+        self.setting_ui.exec_()
+        
     
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
@@ -192,7 +211,7 @@ class IB_Trading_APP(QMainWindow):
             # Update SPY price
             if data.get('spy_price'):
                 self.ui.label_spy_value.setText(f"${data['spy_price']:.2f}")
-            
+
             # Update account metrics
             if data.get('account') and not data['account'].empty:
                 account_data = data['account'].iloc[0]
@@ -215,7 +234,7 @@ class IB_Trading_APP(QMainWindow):
     
     def update_connection_status(self, connected: bool):
         """Update connection status in UI"""
-        status_text = "Connected" if connected else "Disconnected"
+        status_text = "Connections Status: Connected" if connected else "Connections Status: Disconnected"
         status_color = "green" if connected else "red"
         
         # Update status label if it exists in the UI

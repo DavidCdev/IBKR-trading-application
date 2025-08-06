@@ -1,0 +1,1 @@
+pyuic5 -x main.ui -o ib_trading_gui.py

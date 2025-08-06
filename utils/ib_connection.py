@@ -428,25 +428,25 @@ class IBDataCollector:
             spy_price = await self.get_spy_price()
             data['spy_price'] = spy_price
             
-            # Get account metrics
-            logger.info("Getting account metrics...")
-            account_df = await self.get_account_metrics()
-            data['account'] = account_df
-            
-            # Get option chain
-            logger.info("Getting option chain...")
-            options_df = await self.get_option_chain()
-            data['options'] = options_df
-            
-            # Get active positions
-            logger.info("Getting active positions...")
-            positions_df = await self.get_active_positions()
-            data['positions'] = positions_df
-            
-            # Get trade statistics
-            logger.info("Getting trade statistics...")
-            stats_df = await self.get_trade_statistics()
-            data['statistics'] = stats_df
+            # # Get account metrics
+            # logger.info("Getting account metrics...")
+            # account_df = await self.get_account_metrics()
+            # data['account'] = account_df
+            #
+            # # Get option chain
+            # logger.info("Getting option chain...")
+            # options_df = await self.get_option_chain()
+            # data['options'] = options_df
+            #
+            # # Get active positions
+            # logger.info("Getting active positions...")
+            # positions_df = await self.get_active_positions()
+            # data['positions'] = positions_df
+            #
+            # # Get trade statistics
+            # logger.info("Getting trade statistics...")
+            # stats_df = await self.get_trade_statistics()
+            # data['statistics'] = stats_df
             
             logger.info("Data collection completed successfully")
             return data

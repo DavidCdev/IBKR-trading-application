@@ -14,7 +14,15 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(824, 637)
+        MainWindow.setEnabled(True)
+        MainWindow.resize(731, 529)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(MainWindow.sizePolicy().hasHeightForWidth())
+        MainWindow.setSizePolicy(sizePolicy)
+        MainWindow.setMinimumSize(QtCore.QSize(0, 0))
+        MainWindow.setMaximumSize(QtCore.QSize(750, 550))
         font = QtGui.QFont()
         font.setFamily("Segoe UI")
         font.setPointSize(11)
@@ -28,72 +36,158 @@ class Ui_MainWindow(object):
         self.horizontalLayout_top = QtWidgets.QHBoxLayout()
         self.horizontalLayout_top.setSpacing(16)
         self.horizontalLayout_top.setObjectName("horizontalLayout_top")
+        self.verticalLayout = QtWidgets.QVBoxLayout()
+        self.verticalLayout.setSpacing(5)
+        self.verticalLayout.setObjectName("verticalLayout")
         self.groupBox_trading_info = QtWidgets.QGroupBox(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.groupBox_trading_info.sizePolicy().hasHeightForWidth())
         self.groupBox_trading_info.setSizePolicy(sizePolicy)
         self.groupBox_trading_info.setMinimumSize(QtCore.QSize(185, 120))
+        font = QtGui.QFont()
+        font.setPointSize(11)
+        font.setBold(True)
+        font.setWeight(75)
+        self.groupBox_trading_info.setFont(font)
         self.groupBox_trading_info.setStyleSheet("QGroupBox {\n"
-"    border: 2px solid #5dade2;\n"
-"    border-radius: 12px;\n"
-"    margin-top: 1ex;\n"
-"    font-weight: bold;\n"
-"    color: #2c3e50;\n"
-"    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(90, 173, 226, 0.08);\n"
-"}\n"
-"QGroupBox::title {\n"
-"    subcontrol-origin: margin;\n"
-"    left: 10px;\n"
-"    padding: 0 8px 0 8px;\n"
-"    background-color: #5dade2;\n"
-"    color: white;\n"
-"    border-radius: 6px;\n"
-"}\n"
-"")
+"        border: 2px solid #5dade2;\n"
+"        border-radius: 12px;\n"
+"        margin-top: 1ex;\n"
+"        font-weight: bold;\n"
+"        color: #2c3e50;\n"
+"        background-color: #fafdff;\n"
+"        box-shadow: 0 2px 8px rgba(90, 173, 226, 0.08);\n"
+"        padding-top: 10px;\n"
+"    }\n"
+"    QGroupBox::title {\n"
+"        subcontrol-origin: margin;\n"
+"        left: 10px;\n"
+"        padding: 0 8px 0 8px;\n"
+"        background-color: #5dade2;\n"
+"        color: white;\n"
+"        border-radius: 6px;\n"
+"    }\n"
+"    ")
         self.groupBox_trading_info.setObjectName("groupBox_trading_info")
         self.verticalLayout_trading = QtWidgets.QVBoxLayout(self.groupBox_trading_info)
         self.verticalLayout_trading.setObjectName("verticalLayout_trading")
-        self.horizontalLayout_spy = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_spy.setObjectName("horizontalLayout_spy")
+        self.verticalLayout_5 = QtWidgets.QVBoxLayout()
+        self.verticalLayout_5.setSpacing(6)
+        self.verticalLayout_5.setObjectName("verticalLayout_5")
         self.label_spy_name = QtWidgets.QLabel(self.groupBox_trading_info)
         font = QtGui.QFont()
+        font.setPointSize(10)
         font.setBold(True)
         font.setWeight(75)
         self.label_spy_name.setFont(font)
+        self.label_spy_name.setAlignment(QtCore.Qt.AlignCenter)
         self.label_spy_name.setObjectName("label_spy_name")
-        self.horizontalLayout_spy.addWidget(self.label_spy_name)
+        self.verticalLayout_5.addWidget(self.label_spy_name)
         self.label_spy_value = QtWidgets.QLabel(self.groupBox_trading_info)
         font = QtGui.QFont()
+        font.setPointSize(12)
         font.setBold(True)
         font.setWeight(75)
         self.label_spy_value.setFont(font)
+        self.label_spy_value.setAlignment(QtCore.Qt.AlignCenter)
         self.label_spy_value.setObjectName("label_spy_value")
-        self.horizontalLayout_spy.addWidget(self.label_spy_value)
-        self.verticalLayout_trading.addLayout(self.horizontalLayout_spy)
+        self.verticalLayout_5.addWidget(self.label_spy_value)
+        self.verticalLayout_trading.addLayout(self.verticalLayout_5)
         self.horizontalLayout_usd_cad = QtWidgets.QHBoxLayout()
         self.horizontalLayout_usd_cad.setObjectName("horizontalLayout_usd_cad")
         self.label_usd_cad_name = QtWidgets.QLabel(self.groupBox_trading_info)
         self.label_usd_cad_name.setObjectName("label_usd_cad_name")
-        self.horizontalLayout_usd_cad.addWidget(self.label_usd_cad_name)
+        self.horizontalLayout_usd_cad.addWidget(self.label_usd_cad_name, 0, QtCore.Qt.AlignHCenter)
         self.label_usd_cad_value = QtWidgets.QLabel(self.groupBox_trading_info)
         self.label_usd_cad_value.setObjectName("label_usd_cad_value")
-        self.horizontalLayout_usd_cad.addWidget(self.label_usd_cad_value)
+        self.horizontalLayout_usd_cad.addWidget(self.label_usd_cad_value, 0, QtCore.Qt.AlignHCenter)
         self.verticalLayout_trading.addLayout(self.horizontalLayout_usd_cad)
         self.horizontalLayout_cad_usd = QtWidgets.QHBoxLayout()
         self.horizontalLayout_cad_usd.setObjectName("horizontalLayout_cad_usd")
         self.label_cad_usd_name = QtWidgets.QLabel(self.groupBox_trading_info)
         self.label_cad_usd_name.setObjectName("label_cad_usd_name")
-        self.horizontalLayout_cad_usd.addWidget(self.label_cad_usd_name)
+        self.horizontalLayout_cad_usd.addWidget(self.label_cad_usd_name, 0, QtCore.Qt.AlignHCenter)
         self.label_cad_usd_value = QtWidgets.QLabel(self.groupBox_trading_info)
         self.label_cad_usd_value.setObjectName("label_cad_usd_value")
-        self.horizontalLayout_cad_usd.addWidget(self.label_cad_usd_value)
+        self.horizontalLayout_cad_usd.addWidget(self.label_cad_usd_value, 0, QtCore.Qt.AlignHCenter)
         self.verticalLayout_trading.addLayout(self.horizontalLayout_cad_usd)
-        self.horizontalLayout_top.addWidget(self.groupBox_trading_info)
+        self.verticalLayout.addWidget(self.groupBox_trading_info)
+        self.groupBox_active_contract = QtWidgets.QGroupBox(self.centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.groupBox_active_contract.sizePolicy().hasHeightForWidth())
+        self.groupBox_active_contract.setSizePolicy(sizePolicy)
+        self.groupBox_active_contract.setMinimumSize(QtCore.QSize(185, 120))
+        font = QtGui.QFont()
+        font.setPointSize(10)
+        font.setBold(True)
+        font.setWeight(75)
+        self.groupBox_active_contract.setFont(font)
+        self.groupBox_active_contract.setStyleSheet("QGroupBox {\n"
+"        border: 2px solid #f39c12;\n"
+"        border-radius: 12px;\n"
+"        margin-top: 1ex;\n"
+"        font-weight: bold;\n"
+"        color: #2c3e50;\n"
+"        background-color: #fafdff;\n"
+"        box-shadow: 0 2px 8px rgba(243, 156, 18, 0.08);\n"
+"        padding-top: 10px;\n"
+"    }\n"
+"    QGroupBox::title {\n"
+"        subcontrol-origin: margin;\n"
+"        left: 10px;\n"
+"        padding: 0 8px 0 8px;\n"
+"        background-color: #f39c12;\n"
+"        color: white;\n"
+"        border-radius: 6px;\n"
+"    }\n"
+"    ")
+        self.groupBox_active_contract.setObjectName("groupBox_active_contract")
+        self.verticalLayout_4 = QtWidgets.QVBoxLayout(self.groupBox_active_contract)
+        self.verticalLayout_4.setObjectName("verticalLayout_4")
+        self.horizontalLayout_pl_percent = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_pl_percent.setObjectName("horizontalLayout_pl_percent")
+        self.label_pl_percent_name = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_pl_percent_name.setObjectName("label_pl_percent_name")
+        self.horizontalLayout_pl_percent.addWidget(self.label_pl_percent_name, 0, QtCore.Qt.AlignHCenter)
+        self.label_pl_percent_value = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_pl_percent_value.setObjectName("label_pl_percent_value")
+        self.horizontalLayout_pl_percent.addWidget(self.label_pl_percent_value, 0, QtCore.Qt.AlignHCenter)
+        self.verticalLayout_4.addLayout(self.horizontalLayout_pl_percent)
+        self.horizontalLayout_pl_dollar = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_pl_dollar.setObjectName("horizontalLayout_pl_dollar")
+        self.label_pl_dollar_name = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_pl_dollar_name.setObjectName("label_pl_dollar_name")
+        self.horizontalLayout_pl_dollar.addWidget(self.label_pl_dollar_name, 0, QtCore.Qt.AlignHCenter)
+        self.label_pl_dollar_value = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_pl_dollar_value.setObjectName("label_pl_dollar_value")
+        self.horizontalLayout_pl_dollar.addWidget(self.label_pl_dollar_value, 0, QtCore.Qt.AlignHCenter)
+        self.verticalLayout_4.addLayout(self.horizontalLayout_pl_dollar)
+        self.horizontalLayout_quantity = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_quantity.setObjectName("horizontalLayout_quantity")
+        self.label_quantity_name = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_quantity_name.setObjectName("label_quantity_name")
+        self.horizontalLayout_quantity.addWidget(self.label_quantity_name, 0, QtCore.Qt.AlignHCenter)
+        self.label_quantity_value = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_quantity_value.setObjectName("label_quantity_value")
+        self.horizontalLayout_quantity.addWidget(self.label_quantity_value, 0, QtCore.Qt.AlignHCenter)
+        self.verticalLayout_4.addLayout(self.horizontalLayout_quantity)
+        self.horizontalLayout_symbol = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_symbol.setObjectName("horizontalLayout_symbol")
+        self.label_symbol_name = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_symbol_name.setObjectName("label_symbol_name")
+        self.horizontalLayout_symbol.addWidget(self.label_symbol_name, 0, QtCore.Qt.AlignHCenter)
+        self.label_symbol_value = QtWidgets.QLabel(self.groupBox_active_contract)
+        self.label_symbol_value.setObjectName("label_symbol_value")
+        self.horizontalLayout_symbol.addWidget(self.label_symbol_value, 0, QtCore.Qt.AlignHCenter)
+        self.verticalLayout_4.addLayout(self.horizontalLayout_symbol)
+        self.verticalLayout.addWidget(self.groupBox_active_contract)
+        self.horizontalLayout_top.addLayout(self.verticalLayout)
         self.groupBox_option_info = QtWidgets.QGroupBox(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.groupBox_option_info.sizePolicy().hasHeightForWidth())
@@ -126,18 +220,34 @@ class Ui_MainWindow(object):
         self.horizontalLayout_strike = QtWidgets.QHBoxLayout()
         self.horizontalLayout_strike.setObjectName("horizontalLayout_strike")
         self.label_strike_name = QtWidgets.QLabel(self.groupBox_option_info)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_strike_name.setFont(font)
         self.label_strike_name.setObjectName("label_strike_name")
         self.horizontalLayout_strike.addWidget(self.label_strike_name)
         self.label_strike_value = QtWidgets.QLabel(self.groupBox_option_info)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_strike_value.setFont(font)
         self.label_strike_value.setObjectName("label_strike_value")
         self.horizontalLayout_strike.addWidget(self.label_strike_value)
         self.horizontalLayout_strike_exp.addLayout(self.horizontalLayout_strike)
         self.horizontalLayout_expiration = QtWidgets.QHBoxLayout()
         self.horizontalLayout_expiration.setObjectName("horizontalLayout_expiration")
         self.label_expiration_name = QtWidgets.QLabel(self.groupBox_option_info)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_expiration_name.setFont(font)
         self.label_expiration_name.setObjectName("label_expiration_name")
         self.horizontalLayout_expiration.addWidget(self.label_expiration_name)
         self.label_expiration_value = QtWidgets.QLabel(self.groupBox_option_info)
+        font = QtGui.QFont()
+        font.setBold(True)
+        font.setWeight(75)
+        self.label_expiration_value.setFont(font)
         self.label_expiration_value.setObjectName("label_expiration_value")
         self.horizontalLayout_expiration.addWidget(self.label_expiration_value)
         self.horizontalLayout_strike_exp.addLayout(self.horizontalLayout_expiration)
@@ -152,19 +262,16 @@ class Ui_MainWindow(object):
         font.setWeight(75)
         self.label_puts_title.setFont(font)
         self.label_puts_title.setObjectName("label_puts_title")
-        self.verticalLayout_puts.addWidget(self.label_puts_title)
+        self.verticalLayout_puts.addWidget(self.label_puts_title, 0, QtCore.Qt.AlignHCenter)
         self.horizontalLayout_put_price = QtWidgets.QHBoxLayout()
         self.horizontalLayout_put_price.setObjectName("horizontalLayout_put_price")
-        self.label_put_price_name = QtWidgets.QLabel(self.groupBox_option_info)
-        self.label_put_price_name.setObjectName("label_put_price_name")
-        self.horizontalLayout_put_price.addWidget(self.label_put_price_name)
         self.label_put_price_value = QtWidgets.QLabel(self.groupBox_option_info)
         font = QtGui.QFont()
         font.setBold(True)
         font.setWeight(75)
         self.label_put_price_value.setFont(font)
         self.label_put_price_value.setObjectName("label_put_price_value")
-        self.horizontalLayout_put_price.addWidget(self.label_put_price_value)
+        self.horizontalLayout_put_price.addWidget(self.label_put_price_value, 0, QtCore.Qt.AlignHCenter)
         self.verticalLayout_puts.addLayout(self.horizontalLayout_put_price)
         self.horizontalLayout_put_bid = QtWidgets.QHBoxLayout()
         self.horizontalLayout_put_bid.setObjectName("horizontalLayout_put_bid")
@@ -247,19 +354,16 @@ class Ui_MainWindow(object):
         font.setWeight(75)
         self.label_calls_title.setFont(font)
         self.label_calls_title.setObjectName("label_calls_title")
-        self.verticalLayout_calls.addWidget(self.label_calls_title)
+        self.verticalLayout_calls.addWidget(self.label_calls_title, 0, QtCore.Qt.AlignHCenter)
         self.horizontalLayout_call_price = QtWidgets.QHBoxLayout()
         self.horizontalLayout_call_price.setObjectName("horizontalLayout_call_price")
-        self.label_call_price_name = QtWidgets.QLabel(self.groupBox_option_info)
-        self.label_call_price_name.setObjectName("label_call_price_name")
-        self.horizontalLayout_call_price.addWidget(self.label_call_price_name)
         self.label_call_price_value = QtWidgets.QLabel(self.groupBox_option_info)
         font = QtGui.QFont()
         font.setBold(True)
         font.setWeight(75)
         self.label_call_price_value.setFont(font)
         self.label_call_price_value.setObjectName("label_call_price_value")
-        self.horizontalLayout_call_price.addWidget(self.label_call_price_value)
+        self.horizontalLayout_call_price.addWidget(self.label_call_price_value, 0, QtCore.Qt.AlignHCenter)
         self.verticalLayout_calls.addLayout(self.horizontalLayout_call_price)
         self.horizontalLayout_call_bid = QtWidgets.QHBoxLayout()
         self.horizontalLayout_call_bid.setObjectName("horizontalLayout_call_bid")
@@ -337,6 +441,11 @@ class Ui_MainWindow(object):
         self.verticalLayout_option_info.addLayout(self.horizontalLayout_puts_calls)
         self.horizontalLayout_top.addWidget(self.groupBox_option_info)
         self.groupBox_ai_insights = QtWidgets.QGroupBox(self.centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.groupBox_ai_insights.sizePolicy().hasHeightForWidth())
+        self.groupBox_ai_insights.setSizePolicy(sizePolicy)
         self.groupBox_ai_insights.setMinimumSize(QtCore.QSize(200, 120))
         self.groupBox_ai_insights.setStyleSheet("QGroupBox {\n"
 "    border: 2px solid #4a90e2;\n"
@@ -375,6 +484,7 @@ class Ui_MainWindow(object):
         self.label_ai_strategy_name.setObjectName("label_ai_strategy_name")
         self.horizontalLayout_ai_strategy.addWidget(self.label_ai_strategy_name)
         self.textbrowser_ai_strategy_value = QtWidgets.QTextBrowser(self.groupBox_ai_insights)
+        self.textbrowser_ai_strategy_value.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.textbrowser_ai_strategy_value.setObjectName("textbrowser_ai_strategy_value")
         self.horizontalLayout_ai_strategy.addWidget(self.textbrowser_ai_strategy_value)
         self.verticalLayout_ai.addLayout(self.horizontalLayout_ai_strategy)
@@ -393,76 +503,12 @@ class Ui_MainWindow(object):
         self.label_ai_alert_name.setObjectName("label_ai_alert_name")
         self.horizontalLayout_ai_alert.addWidget(self.label_ai_alert_name)
         self.textbrowser_ai_alert_value = QtWidgets.QTextBrowser(self.groupBox_ai_insights)
+        self.textbrowser_ai_alert_value.setFrameShape(QtWidgets.QFrame.NoFrame)
         self.textbrowser_ai_alert_value.setObjectName("textbrowser_ai_alert_value")
         self.horizontalLayout_ai_alert.addWidget(self.textbrowser_ai_alert_value)
         self.verticalLayout_ai.addLayout(self.horizontalLayout_ai_alert)
         self.horizontalLayout_top.addWidget(self.groupBox_ai_insights)
         self.verticalLayout_main.addLayout(self.horizontalLayout_top)
-        self.groupBox_active_contract = QtWidgets.QGroupBox(self.centralwidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.groupBox_active_contract.sizePolicy().hasHeightForWidth())
-        self.groupBox_active_contract.setSizePolicy(sizePolicy)
-        self.groupBox_active_contract.setStyleSheet("QGroupBox {\n"
-"    border: 2px solid #f39c12;\n"
-"    border-radius: 12px;\n"
-"    margin-top: 1ex;\n"
-"    font-weight: bold;\n"
-"    color: #2c3e50;\n"
-"    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(243, 156, 18, 0.08);\n"
-"    padding-top: 10px;\n"
-"}\n"
-"QGroupBox::title {\n"
-"    subcontrol-origin: margin;\n"
-"    left: 10px;\n"
-"    padding: 0 8px 0 8px;\n"
-"    background-color: #f39c12;\n"
-"    color: white;\n"
-"    border-radius: 6px;\n"
-"}\n"
-"")
-        self.groupBox_active_contract.setObjectName("groupBox_active_contract")
-        self.horizontalLayout_active = QtWidgets.QHBoxLayout(self.groupBox_active_contract)
-        self.horizontalLayout_active.setObjectName("horizontalLayout_active")
-        self.horizontalLayout_symbol = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_symbol.setObjectName("horizontalLayout_symbol")
-        self.label_symbol_name = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_symbol_name.setObjectName("label_symbol_name")
-        self.horizontalLayout_symbol.addWidget(self.label_symbol_name)
-        self.label_symbol_value = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_symbol_value.setObjectName("label_symbol_value")
-        self.horizontalLayout_symbol.addWidget(self.label_symbol_value)
-        self.horizontalLayout_active.addLayout(self.horizontalLayout_symbol)
-        self.horizontalLayout_quantity = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_quantity.setObjectName("horizontalLayout_quantity")
-        self.label_quantity_name = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_quantity_name.setObjectName("label_quantity_name")
-        self.horizontalLayout_quantity.addWidget(self.label_quantity_name)
-        self.label_quantity_value = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_quantity_value.setObjectName("label_quantity_value")
-        self.horizontalLayout_quantity.addWidget(self.label_quantity_value)
-        self.horizontalLayout_active.addLayout(self.horizontalLayout_quantity)
-        self.horizontalLayout_pl_dollar = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_pl_dollar.setObjectName("horizontalLayout_pl_dollar")
-        self.label_pl_dollar_name = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_pl_dollar_name.setObjectName("label_pl_dollar_name")
-        self.horizontalLayout_pl_dollar.addWidget(self.label_pl_dollar_name)
-        self.label_pl_dollar_value = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_pl_dollar_value.setObjectName("label_pl_dollar_value")
-        self.horizontalLayout_pl_dollar.addWidget(self.label_pl_dollar_value)
-        self.horizontalLayout_active.addLayout(self.horizontalLayout_pl_dollar)
-        self.horizontalLayout_pl_percent = QtWidgets.QHBoxLayout()
-        self.horizontalLayout_pl_percent.setObjectName("horizontalLayout_pl_percent")
-        self.label_pl_percent_name = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_pl_percent_name.setObjectName("label_pl_percent_name")
-        self.horizontalLayout_pl_percent.addWidget(self.label_pl_percent_name)
-        self.label_pl_percent_value = QtWidgets.QLabel(self.groupBox_active_contract)
-        self.label_pl_percent_value.setObjectName("label_pl_percent_value")
-        self.horizontalLayout_pl_percent.addWidget(self.label_pl_percent_value)
-        self.horizontalLayout_active.addLayout(self.horizontalLayout_pl_percent)
-        self.verticalLayout_main.addWidget(self.groupBox_active_contract)
         self.horizontalLayout_bottom = QtWidgets.QHBoxLayout()
         self.horizontalLayout_bottom.setSpacing(16)
         self.horizontalLayout_bottom.setObjectName("horizontalLayout_bottom")
@@ -616,9 +662,29 @@ class Ui_MainWindow(object):
         self.verticalLayout_main.addLayout(self.horizontalLayout_bottom)
         self.horizontalLayout_status_area = QtWidgets.QHBoxLayout()
         self.horizontalLayout_status_area.setObjectName("horizontalLayout_status_area")
-        self.label_status_icons = QtWidgets.QLabel(self.centralwidget)
-        self.label_status_icons.setObjectName("label_status_icons")
-        self.horizontalLayout_status_area.addWidget(self.label_status_icons)
+        self.pushButton_settings = QtWidgets.QPushButton(self.centralwidget)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.pushButton_settings.sizePolicy().hasHeightForWidth())
+        self.pushButton_settings.setSizePolicy(sizePolicy)
+        self.pushButton_settings.setMinimumSize(QtCore.QSize(12, 12))
+        self.pushButton_settings.setMaximumSize(QtCore.QSize(30, 30))
+        font = QtGui.QFont()
+        font.setPointSize(13)
+        font.setBold(False)
+        font.setWeight(50)
+        self.pushButton_settings.setFont(font)
+        self.pushButton_settings.setStyleSheet("QPushButton {\n"
+"    background: transparent;\n"
+"    color: black;\n"
+"}\n"
+"\n"
+"QPushButton:hover {\n"
+"    color: blue;\n"
+"}")
+        self.pushButton_settings.setObjectName("pushButton_settings")
+        self.horizontalLayout_status_area.addWidget(self.pushButton_settings)
         self.label_connection_status = QtWidgets.QLabel(self.centralwidget)
         font = QtGui.QFont()
         font.setPointSize(9)
@@ -698,12 +764,22 @@ class Ui_MainWindow(object):
         MainWindow.setWindowTitle(_translate("MainWindow", "IB Trading GUI"))
         self.groupBox_trading_info.setToolTip(_translate("MainWindow", "Displays current trading information including SPY and currency rates."))
         self.groupBox_trading_info.setTitle(_translate("MainWindow", "Trading Information"))
-        self.label_spy_name.setText(_translate("MainWindow", "SPY:"))
+        self.label_spy_name.setText(_translate("MainWindow", "  SPY:"))
         self.label_spy_value.setText(_translate("MainWindow", "$498.33"))
         self.label_usd_cad_name.setText(_translate("MainWindow", "USD/CAD:"))
         self.label_usd_cad_value.setText(_translate("MainWindow", "1.3750"))
         self.label_cad_usd_name.setText(_translate("MainWindow", "CAD/USD:"))
         self.label_cad_usd_value.setText(_translate("MainWindow", "0.7272"))
+        self.groupBox_active_contract.setToolTip(_translate("MainWindow", "Information about the currently active contract in your portfolio."))
+        self.groupBox_active_contract.setTitle(_translate("MainWindow", "Active Contract"))
+        self.label_pl_percent_name.setText(_translate("MainWindow", "P/L (%):"))
+        self.label_pl_percent_value.setText(_translate("MainWindow", "0.00%"))
+        self.label_pl_dollar_name.setText(_translate("MainWindow", "P/L ($):"))
+        self.label_pl_dollar_value.setText(_translate("MainWindow", "$0.00"))
+        self.label_quantity_name.setText(_translate("MainWindow", "Quantity:"))
+        self.label_quantity_value.setText(_translate("MainWindow", "10"))
+        self.label_symbol_name.setText(_translate("MainWindow", "Symbol:"))
+        self.label_symbol_value.setText(_translate("MainWindow", "SPY 500C"))
         self.groupBox_option_info.setToolTip(_translate("MainWindow", "Shows detailed information for the selected option contract."))
         self.groupBox_option_info.setTitle(_translate("MainWindow", "Option Information"))
         self.label_strike_name.setText(_translate("MainWindow", "Strike:"))
@@ -711,7 +787,6 @@ class Ui_MainWindow(object):
         self.label_expiration_name.setText(_translate("MainWindow", "Expiration:"))
         self.label_expiration_value.setText(_translate("MainWindow", "2025-08-07"))
         self.label_puts_title.setText(_translate("MainWindow", "Puts"))
-        self.label_put_price_name.setText(_translate("MainWindow", "Price:"))
         self.label_put_price_value.setText(_translate("MainWindow", "$2.80"))
         self.label_put_bid_name.setText(_translate("MainWindow", "Bid:"))
         self.label_put_bid_value.setText(_translate("MainWindow", "$2.79"))
@@ -730,7 +805,6 @@ class Ui_MainWindow(object):
         self.label_put_volume_name.setText(_translate("MainWindow", "Volume:"))
         self.label_put_volume_value.setText(_translate("MainWindow", "4,321"))
         self.label_calls_title.setText(_translate("MainWindow", "Calls"))
-        self.label_call_price_name.setText(_translate("MainWindow", "Price:"))
         self.label_call_price_value.setText(_translate("MainWindow", "$3.10"))
         self.label_call_bid_name.setText(_translate("MainWindow", "Bid:"))
         self.label_call_bid_value.setText(_translate("MainWindow", "$3.09"))
@@ -761,18 +835,8 @@ class Ui_MainWindow(object):
 "<html><head><meta name=\"qrichtext\" content=\"1\" /><style type=\"text/css\">\n"
 "p, li { white-space: pre-wrap; }\n"
 "</style></head><body style=\" font-family:\'MS Shell Dlg 2\'; font-size:8.25pt; font-weight:400; font-style:normal;\">\n"
-"<p align=\"justify\" style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><br /></p></body></html>"))
+"<p align=\"center\" style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">12</p></body></html>"))
         self.textbrowser_ai_alert_value.setProperty("text", _translate("MainWindow", "⚠️ Unusual options volume detected in SPY 500C. Watch for sharp price swings at market open. Consider reducing position size if implied volatility rises above 25%."))
-        self.groupBox_active_contract.setToolTip(_translate("MainWindow", "Information about the currently active contract in your portfolio."))
-        self.groupBox_active_contract.setTitle(_translate("MainWindow", "Active Contract"))
-        self.label_symbol_name.setText(_translate("MainWindow", "Symbol:"))
-        self.label_symbol_value.setText(_translate("MainWindow", "SPY 500C"))
-        self.label_quantity_name.setText(_translate("MainWindow", "Quantity:"))
-        self.label_quantity_value.setText(_translate("MainWindow", "10"))
-        self.label_pl_dollar_name.setText(_translate("MainWindow", "P/L ($):"))
-        self.label_pl_dollar_value.setText(_translate("MainWindow", "$0.00"))
-        self.label_pl_percent_name.setText(_translate("MainWindow", "P/L (%):"))
-        self.label_pl_percent_value.setText(_translate("MainWindow", "0.00%"))
         self.groupBox_account_metrics.setToolTip(_translate("MainWindow", "Key account metrics including value, high water mark, and daily P&L."))
         self.groupBox_account_metrics.setTitle(_translate("MainWindow", "Account Metrics"))
         self.label_account_value_name.setText(_translate("MainWindow", "Account Value:"))
@@ -799,7 +863,7 @@ class Ui_MainWindow(object):
         self.label_total_losses_sum_value.setText(_translate("MainWindow", "$2,500.00"))
         self.label_total_trades_name.setText(_translate("MainWindow", "Total Trades:"))
         self.label_total_trades_value.setText(_translate("MainWindow", "20"))
-        self.label_status_icons.setText(_translate("MainWindow", "⚙ "))
+        self.pushButton_settings.setText(_translate("MainWindow", " ⚙ "))
         self.label_connection_status.setText(_translate("MainWindow", "Connection: Connected"))
         self.button_refresh_ai.setToolTip(_translate("MainWindow", "Refresh the AI insights and recommendations."))
         self.button_refresh_ai.setText(_translate("MainWindow", "🔄 Refresh AI"))
@@ -808,11 +872,11 @@ class Ui_MainWindow(object):
         self.label_time.setText(_translate("MainWindow", "09:42:49 PM"))
 
 
-# if __name__ == "__main__":
-#     import sys
-#     app = QtWidgets.QApplication(sys.argv)
-#     MainWindow = QtWidgets.QMainWindow()
-#     ui = Ui_MainWindow()
-#     ui.setupUi(MainWindow)
-#     MainWindow.show()
-#     sys.exit(app.exec_())
+if __name__ == "__main__":
+    import sys
+    app = QtWidgets.QApplication(sys.argv)
+    MainWindow = QtWidgets.QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(MainWindow)
+    MainWindow.show()
+    sys.exit(app.exec_())
