@@ -1,10 +1,9 @@
 import asyncio
 import logging
-from typing import Optional, Dict, Any, List
-from ib_async import IB, Stock, Option, util
+from typing import Optional, Dict, Any
+from ib_async import IB, Stock, Option
 import pandas as pd
 from datetime import datetime, timedelta
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
