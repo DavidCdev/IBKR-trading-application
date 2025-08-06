@@ -54,7 +54,6 @@ class Ui_MainWindow(object):
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
 "    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(90, 173, 226, 0.08);\n"
 "}\n"
 "QGroupBox::title {\n"
 "    subcontrol-origin: margin;\n"
@@ -98,7 +97,6 @@ class Ui_MainWindow(object):
 
         self.horizontalLayout_usd_cad.addWidget(self.label_usd_cad_value)
 
-
         self.verticalLayout_trading.addLayout(self.horizontalLayout_usd_cad)
 
         self.horizontalLayout_cad_usd = QHBoxLayout()
@@ -134,7 +132,6 @@ class Ui_MainWindow(object):
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
 "    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(90, 173, 226, 0.08);\n"
 "    padding-top: 10px;\n"
 "}\n"
 "QGroupBox::title {\n"
@@ -495,7 +492,6 @@ class Ui_MainWindow(object):
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
 "    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.08);\n"
 "}\n"
 "QGroupBox::title {\n"
 "    subcontrol-origin: margin;\n"
@@ -589,7 +585,6 @@ class Ui_MainWindow(object):
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
 "    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(243, 156, 18, 0.08);\n"
 "    padding-top: 10px;\n"
 "}\n"
 "QGroupBox::title {\n"
@@ -678,7 +673,6 @@ class Ui_MainWindow(object):
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
 "    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.08);\n"
 "    padding-top: 10px;\n"
 "}\n"
 "QGroupBox::title {\n"
@@ -779,7 +773,6 @@ class Ui_MainWindow(object):
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
 "    background-color: #fafdff;\n"
-"    box-shadow: 0 2px 8px rgba(230, 126, 34, 0.08);\n"
 "    padding-top: 10px;\n"
 "}\n"
 "QGroupBox::title {\n"
@@ -923,13 +916,6 @@ class Ui_MainWindow(object):
 "    padding: 7px 16px;\n"
 "    font-weight: bold;\n"
 "    font-size: 8pt;\n"
-"    transition: background 0.2s;\n"
-"}\n"
-"QPushButton:hover {\n"
-"    background-color: #229954;\n"
-"}\n"
-"QPushButton:pressed {\n"
-"    background-color: #1e8449;\n"
 "}")
 
         self.horizontalLayout_status_area.addWidget(self.button_refresh_ai)
@@ -946,13 +932,6 @@ class Ui_MainWindow(object):
 "    padding: 7px 16px;\n"
 "    font-weight: bold;\n"
 "    font-size: 8pt;\n"
-"    transition: background 0.2s;\n"
-"}\n"
-"QPushButton:hover {\n"
-"    background-color: #2980b9;\n"
-"}\n"
-"QPushButton:pressed {\n"
-"    background-color: #21618c;\n"
 "}")
 
         self.horizontalLayout_status_area.addWidget(self.button_ai_prompt)
