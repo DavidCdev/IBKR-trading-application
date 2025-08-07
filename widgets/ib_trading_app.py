@@ -3,6 +3,7 @@ from PyQt5.QtCore import QThread, QTimer
 from ui.ib_trading_gui import Ui_MainWindow
 from utils.config_manager import AppConfig
 from widgets.settings_form import Settings_Form
+from widgets.ai_prompt_form import AIPrompt_Form
 from utils.data_collector import DataCollectorWorker
 from typing import Dict, Any
 import logging
@@ -35,13 +36,13 @@ class IB_Trading_APP(QMainWindow):
         # Setup UI
         self.setup_ui()
         self.setting_ui = Settings_Form(self.config)
-
+        self.ai_prompt_ui = AIPrompt_Form(self.config)
         # Start data collection
         self.worker_thread.start()
 
         self.setting_ui.ui.cancelButton.clicked.connect(self._close_setting_form)
         self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
-
+        
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("IB Trading Application")
@@ -52,6 +53,10 @@ class IB_Trading_APP(QMainWindow):
         # Connect settings button
         if hasattr(self.ui, 'pushButton_settings'):
             self.ui.pushButton_settings.clicked.connect(self.show_setting_ui)
+        
+        # Connect AI prompt button
+        if hasattr(self.ui, 'button_ai_prompt'):
+            self.ui.button_ai_prompt.clicked.connect(self.show_ai_prompt_ui)
         
         # Setup refresh timer for UI updates
         self.refresh_timer = QTimer()
@@ -64,6 +69,10 @@ class IB_Trading_APP(QMainWindow):
         if hasattr(self.setting_ui, 'load_config_values'):
             self.setting_ui.load_config_values()
         self.setting_ui.exec_()
+
+    def show_ai_prompt_ui(self):
+        """Show the AI prompt dialog"""
+        self.ai_prompt_ui.exec_()
 
     def _close_setting_form(self):
         self.setting_ui.close()
