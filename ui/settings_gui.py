@@ -240,7 +240,7 @@ class Ui_PreferencesDialog(object):
         self.verticalLayout.addWidget(self.tabWidget)
         self.buttonLayout = QtWidgets.QHBoxLayout()
         self.buttonLayout.setObjectName("buttonLayout")
-        spacerItem3 = QtWidgets.QSpacerItem(450, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Policy.Expanding)
+        spacerItem3 = QtWidgets.QSpacerItem(400, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.buttonLayout.addItem(spacerItem3)
         self.cancelButton = QtWidgets.QPushButton(PreferencesDialog)
         self.cancelButton.setObjectName("cancelButton")

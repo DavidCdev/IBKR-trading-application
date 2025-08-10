@@ -4,9 +4,13 @@ from ui.ib_trading_gui import Ui_MainWindow
 from utils.config_manager import AppConfig
 from widgets.settings_form import Settings_Form
 from widgets.ai_prompt_form import AIPrompt_Form
+
 from utils.data_collector import DataCollectorWorker
+from utils.ai_engine import AI_Engine
+
 from typing import Dict, Any
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +19,7 @@ class IB_Trading_APP(QMainWindow):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+
 
         # Load configuration
         self.config = AppConfig.load_from_file()
@@ -42,13 +47,20 @@ class IB_Trading_APP(QMainWindow):
 
         self.setting_ui.ui.cancelButton.clicked.connect(self._close_setting_form)
         self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
-        
+
+        self.ai_engine = AI_Engine(self.config)
+
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("IB Trading Application")
         
         # Set initial connection status
         self.update_connection_status(False)
+        
+        # Initialize time label with current time
+        if hasattr(self.ui, 'label_time'):
+            current_time = datetime.now().strftime("%I:%M:%S %p")
+            self.ui.label_time.setText(current_time)
         
         # Connect settings button
         if hasattr(self.ui, 'pushButton_settings'):
@@ -57,6 +69,8 @@ class IB_Trading_APP(QMainWindow):
         # Connect AI prompt button
         if hasattr(self.ui, 'button_ai_prompt'):
             self.ui.button_ai_prompt.clicked.connect(self.show_ai_prompt_ui)
+        
+        self.ui.button_refresh_ai.clicked.connect(self.refresh_ai)
         
         # Setup refresh timer for UI updates
         self.refresh_timer = QTimer()
@@ -69,6 +83,10 @@ class IB_Trading_APP(QMainWindow):
         if hasattr(self.setting_ui, 'load_config_values'):
             self.setting_ui.load_config_values()
         self.setting_ui.exec_()
+
+    def refresh_ai(self):
+        """Refresh the AI engine"""
+        self.ai_engine.refresh()
 
     def show_ai_prompt_ui(self):
         """Show the AI prompt dialog"""
@@ -154,25 +172,32 @@ class IB_Trading_APP(QMainWindow):
         """Update UI with collected data"""
         try:
             # Update SPY price
-            if data.get('spy_price'):
+            if data.get('spy_price') is not None and data['spy_price'] > 0:
                 self.ui.label_spy_value.setText(f"${data['spy_price']:.2f}")
 
+            if data.get('fx_ratio') is not None and data['fx_ratio'] > 0:
+                self.ui.label_usd_cad_value.setText(f"${data['fx_ratio']:.2f}")
+                self.ui.label_cad_usd_name.setText(f"${1/data['fx_ratio']:.2f}")
+
             # Update account metrics
-            if data.get('account') and not data['account'].empty:
+            if data.get('account') is not None and not data['account'].empty:
+                logger.info("Updating Account Data in UI")
                 account_data = data['account'].iloc[0]
+                account_value = account_data.get('NetLiquidation', 'N/A')
+                self.ui.label_account_value_value.setText(f"${account_value}")
+                logger.info(f"Account Net Liquidation: ${account_value}")
                 # Update account-related UI elements here
-                logger.info(f"Account Net Liquidation: ${account_data.get('NetLiquidation', 'N/A')}")
-            
-            # Update positions
-            if data.get('positions') and not data['positions'].empty:
-                positions_count = len(data['positions'])
-                logger.info(f"Active positions: {positions_count}")
-            
-            # Update statistics
-            if data.get('statistics') and not data['statistics'].empty:
-                stats = data['statistics'].iloc[0]
-                win_rate = stats.get('Win_Rate', 0)
-                logger.info(f"Win rate: {win_rate:.2f}%")
+            #
+            # # Update positions
+            # if data.get('positions') and not data['positions'].empty:
+            #     positions_count = len(data['positions'])
+            #     logger.info(f"Active positions: {positions_count}")
+            #
+            # # Update statistics
+            # if data.get('statistics') and not data['statistics'].empty:
+            #     stats = data['statistics'].iloc[0]
+            #     win_rate = stats.get('Win_Rate', 0)
+            #     logger.info(f"Win rate: {win_rate:.2f}%")
                 
         except Exception as e:
             logger.error(f"Error updating UI with data: {e}")
@@ -203,8 +228,10 @@ class IB_Trading_APP(QMainWindow):
     
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""
-        # Add any UI elements that need real-time updates here
-        pass
+        # Update the time label with current time
+        current_time = datetime.now().strftime("%I:%M:%S %p")
+        if hasattr(self.ui, 'label_time'):
+            self.ui.label_time.setText(current_time)
     
     def closeEvent(self, event):
         """Handle application shutdown"""

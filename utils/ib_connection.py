@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import Optional, Dict, Any
-from ib_async import IB, Stock, Option
+from ib_async import IB, Stock, Option, Forex
 import pandas as pd
 from datetime import datetime, timedelta
 
@@ -20,6 +20,7 @@ class IBDataCollector:
         self.clientId = clientId
         self.timeout = timeout
         self.spy_price = 0
+        self.fx_ratio = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
         
     async def connect(self) -> bool:
@@ -81,22 +82,65 @@ class IBDataCollector:
             # Wait for data with timeout
             await asyncio.sleep(2)
             
-            price = spy_ticker.marketPrice()
-            if price and price > 0:
-                self.spy_price = price
-                logger.info(f"SPY Price: ${price:.2f}")
-                
+            if spy_ticker.last and spy_ticker.last > 0:
+                logger.info(f"SPY Last Price: ${spy_ticker.last}")
+                self.spy_price = spy_ticker.last
                 # Cancel market data subscription
                 self.ib.cancelMktData(spy_qualified[0])
                 self._active_subscriptions.discard(spy_qualified[0])
                 
-                return price
+            elif spy_ticker.close and spy_ticker.close > 0:
+                logger.info(f"SPY Previous Close: ${spy_ticker.close}")
+                self.spy_price = spy_ticker.close
+                # Cancel market data subscription
+                self.ib.cancelMktData(spy_qualified[0])
+                self._active_subscriptions.discard(spy_qualified[0])
+                
+            elif spy_ticker.bid and spy_ticker.ask:
+                self.spy_price = (spy_ticker.bid + spy_ticker.ask) / 2
+                logger.info(f"SPY Mid Price: ${self.spy_price:.2f} (Bid: ${spy_ticker.bid}, Ask: ${spy_ticker.ask})")
+                # Cancel market data subscription
+                self.ib.cancelMktData(spy_qualified[0])
+                self._active_subscriptions.discard(spy_qualified[0])
+            
             else:
-                logger.warning("Invalid SPY price received")
-                return None
+                logger.info("No price data available")
+                logger.info(f"Last: {spy_ticker.last}, Bid: {spy_ticker.bid}, Ask: {spy_ticker.ask}")
+                logger.info(f"Close: {spy_ticker.close}, Open: {spy_ticker.open}")
+                self.spy_price = 0
+                # Cancel market data subscription
+                self.ib.cancelMktData(spy_qualified[0])
+                self._active_subscriptions.discard(spy_qualified[0])
+            
+            return self.spy_price
                 
         except Exception as e:
             logger.error(f"Error getting SPY price: {e}")
+            return None
+        
+    async def get_fx_ratio(self) -> Optional[float]:
+        """Get current USD/CAD ratio with improved error handling"""
+        try:
+            contract = Forex('USDCAD', 'IDEALPRO')
+            await self.ib.qualifyContractsAsync(contract)  # Qualify the contract to populate conId
+            ticker = await self.ib.reqMktDataAsync(contract, '', False, False)
+            await asyncio.sleep(2)  # Use await here!
+            
+            if ticker.last is not None:
+                self.fx_ratio = ticker.last
+                logger.info(f"USD/CAD Ratio (last): {self.fx_ratio}")
+            elif ticker.close is not None:
+                self.fx_ratio = ticker.close
+                logger.info(f"USD/CAD Ratio (close): {self.fx_ratio}")
+            elif ticker.bid and ticker.ask:
+                self.fx_ratio = (ticker.bid + ticker.ask) / 2
+                logger.info(f"USD/CAD Ratio (mid): {self.fx_ratio}")
+            else:
+                self.fx_ratio = 0
+            
+            return self.fx_ratio
+        except Exception as e:
+            logger.error(f"Error getting USD/CAD ratio: {e}")
             return None
     
     async def get_option_chain(self, symbol='SPY', num_strikes=10) -> pd.DataFrame:
@@ -422,15 +466,19 @@ class IBDataCollector:
         try:
             data = {}
             
-            # Get SPY price
+            # # Get SPY price
             logger.info("Getting SPY price...")
             spy_price = await self.get_spy_price()
             data['spy_price'] = spy_price
             
-            # # Get account metrics
-            # logger.info("Getting account metrics...")
-            # account_df = await self.get_account_metrics()
-            # data['account'] = account_df
+            # Get USD/CAD ratio
+            logger.info("Getting USD/CAD ratio...")
+            data["fx_ratio"] = await self.get_fx_ratio()
+            
+            # Get account metrics
+            logger.info("Getting account metrics...")
+            account_df = await self.get_account_metrics()
+            data['account'] = account_df
             #
             # # Get option chain
             # logger.info("Getting option chain...")
