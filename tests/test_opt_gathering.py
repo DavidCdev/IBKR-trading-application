@@ -41,7 +41,6 @@ class IBDataCollector:
         self.fx_ratio = 0.0
         self._active_subscriptions = set()  # Track active market data subscriptions
         self._active_contracts = {}  # Added missing variable
-        self.event_bus = None  # Added missing variable - you'll need to implement this
         self.underlying_symbol = 'IBKR'  # Added missing config
         self.underlying_price = 0  # Added missing variable
         self.options_chain: List[Dict[str, Any]] = []
@@ -49,6 +48,9 @@ class IBDataCollector:
             'contract': {
                 'symbol': 'SPY',
                 'secType': 'OPT',
+                'strike': 502,
+                'right': 'C',
+                'lastTradeDateOrContractMonth': '20250815',  # August 15, 2025 expiration
                 'exchange': 'SMART',
                 'currency': 'USD'
             }
@@ -95,12 +97,16 @@ class IBDataCollector:
         if not isinstance(data, dict):
             data = {}
         contract = self._create_contract_from_data(data.get('contract', data))
+
+        print(f"Contract is : {contract}")
         if not contract:
             raise ValueError(f"Could not create contract from data: {data}")
 
         # Qualify with IB to get complete contract details
         logger.info("Qualifying contract with IB...")
         qualified_contracts = await self.ib.qualifyContractsAsync(contract)
+        await asyncio.sleep(2)  # Use await here!
+
         if not qualified_contracts or qualified_contracts[0] is None:
             raise ValueError(f"Could not qualify contract: {contract}")
 
@@ -170,17 +176,8 @@ class IBDataCollector:
         """
         try:
             sec_type = contract_data.get('secType', 'STK').upper()
-
-            # Stock contracts
-            if sec_type == 'STK':
-                logger.info("Section Type is STK")
-                return Stock(
-                    symbol=contract_data.get('symbol', ''),
-                    exchange=contract_data.get('exchange', 'SMART'),
-                    currency=contract_data.get('currency', 'USD')
-                )
             # Option contracts
-            elif sec_type == 'OPT':
+            if sec_type == 'OPT':
                 logger.info("Section Type is OPT")
                 return Option(
                     symbol=contract_data.get('symbol', ''),
@@ -212,22 +209,22 @@ class IBDataCollector:
     def _on_market_data_tick(self, ticker: Ticker):
         """Enhanced market data callback with comprehensive tick processing."""
         try:
-            logging.info("Start market data tick")
+            logging.info(f"Start market data tick! Ticker is : {ticker}")
             # Update active contracts with current prices
-            if hasattr(ticker, 'contract') and ticker.contract:
-                contract = ticker.contract
-                # Fixed util.isNan to use math.isnan
-                last_price = ticker.last if ticker.last and not isnan(ticker.last) else ticker.close
-                logging.info(f"last price: {last_price}")
-                # Store current price for external access
-                if contract.symbol == 'SPY' and last_price and last_price > 0:
-                    self.current_spy_price = last_price
-                    logger.info(f"SPY price updated: {last_price}")
-
-                for contract_key, active_contract in self._active_contracts.items():
-                    if (getattr(active_contract.contract, 'conId', None) == getattr(contract, 'conId', None) and
-                            last_price and last_price > 0):
-                        active_contract.current_price = last_price
+            # if hasattr(ticker, 'contract') and ticker.contract:
+            #     contract = ticker.contract
+            #     # Fixed util.isNan to use math.isnan
+            #     last_price = ticker.last if ticker.last and not isnan(ticker.last) else ticker.close
+            #     logging.info(f"last price: {last_price}")
+            #     # Store current price for external access
+            #     if contract.symbol == 'SPY' and last_price and last_price > 0:
+            #         self.current_spy_price = last_price
+            #         logger.info(f"SPY price updated: {last_price}")
+            #
+            #     for contract_key, active_contract in self._active_contracts.items():
+            #         if (getattr(active_contract.contract, 'conId', None) == getattr(contract, 'conId', None) and
+            #                 last_price and last_price > 0):
+            #             active_contract.current_price = last_price
 
             # Log tick data for debugging
             tick_data = {
@@ -260,34 +257,8 @@ class IBDataCollector:
             sec_type = contract.get('secType', '')
 
             # Update underlying price for the configured symbol
-            if symbol == self.underlying_symbol and sec_type == 'STK':  # Fixed self.config.underlying_symbol
-                last_price = data.get('last')
-                if last_price and last_price > 0:
-                    self.underlying_price = last_price
-                    logging.info("Underlying Symbol price: ", self.underlying_price)
 
-                    logger.debug(f"Underlying price update: ${last_price}")
-
-                    # Check if we need to reselect options
-                    self._check_options_reselection()
-
-            # Handle forex data for currency conversion
-            elif sec_type == 'CASH' and symbol in ['USD', 'CAD']:
-                last_price = data.get('last')
-                if last_price and last_price > 0:
-                    # Emit forex update for GUI
-                    #     forex_data = {
-                    #         'from_currency': 'USD',
-                    #         'to_currency': 'CAD',
-                    #         'rate': last_price,
-                    #         'reciprocal_rate': 1.0 / last_price if last_price > 0 else 0,
-                    #         'timestamp': datetime.now().isoformat()
-                    #     }
-
-                    logger.debug(f"Forex update: USD/CAD = {last_price}")
-
-            # Handle options data
-            elif sec_type == 'OPT':
+            if sec_type == 'OPT':
                 # Update options chain with current prices
                 logger.info("Section Type is : OPT")
                 self._update_options_chain(data)
@@ -305,7 +276,7 @@ class IBDataCollector:
             contract = tick_data.get('contract', {})
             symbol = contract.get('symbol', '')
 
-            if symbol != self.config.underlying_symbol:
+            if symbol != self.underlying_symbol:
                 return
 
             # Find the option in our chain and update its data

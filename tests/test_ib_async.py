@@ -1,126 +1,133 @@
+import time
+
 from ib_async import *
 import asyncio
 import pandas as pd
+import time
+from datetime import datetime
 
 # Connect to TWS
 ib = IB()
 ib.connect('127.0.0.1', 7497, clientId=2)  # Paper trading port
-# ib.connect('127.0.0.1', 7496, clientId=1)  # Live trading port
-#
-#
-# # Create SPY contract
-# spy_stock = Stock('SPY', 'SMART', 'USD')
-# ib.qualifyContracts(spy_stock)
-#
-# # Get market data
-# spy_ticker = ib.reqMktData(spy_stock)
-# ib.sleep(2)  # Wait for data
-#
-# print(f"SPY Price: ${spy_ticker.marketPrice()}")
-#
-#
-# # Get option chain for SPY
-# chains = ib.reqSecDefOptParams('SPY', '', 'STK', 756733)  # SPY conId
-# print("Getting chains successfully")
-# # Filter for your expiration date (2025-08-05)
-# target_expiry = '20250805'
-# strikes = []
-# for chain in chains:
-#     if target_expiry in chain.expirations:
-#         strikes = chain.strikes
-#         break
-#
-#
-# print("Options")
-# # Create option contracts for $502 strike
-# call_502 = Option('SPY', target_expiry, 502, 'C', 'SMART')
-# put_502 = Option('SPY', target_expiry, 502, 'P', 'SMART')
-#
-# ib.qualifyContracts(call_502, put_502)
-# print("reqMktData")
-# # Get option market data
-# call_ticker = ib.reqMktData(call_502, '', False, False)
-# put_ticker = ib.reqMktData(put_502, '', False, False)
-# ib.sleep(2)
-#
-# print(f"Call Bid: ${call_ticker.bid}, Ask: ${call_ticker.ask}")
-# print(f"Put Bid: ${put_ticker.bid}, Ask: ${put_ticker.ask}")
-#
-# # Greeks are available in the ticker object
-# print(f"Call Delta: {call_ticker.modelGreeks.delta if call_ticker.modelGreeks else 'N/A'}")
-# print(f"Call Gamma: {call_ticker.modelGreeks.gamma if call_ticker.modelGreeks else 'N/A'}")
-# print(f"Call Theta: {call_ticker.modelGreeks.theta if call_ticker.modelGreeks else 'N/A'}")
-# print(f"Call Vega: {call_ticker.modelGreeks.vega if call_ticker.modelGreeks else 'N/A'}")
-#
-# # Volume and Open Interest are in the ticker
-# print(f"Call Volume: {call_ticker.volume}")
-# print(f"Call Open Interest: {call_ticker.openInterest}")
-# print(f"Put Volume: {put_ticker.volume}")
-# print(f"Put Open Interest: {put_ticker.openInterest}")
-#
-#
-# # Get account summary
-# account_summary = ib.accountSummary()
-#
-# # Extract key metrics
-# account_metrics = {}
-# for item in account_summary:
-#     if item.tag == 'NetLiquidation':
-#         account_metrics['Account Value'] = float(item.value)
-#     elif item.tag == 'DayTradesRemaining':
-#         account_metrics['Day Trades Remaining'] = item.value
-#     elif item.tag == 'BuyingPower':
-#         account_metrics['Buying Power'] = float(item.value)
-#
-# print(f"Account Value: ${account_metrics.get('Account Value', 0):,.2f}")
-#
-#
-# # Get current positions
-# positions = ib.positions()
-#
-# for position in positions:
-#     if position.contract.symbol == 'SPY' and position.contract.secType == 'OPT':
-#         print(f"Symbol: {position.contract.symbol}")
-#         print(f"Strike: {position.contract.strike}")
-#         print(f"Right: {position.contract.right}")
-#         print(f"Quantity: {position.position}")
-#         print(f"Avg Cost: ${position.avgCost}")
-#
-# # Get P&L for positions
-# pnl = ib.reqPnL('your_account_id')  # Replace with your account ID
-#
-# # For single position P&L
-# for position in positions:
-#     if position.contract.symbol == 'SPY':
-#         pnl_single = ib.reqPnLSingle('your_account_id', '', position.contract.conId)
-#         print(f"Daily P&L: ${pnl_single.dailyPnL}")
-#         print(f"Unrealized P&L: ${pnl_single.unrealizedPnL}")
-#
-#
-# # You'll need to track this yourself or get from executions
-# executions = ib.reqExecutions()
-#
-# # Calculate win rate and statistics
-# wins = 0
-# losses = 0
-# total_win_amount = 0
-# total_loss_amount = 0
-#
-# # This requires processing your execution history
-# # and calculating realized P&L per trade
-#
-# print(f"Total Trades: {len(executions)}")
-# print(f"Win Rate: {(wins/(wins+losses)*100):.1f}%" if (wins+losses) > 0 else "N/A")
-#
-#
-# # Get currency exchange rates
-# usd_cad = Forex('USD', 'CAD')
-# ib.qualifyContracts(usd_cad)
-#
-# usd_cad_ticker = ib.reqMktData(usd_cad)
-# ib.sleep(2)
-#
-# print(f"USD/CAD: {usd_cad_ticker.marketPrice()}")
-#
-#
-#
+
+# Wait for connection to be established
+print("Waiting for connection to be established...")
+time.sleep(5)
+
+# Check if connected
+if not ib.isConnected():
+    print("Failed to connect to TWS")
+    exit(1)
+
+print("Connected to TWS successfully")
+
+# Create a more specific contract with expiration date
+# Using the first expiration date from the error message: 20250815 (August 15, 2025)
+call_contract = Option('SPY', 
+                      strike=502, 
+                      right='C', 
+                      exchange='SMART',
+                      lastTradeDateOrContractMonth='20250815')
+
+print(f"Requesting contract qualification for: {call_contract}")
+contracts = ib.qualifyContracts(call_contract)
+
+# Wait a bit more for contract qualification
+time.sleep(3)
+
+print(f"Contracts returned: {contracts}")
+
+# Check if contracts were qualified successfully
+if not contracts or contracts[0] is None:
+    print("Failed to qualify contracts. Please check:")
+    print("1. TWS is running and accepting connections")
+    print("2. Contract specifications are correct")
+    print("3. You have market data permissions")
+    exit(1)
+
+print(f"Successfully qualified contract: {contracts[0]}")
+
+# Check current time and market status
+current_time = datetime.now()
+print(f"Current time: {current_time}")
+print("Note: Market data may not be available outside of market hours (9:30 AM - 4:00 PM ET, weekdays)")
+
+# Request market data
+ticker = ib.reqMktData(contracts[0],
+    genericTickList='100,101,106',  # Volume, Open Interest, IV
+    snapshot=False
+)
+
+# Wait for market data to arrive with progress updates
+print("Waiting for market data...")
+for i in range(20):  # Wait up to 20 seconds
+    time.sleep(1)
+    print(f"Waiting... {i+1}/20 seconds")
+    
+    # Check if we have any data
+    if hasattr(ticker, 'last') and ticker.last is not None:
+        print(f"Last price received: {ticker.last}")
+        break
+    if hasattr(ticker, 'bid') and ticker.bid is not None:
+        print(f"Bid received: {ticker.bid}")
+        break
+    if hasattr(ticker, 'ask') and ticker.ask is not None:
+        print(f"Ask received: {ticker.ask}")
+        break
+
+print("\n=== Market Data Summary ===")
+
+# Basic price data
+if hasattr(ticker, 'last') and ticker.last is not None:
+    print(f"Last Price: {ticker.last}")
+else:
+    print("Last Price: Not available")
+
+if hasattr(ticker, 'bid') and ticker.bid is not None:
+    print(f"Bid: {ticker.bid}")
+else:
+    print("Bid: Not available")
+
+if hasattr(ticker, 'ask') and ticker.ask is not None:
+    print(f"Ask: {ticker.ask}")
+else:
+    print("Ask: Not available")
+
+# Greeks
+print("\n=== Greeks ===")
+if hasattr(ticker, 'modelGreeks') and ticker.modelGreeks is not None:
+    delta = ticker.modelGreeks.delta
+    gamma = ticker.modelGreeks.gamma
+    theta = ticker.modelGreeks.theta
+    vega = ticker.modelGreeks.vega
+    
+    print(f"Delta: {delta}")
+    print(f"Gamma: {gamma}")
+    print(f"Theta: {theta}")
+    print(f"Vega: {vega}")
+else:
+    print("Greeks not available (may need market to be open)")
+
+# Open Interest and Volume
+print("\n=== Volume & Open Interest ===")
+if hasattr(ticker, 'callOpenInterest') and not pd.isna(ticker.callOpenInterest):
+    open_interest = ticker.callOpenInterest
+    print(f"Call Open Interest: {open_interest}")
+else:
+    print("Call Open Interest: Not available")
+
+if hasattr(ticker, 'callVolume') and not pd.isna(ticker.callVolume):
+    volume = ticker.callVolume
+    print(f"Call Volume: {volume}")
+else:
+    print("Call Volume: Not available")
+
+# Additional debugging info
+print("\n=== Debug Info ===")
+print(f"Ticker object type: {type(ticker)}")
+print(f"Ticker attributes: {[attr for attr in dir(ticker) if not attr.startswith('_')]}")
+print(f"Contract details: {contracts[0]}")
+
+# Disconnect
+ib.disconnect()
+print("\nDisconnected from TWS")
