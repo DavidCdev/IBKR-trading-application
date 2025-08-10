@@ -298,7 +298,9 @@ class IBDataCollector:
     
     async def calculate_pnl_detailed(self, pos, current_price):
         results = []
-
+        pnl_dollar = 0
+        pnl_percent = 0
+        currency = ''
         if 'USDCAD' in str(pos.contract):
             # Forex
             pnl_dollar = pos.position * (current_price - pos.avgCost)
@@ -337,7 +339,7 @@ class IBDataCollector:
                 logger.info("No active positions found")
                 return pd.DataFrame()
             
-            position_data = []
+            pnl_detailed = []
             for position in positions:
                 logger.info(f"Position: {position}")
                 try:
