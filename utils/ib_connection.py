@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
 from datetime import datetime, timedelta
-
 logger = logging.getLogger(__name__)
 
 
@@ -13,13 +12,16 @@ class IBDataCollector:
     Improved IB Data Collector with better error handling and resource management
     """
     
-    def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30):
+    def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30, trading_config=None):
         self.ib = IB()
+        self.trading_config = trading_config
+        self.underlying_symbol = trading_config.get('underlying_symbol')
         self.host = host
         self.port = port
         self.clientId = clientId
         self.timeout = timeout
         self.spy_price = 0
+        self.underlying_symbol_price = 0
         self.fx_ratio = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
         
@@ -64,58 +66,58 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
     
-    async def get_spy_price(self) -> Optional[float]:
-        """Get current SPY price with improved error handling"""
+    async def get_underlying_symbol_price(self) -> Optional[float]:
+        """Get current underlying symbol price with improved error handling"""
         try:
-            spy = Stock('SPY', 'SMART', 'USD')
+            underlying_symbol = Stock(self.underlying_symbol, 'SMART', 'USD')
             
             # Qualify the contract
-            spy_qualified = await self.ib.qualifyContractsAsync(spy)
-            if not spy_qualified or spy_qualified[0] is None:
-                logger.error("Could not qualify SPY contract")
+            underlying_symbol_qualified = await self.ib.qualifyContractsAsync(underlying_symbol)
+            if not underlying_symbol_qualified or underlying_symbol_qualified[0] is None:
+                logger.error(f"Could not qualify {self.underlying_symbol} contract")
                 return None
             
             # Request market data
-            spy_ticker = self.ib.reqMktData(spy_qualified[0])
-            self._active_subscriptions.add(spy_qualified[0])
+            underlying_symbol_ticker = self.ib.reqMktData(underlying_symbol_qualified[0])
+            self._active_subscriptions.add(underlying_symbol_qualified[0])
             
             # Wait for data with timeout
             await asyncio.sleep(2)
             
-            if spy_ticker.last and spy_ticker.last > 0:
-                logger.info(f"SPY Last Price: ${spy_ticker.last}")
-                self.spy_price = spy_ticker.last
+            if underlying_symbol_ticker.last and underlying_symbol_ticker.last > 0:
+                logger.info(f"{self.underlying_symbol} Last Price: ${underlying_symbol_ticker.last}")
+                self.underlying_symbol_price = underlying_symbol_ticker.last
                 # Cancel market data subscription
-                self.ib.cancelMktData(spy_qualified[0])
-                self._active_subscriptions.discard(spy_qualified[0])
+                self.ib.cancelMktData(underlying_symbol_qualified[0])
+                self._active_subscriptions.discard(underlying_symbol_qualified[0])
                 
-            elif spy_ticker.close and spy_ticker.close > 0:
-                logger.info(f"SPY Previous Close: ${spy_ticker.close}")
-                self.spy_price = spy_ticker.close
+            elif underlying_symbol_ticker.close and underlying_symbol_ticker.close > 0:
+                logger.info(f"{self.underlying_symbol} Previous Close: ${underlying_symbol_ticker.close}")
+                self.underlying_symbol_price = underlying_symbol_ticker.close
                 # Cancel market data subscription
-                self.ib.cancelMktData(spy_qualified[0])
-                self._active_subscriptions.discard(spy_qualified[0])
+                self.ib.cancelMktData(underlying_symbol_qualified[0])
+                self._active_subscriptions.discard(underlying_symbol_qualified[0])
                 
-            elif spy_ticker.bid and spy_ticker.ask:
-                self.spy_price = (spy_ticker.bid + spy_ticker.ask) / 2
-                logger.info(f"SPY Mid Price: ${self.spy_price:.2f} (Bid: ${spy_ticker.bid}, Ask: ${spy_ticker.ask})")
+            elif underlying_symbol_ticker.bid and underlying_symbol_ticker.ask:
+                self.underlying_symbol_price = (underlying_symbol_ticker.bid + underlying_symbol_ticker.ask) / 2
+                logger.info(f"{self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${underlying_symbol_ticker.bid}, Ask: ${underlying_symbol_ticker.ask})")
                 # Cancel market data subscription
-                self.ib.cancelMktData(spy_qualified[0])
-                self._active_subscriptions.discard(spy_qualified[0])
+                self.ib.cancelMktData(underlying_symbol_qualified[0])
+                self._active_subscriptions.discard(underlying_symbol_qualified[0])
             
             else:
                 logger.info("No price data available")
-                logger.info(f"Last: {spy_ticker.last}, Bid: {spy_ticker.bid}, Ask: {spy_ticker.ask}")
-                logger.info(f"Close: {spy_ticker.close}, Open: {spy_ticker.open}")
-                self.spy_price = 0
+                logger.info(f"Last: {underlying_symbol_ticker.last}, Bid: {underlying_symbol_ticker.bid}, Ask: {underlying_symbol_ticker.ask}")
+                logger.info(f"Close: {underlying_symbol_ticker.close}, Open: {underlying_symbol_ticker.open}")
+                self.underlying_symbol_price = 0
                 # Cancel market data subscription
-                self.ib.cancelMktData(spy_qualified[0])
-                self._active_subscriptions.discard(spy_qualified[0])
+                self.ib.cancelMktData(underlying_symbol_qualified[0])
+                self._active_subscriptions.discard(underlying_symbol_qualified[0])
             
-            return self.spy_price
+            return self.underlying_symbol_price
                 
         except Exception as e:
-            logger.error(f"Error getting SPY price: {e}")
+            logger.error(f"Error getting {self.underlying_symbol} price: {e}")
             return None
         
     async def get_fx_ratio(self) -> Optional[float]:
@@ -123,20 +125,35 @@ class IBDataCollector:
         try:
             contract = Forex('USDCAD', 'IDEALPRO')
             await self.ib.qualifyContractsAsync(contract)  # Qualify the contract to populate conId
-            ticker = await self.ib.reqMktDataAsync(contract, '', False, False)
+            ticker = self.ib.reqMktData(contract, '', False, False)
             await asyncio.sleep(2)  # Use await here!
             
-            if ticker.last is not None:
+            if ticker.last and ticker.last > 0:
                 self.fx_ratio = ticker.last
                 logger.info(f"USD/CAD Ratio (last): {self.fx_ratio}")
-            elif ticker.close is not None:
+                # Cancel market data subscription
+                self.ib.cancelMktData(contract)
+                self._active_subscriptions.discard(contract)
+                
+            elif ticker.close and ticker.close > 0:
                 self.fx_ratio = ticker.close
                 logger.info(f"USD/CAD Ratio (close): {self.fx_ratio}")
+                # Cancel market data subscription
+                self.ib.cancelMktData(contract)
+                self._active_subscriptions.discard(contract)
+                
             elif ticker.bid and ticker.ask:
                 self.fx_ratio = (ticker.bid + ticker.ask) / 2
                 logger.info(f"USD/CAD Ratio (mid): {self.fx_ratio}")
+                # Cancel market data subscription
+                self.ib.cancelMktData(contract)
+                self._active_subscriptions.discard(contract)
+                
             else:
                 self.fx_ratio = 0
+                # Cancel market data subscription
+                self.ib.cancelMktData(contract)
+                self._active_subscriptions.discard(contract)
             
             return self.fx_ratio
         except Exception as e:
@@ -170,10 +187,10 @@ class IBDataCollector:
             chain = chains[0]
 
             # Get current stock price for strike selection
-            if self.spy_price == 0:
-                await self.get_spy_price()
+            if self.underlying_symbol_price == 0:
+                await self.get_underlying_symbol_price()
 
-            if self.spy_price == 0:
+            if self.underlying_symbol_price == 0:
                 logger.error("Unable to get current stock price for strike selection")
                 return pd.DataFrame()
 
@@ -279,10 +296,42 @@ class IBDataCollector:
             logger.warning(f"Error getting data for {option_type} option: {e}")
             return None
     
+    async def calculate_pnl_detailed(self, pos, current_price):
+        results = []
+
+        if 'USDCAD' in str(pos.contract):
+            # Forex
+            pnl_dollar = pos.position * (current_price - pos.avgCost)
+            pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            currency = 'CAD'
+
+        elif pos.contract.symbol == 'IBKR':
+            # Option
+            pnl_dollar = pos.position * (current_price - pos.avgCost)
+            pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            currency = 'USD'
+
+        elif pos.contract.symbol == 'SPY':
+            # Stock (Short)
+            pnl_dollar = pos.position * (current_price - pos.avgCost)
+            pnl_percent = -((current_price - pos.avgCost) / pos.avgCost) * 100 * (-1 if pos.position < 0 else 1)
+            currency = 'USD'
+
+        results.append({
+            'symbol': pos.contract.localSymbol if hasattr(pos.contract, 'localSymbol') else 'USDCAD',
+            'position_size': pos.position,
+            'avg_cost': pos.avgCost,
+            'pnl_dollar': round(pnl_dollar, 2),
+            'pnl_percent': round(pnl_percent, 2),
+            'currency': currency
+        })
+
+        return results
+
     async def get_active_positions(self) -> pd.DataFrame:
         """Get active positions with improved error handling"""
         try:
-            positions = await self.ib.positionsAsync()
+            positions = self.ib.positions()
             
             if not positions:
                 logger.info("No active positions found")
@@ -290,27 +339,17 @@ class IBDataCollector:
             
             position_data = []
             for position in positions:
+                logger.info(f"Position: {position}")
                 try:
-                    data = {
-                        'Symbol': position.contract.symbol,
-                        'SecType': position.contract.secType,
-                        'Exchange': position.contract.exchange,
-                        'Currency': position.contract.currency,
-                        'Position': position.position,
-                        'AvgCost': position.avgCost,
-                        'MarketValue': position.marketValue
-                    }
-                    position_data.append(data)
+                    pnl_detailed = await self.calculate_pnl_detailed(position, self.underlying_symbol_price)
+
                 except Exception as e:
                     logger.warning(f"Error processing position: {e}")
                     continue
             
-            if position_data:
-                df = pd.DataFrame(position_data)
-                logger.info(f"Retrieved {len(df)} active positions")
-                return df
-            else:
-                return pd.DataFrame()
+            df = pd.DataFrame(pnl_detailed)
+
+            return df
                 
         except Exception as e:
             logger.error(f"Error getting active positions: {e}")
@@ -467,14 +506,14 @@ class IBDataCollector:
             data = {}
             
             # # Get SPY price
-            logger.info("Getting SPY price...")
-            spy_price = await self.get_spy_price()
-            data['spy_price'] = spy_price
-            
+            logger.info(f"Getting {self.underlying_symbol} price...")
+            underlying_symbol_price = await self.get_underlying_symbol_price()
+            data['underlying_symbol_price'] = underlying_symbol_price
+
             # Get USD/CAD ratio
             logger.info("Getting USD/CAD ratio...")
             data["fx_ratio"] = await self.get_fx_ratio()
-            
+
             # Get account metrics
             logger.info("Getting account metrics...")
             account_df = await self.get_account_metrics()
@@ -485,10 +524,10 @@ class IBDataCollector:
             # options_df = await self.get_option_chain()
             # data['options'] = options_df
             #
-            # # Get active positions
-            # logger.info("Getting active positions...")
-            # positions_df = await self.get_active_positions()
-            # data['positions'] = positions_df
+            # Get active positions
+            logger.info("Getting active positions...")
+            positions_df = await self.get_active_positions()
+            data['active_contract'] = positions_df
             #
             # # Get trade statistics
             # logger.info("Getting trade statistics...")

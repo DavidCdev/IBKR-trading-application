@@ -171,13 +171,18 @@ class IB_Trading_APP(QMainWindow):
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
         try:
+            if self.config.trading.get('underlying_symbol') is not None:
+                self.ui.label_spy_name.setText(f"{self.config.trading.get('underlying_symbol')}")
+            else:
+                self.ui.label_spy_name.setText(f"---")
+
             # Update SPY price
-            if data.get('spy_price') is not None and data['spy_price'] > 0:
-                self.ui.label_spy_value.setText(f"${data['spy_price']:.2f}")
+            if data.get('underlying_symbol_price') is not None and data['underlying_symbol_price'] > 0:
+                self.ui.label_spy_value.setText(f"${data['underlying_symbol_price']:.2f}")
 
             if data.get('fx_ratio') is not None and data['fx_ratio'] > 0:
-                self.ui.label_usd_cad_value.setText(f"${data['fx_ratio']:.2f}")
-                self.ui.label_cad_usd_name.setText(f"${1/data['fx_ratio']:.2f}")
+                self.ui.label_usd_cad_value.setText(f"{data['fx_ratio']:.4f}")
+                self.ui.label_cad_usd_value.setText(f"{1/data['fx_ratio']:.4f}")
 
             # Update account metrics
             if data.get('account') is not None and not data['account'].empty:
@@ -192,7 +197,20 @@ class IB_Trading_APP(QMainWindow):
             # if data.get('positions') and not data['positions'].empty:
             #     positions_count = len(data['positions'])
             #     logger.info(f"Active positions: {positions_count}")
-            #
+            
+            # Update active contract data
+            if data.get('active_contract') is not None and not data['active_contract'].empty:
+                logger.info("Updating Active Contract Data in UI")
+                active_contract_data = data['active_contract'].iloc[0]
+                logger.info(f"Active contract data: {active_contract_data}")
+                self.ui.label_symbol_value.setText(f"{active_contract_data.get('symbol', '---')}")
+                self.ui.label_quantity_value.setText(f"{active_contract_data.get('position_size', '---')}")
+                self.ui.label_pl_dollar_value.setText(f"${active_contract_data.get('pnl_dollar', '---')}")
+                self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
+
+
+            
+            
             # # Update statistics
             # if data.get('statistics') and not data['statistics'].empty:
             #     stats = data['statistics'].iloc[0]

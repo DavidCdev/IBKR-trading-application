@@ -18,7 +18,8 @@ class DataCollectorWorker(QObject):
         self.collector = IBDataCollector(
             host=config.ib_host,
             port=config.ib_port,
-            clientId=config.ib_client_id
+            clientId=config.ib_client_id,
+            trading_config=config.trading
         )
         self.is_running = False
         self.reconnect_attempts = 0
