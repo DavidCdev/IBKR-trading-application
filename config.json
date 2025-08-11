@@ -63,5 +63,8 @@
     "ai_prompt": {
         "prompt": "I am a AI assistant\n",
         "context": "You are a helpful assistant that can answer questions and help with tasks."
+    },
+    "account": {
+        "high_water_mark": 10008032.2
     }
 }

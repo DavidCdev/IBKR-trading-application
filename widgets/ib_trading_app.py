@@ -207,11 +207,13 @@ class IB_Trading_APP(QMainWindow):
                 starting_value = account_data.get('StartingValue','---')
                 pnl_value_price = account_data.get('RealizedPnLPrice', 0)
                 pnl_value_percent = account_data.get('RealizedPnLPercent', 0)
+                high_water_mark = account_data.get('HighWaterMark', '---')
 
                 self.ui.label_account_value_value.setText(f"${account_value}")
                 self.ui.label_starting_value_value.setText(f"${starting_value}")
                 self.ui.label_daily_pl_value.setText(f"${pnl_value_price}")
                 self.ui.label_daily_pl_percent_value.setText(f"${pnl_value_percent}")
+                self.ui.label_high_water_value.setText(f"${high_water_mark}")
                 logger.info(f"Account Net Liquidation: ${account_value}")
                 # Update account-related UI elements here
             #

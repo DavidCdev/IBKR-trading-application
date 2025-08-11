@@ -12,9 +12,10 @@ class IBDataCollector:
     Improved IB Data Collector with better error handling and resource management
     """
     
-    def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30, trading_config=None):
+    def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30, trading_config=None, account_config=None):
         self.ib = IB()
         self.trading_config = trading_config
+        self.account_config = account_config
         self.underlying_symbol = trading_config.get('underlying_symbol')
         self.host = host
         self.port = port
@@ -389,12 +390,25 @@ class IBDataCollector:
             realized_pn_l_account_value = float(account_data.get('RealizedPnL', 0) or 0)
             starting_value = liquidation_account_value - realized_pn_l_account_value
             realized_pn_l_account_percent = (realized_pn_l_account_value / starting_value) * 100
+
+            high_water_mark = self.account_config.get('high_water_mark')
+            logger.info(f"High water mark: {high_water_mark}")
+            
+            if high_water_mark is None:
+                high_water_mark = realized_pn_l_account_percent
+            
+            if realized_pn_l_account_value > high_water_mark:
+                high_water_mark = realized_pn_l_account_value
+                self.account_config['high_water_mark'] = high_water_mark
+                logger.info(f"High water mark updated to {high_water_mark}")
+
             # Create DataFrame with common metrics
             metrics = {
                 'NetLiquidation': liquidation_account_value,
+                'StartingValue':starting_value,
+                'HighWaterMark': high_water_mark,
                 'RealizedPnLPrice': realized_pn_l_account_value,
                 'RealizedPnLPercent': realized_pn_l_account_percent,
-                'StartingValue':starting_value,
                 'TotalCashValue': account_data.get('TotalCashValue', 0),
                 'GrossPositionValue': account_data.get('GrossPositionValue', 0),
                 'BuyingPower': account_data.get('BuyingPower', 0),

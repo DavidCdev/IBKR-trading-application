@@ -19,6 +19,8 @@ class AppConfig:
     debug: Dict[str, Any] = None
     # AI prompt settings
     ai_prompt: Dict[str, Any] = None
+    # Account settings
+    account: Dict[str, Any] = None
     
     def __post_init__(self):
         """Initialize default values if not provided"""
@@ -95,7 +97,10 @@ class AppConfig:
                 "prompt": "You are a helpful assistant that can answer questions and help with tasks.",
                 "context": "You are a helpful assistant that can answer questions and help with tasks."
             }
-
+        if self.account is None:
+            self.account = {
+                "high_water_mark": 1000000
+            }
     # Properties for backward compatibility
     @property
     def ib_host(self) -> str:
@@ -133,7 +138,8 @@ class AppConfig:
                     trading=config_data.get('trading'), 
                     performance=config_data.get('performance'),
                     debug=config_data.get('debug'),
-                    ai_prompt=config_data.get('ai_prompt')
+                    ai_prompt=config_data.get('ai_prompt'),
+                    account=config_data.get('account')
                 )
         except Exception as e:
             logger.warning(f"Failed to load config from {config_path}: {e}")
@@ -148,7 +154,8 @@ class AppConfig:
                 "trading": self.trading,
                 "performance": self.performance,
                 "debug": self.debug,
-                "ai_prompt": self.ai_prompt
+                "ai_prompt": self.ai_prompt,
+                "account": self.account
             }
             with open(config_path, 'w') as f:
                 json.dump(config_dict, f, indent=4)
