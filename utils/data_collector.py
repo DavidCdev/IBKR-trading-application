@@ -43,6 +43,51 @@ class DataCollectorWorker(QObject):
         """Stop the data collection loop"""
         self.is_running = False
     
+    def connect_to_ib(self):
+        """Manually connect to IB (called from settings form)"""
+        try:
+            logger.info("Manual connection request from settings form")
+            # Create a new event loop for this connection attempt
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            async def connect_async():
+                try:
+                    success = await self.collector.connect()
+                    if success:
+                        logger.info("Manual connection successful")
+                        # Emit connection success signal
+                        self.connection_success.emit({'status': 'Connected'})
+                    else:
+                        logger.error("Manual connection failed")
+                        self.error_occurred.emit("Failed to connect to IB")
+                except Exception as e:
+                    logger.error(f"Error during manual connection: {e}")
+                    self.error_occurred.emit(f"Connection error: {str(e)}")
+                finally:
+                    loop.close()
+            
+            # Run the connection in the new event loop
+            loop.run_until_complete(connect_async())
+            
+        except Exception as e:
+            logger.error(f"Error in connect_to_ib: {e}")
+            self.error_occurred.emit(f"Connection setup error: {str(e)}")
+    
+    def disconnect_from_ib(self):
+        """Manually disconnect from IB (called from settings form)"""
+        try:
+            logger.info("Manual disconnection request from settings form")
+            # Disconnect the collector
+            self.collector.disconnect()
+            logger.info("Manual disconnection successful")
+            # Emit disconnection signal
+            self.connection_disconnected.emit({'status': 'Disconnected'})
+            
+        except Exception as e:
+            logger.error(f"Error in disconnect_from_ib: {e}")
+            self.error_occurred.emit(f"Disconnection error: {str(e)}")
+    
     async def _collection_loop(self):
         """Main data collection loop"""
         while self.is_running:

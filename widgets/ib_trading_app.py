@@ -91,7 +91,7 @@ class IB_Trading_APP(QMainWindow):
                 logger.error(f"Main UI file not found: {main_ui_file_path}")
                 raise FileNotFoundError(f"Main UI file not found: {main_ui_file_path}")
             
-            self.setting_ui = Settings_Form(self.config, self.connection_status)
+            self.setting_ui = Settings_Form(self.config, self.connection_status, self.data_worker)
             logger.info("Settings_Form initialized successfully")
             
             logger.info("Initializing AIPrompt_Form...")
@@ -109,6 +109,16 @@ class IB_Trading_APP(QMainWindow):
                 self.setting_ui.ui.cancelButton.clicked.connect(self._close_setting_form)
             if hasattr(self.setting_ui.ui, 'saveButton'):
                 self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
+            
+            # Connect settings form to data worker signals for connection status updates
+            if self.setting_ui and self.data_worker:
+                try:
+                    self.data_worker.connection_success.connect(lambda data: self.setting_ui.update_connection_status(data.get('status', 'Connected')))
+                    self.data_worker.connection_disconnected.connect(lambda data: self.setting_ui.update_connection_status(data.get('status', 'Disconnected')))
+                    self.data_worker.error_occurred.connect(lambda msg: self.setting_ui.update_connection_status("Error"))
+                    logger.info("Settings form signal connections established")
+                except Exception as e:
+                    logger.error(f"Failed to connect settings form signals: {e}")
                 
         except Exception as e:
             logger.error(f"Error initializing UI forms: {e}")
@@ -331,6 +341,7 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_usd_cad_value.setText(f"{data['fx_ratio']:.4f}")
                 self.ui.label_cad_usd_value.setText(f"{1/data['fx_ratio']:.4f}")
 
+
             # Update account metrics
             if data.get('account') is not None and not data['account'].empty:
                 logger.info("Updating Account Data in UI")
@@ -344,11 +355,13 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_account_value_value.setText(f"${account_value}")
                 self.ui.label_starting_value_value.setText(f"${starting_value}")
                 self.ui.label_daily_pl_value.setText(f"${pnl_value_price}")
-                self.ui.label_daily_pl_percent_value.setText(f"${pnl_value_percent}")
+                self.ui.label_daily_pl_percent_value.setText(f"{pnl_value_percent}%")
                 self.ui.label_high_water_value.setText(f"${high_water_mark}")
                 logger.info(f"Account Net Liquidation: ${account_value}")
                 # Update account-related UI elements here
             #
+
+
             # # Update positions
             # if data.get('positions') and not data['positions'].empty:
             #     positions_count = len(data['positions'])
@@ -361,18 +374,26 @@ class IB_Trading_APP(QMainWindow):
                 logger.info(f"Active contract data: {active_contract_data}")
                 self.ui.label_symbol_value.setText(f"{active_contract_data.get('symbol', '---')}")
                 self.ui.label_quantity_value.setText(f"{active_contract_data.get('position_size', '---')}")
-                self.ui.label_pl_dollar_value.setText(f"${active_contract_data.get('pnl_dollar', '---')}")
+                self.ui.label_pl_dollar_value.setText(f"{active_contract_data.get('pnl_dollar', '---')}$")
                 self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
-            
+
             # Update option information data
-            if data.get('options') is not None and not data.get('options'):
+            if data.get('options') is not None and not data.get('options').empty:
                 logger.info("Updating Option Information Data in UI")
-                option_info = data['options'].iloc[0]
-                logger.info(f"Option information data: {option_info}")
-                # call_option_info = option_info[0]
-                # put_option_info = option_info[1]
+                call_option_info = data['options'].iloc[0]
+                put_option_info = data['options'].iloc[1]
+
+                tmp_expiration = call_option_info["Expiration"]
+                # Convert string format "20250810" to datetime then format as "2025-08-10"
+                if isinstance(tmp_expiration, str) and len(tmp_expiration) == 8:
+                    tmp_expiration = datetime.strptime(tmp_expiration, "%Y%m%d").strftime("%Y-%m-%d")
+                # elif hasattr(tmp_expiration, 'strftime'):
+                #     # If it's already a datetime object
+                #     tmp_expiration = tmp_expiration.strftime("%Y-%m-%d")
                 
-                
+                self.ui.label_strike_value.setText(f'{call_option_info["Strike"]}')
+                self.ui.label_expiration_value.setText(f'{tmp_expiration}')
+
                 # self.ui.label_option_info_value.setText(f"{option_info.get('option_info', '---')}")
             
             # # Update statistics

@@ -51,7 +51,7 @@ class IBDataCollector:
     async def _on_connected(self):
         """Handle successful IB connection."""
         try:
-            logger.info("✓ IB Connection established successfully")
+            logger.info("IB Connection established successfully")
             self._connected = True
             self.connection_attempts = 0
             
@@ -72,7 +72,7 @@ class IBDataCollector:
     async def _on_disconnected(self):
         """Handle IB disconnection."""
         try:
-            logger.info("✗ IB Connection disconnected")
+            logger.info("IB Connection disconnected")
             self._connected = False
             
             # Emit disconnection event
@@ -325,23 +325,23 @@ class IBDataCollector:
             
             # Wait for data
             await asyncio.sleep(1)
-            
+            print(f"Contract: {contract}")
             # Extract data
             data = {
                 'Symbol': contract.symbol,
-                'Expiration': contract.lastTradingDay,
+                'Expiration': contract.lastTradeDateOrContractMonth,
                 'Strike': contract.strike,
                 'Type': option_type,
-                'Bid': ticker.bid if ticker.bid else 0,
-                'Ask': ticker.ask if ticker.ask else 0,
-                'Last': ticker.last if ticker.last else 0,
-                'Volume': ticker.volume if ticker.volume else 0,
-                'Open_Interest': ticker.openInterest if ticker.openInterest else 0,
-                'Implied_Volatility': ticker.impliedVolatility if ticker.impliedVolatility else 0,
-                'Delta': ticker.delta if ticker.delta else 0,
-                'Gamma': ticker.gamma if ticker.gamma else 0,
-                'Theta': ticker.theta if ticker.theta else 0,
-                'Vega': ticker.vega if ticker.vega else 0
+                # 'Bid': ticker.bid if ticker.bid else 0,
+                # 'Ask': ticker.ask if ticker.ask else 0,
+                # 'Last': ticker.last if ticker.last else 0,
+                # 'Volume': ticker.volume if ticker.volume else 0,
+                # 'Open_Interest': ticker.openInterest if ticker.openInterest else 0,
+                # 'Implied_Volatility': ticker.impliedVolatility if ticker.impliedVolatility else 0,
+                # 'Delta': ticker.delta if ticker.delta else 0,
+                # 'Gamma': ticker.gamma if ticker.gamma else 0,
+                # 'Theta': ticker.theta if ticker.theta else 0,
+                # 'Vega': ticker.vega if ticker.vega else 0
             }
             
             # Cancel market data subscription
@@ -456,16 +456,16 @@ class IBDataCollector:
             logger.info(f"High water mark: {high_water_mark}")
             
             if high_water_mark is None:
-                high_water_mark = realized_pn_l_account_value
+                high_water_mark = liquidation_account_value
             else:
                 try:
                     high_water_mark = float(high_water_mark)
                 except Exception:
                     # If persisted as string previously, coerce to float
-                    high_water_mark = realized_pn_l_account_value
+                    high_water_mark = liquidation_account_value
 
-            if realized_pn_l_account_value > high_water_mark:
-                high_water_mark = realized_pn_l_account_value
+            if liquidation_account_value > high_water_mark:
+                high_water_mark = liquidation_account_value
                 if self.account_config is not None:
                     self.account_config['high_water_mark'] = high_water_mark
                 logger.info(f"High water mark updated to {high_water_mark}")
@@ -475,8 +475,8 @@ class IBDataCollector:
                 'NetLiquidation': liquidation_account_value,
                 'StartingValue':starting_value,
                 'HighWaterMark': high_water_mark,
-                'RealizedPnLPrice': realized_pn_l_account_value,
-                'RealizedPnLPercent': realized_pn_l_account_percent,
+                'RealizedPnLPrice': round(realized_pn_l_account_value, 2),
+                'RealizedPnLPercent': round(realized_pn_l_account_percent, 2),
                 'TotalCashValue': account_data.get('TotalCashValue', 0),
                 'GrossPositionValue': account_data.get('GrossPositionValue', 0),
                 'BuyingPower': account_data.get('BuyingPower', 0),
@@ -618,17 +618,18 @@ class IBDataCollector:
             logger.info("Getting account metrics...")
             account_df = await self.get_account_metrics()
             data['account'] = account_df
-            #
+
             # Get option chain
             logger.info("Getting option chain...")
             options_df = await self.get_option_chain()
+            print(f"options_df is: {options_df}")
             data['options'] = options_df
-            #
+
             # Get active positions
             logger.info("Getting active positions...")
             positions_df = await self.get_active_positions(self.underlying_symbol)
             data['active_contract'] = positions_df
-            #
+
             # # Get trade statistics
             # logger.info("Getting trade statistics...")
             # stats_df = await self.get_trade_statistics()

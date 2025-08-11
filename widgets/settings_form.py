@@ -7,12 +7,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Settings_Form(QDialog):
-    def __init__(self, config: AppConfig = None, connection_status: str = None):
+    def __init__(self, config: AppConfig = None, connection_status: str = None, data_worker=None):
         super().__init__()
         self.ui = Ui_PreferencesDialog()
         self.ui.setupUi(self)
         self.config = config
         self.connection_status = connection_status
+        self.data_worker = data_worker
         if self.config:
             self.load_config_values()
         
@@ -113,8 +114,59 @@ class Settings_Form(QDialog):
     def connect_button_clicked(self):
         """Handle connect button click"""
         if self.connection_status == 'Connected':
-            self.connection_status = 'Disconnected'
+            # Disconnect from IB
+            if self.data_worker and hasattr(self.data_worker, 'disconnect_from_ib'):
+                try:
+                    logger.info("Disconnecting from IB via DataCollectorWorker")
+                    self.data_worker.disconnect_from_ib()
+                    self.connection_status = 'Disconnecting...'
+                    self.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)
+                    self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
+                    self.ui.connectButton.setText("Disconnecting...")
+                    self.ui.connectButton.setEnabled(False)
+                except Exception as e:
+                    logger.error(f"Error disconnecting from IB: {e}")
+                    self.ui.connectionStatusLabel.setText("Connection: Error disconnecting")
+                    self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+            else:
+                logger.warning("No data worker available for disconnection")
+                self.ui.connectionStatusLabel.setText("Connection: No data worker")
+                self.ui.connectionStatusLabel.setStyleSheet("color: red;")
         else:
-            self.connection_status = 'Connected'
+            # Connect to IB
+            if self.data_worker and hasattr(self.data_worker, 'connect_to_ib'):
+                try:
+                    logger.info("Connecting to IB via DataCollectorWorker")
+                    self.data_worker.connect_to_ib()
+                    self.connection_status = 'Connecting...'
+                    self.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)
+                    self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
+                    self.ui.connectButton.setText("Connecting...")
+                    self.ui.connectButton.setEnabled(False)
+                except Exception as e:
+                    logger.error(f"Error connecting to IB: {e}")
+                    self.ui.connectionStatusLabel.setText("Connection: Error connecting")
+                    self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+            else:
+                logger.warning("No data worker available for connection")
+                self.ui.connectionStatusLabel.setText("Connection: No data worker")
+                self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+    
+    def update_connection_status(self, status: str):
+        """Update connection status from external source (e.g., signal handlers)"""
+        self.connection_status = status
+        
+        if hasattr(self.ui, 'connectionStatusLabel'):
+            self.ui.connectionStatusLabel.setText("Connection: " + status)
+            if status == 'Connected':
+                self.ui.connectionStatusLabel.setStyleSheet("color: green;")
+                self.ui.connectButton.setText("Disconnect")
+            elif status == 'Disconnected':
+                self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+                self.ui.connectButton.setText("Connect")
+            else:
+                self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
+                self.ui.connectButton.setText("Connecting..." if "Connecting" in status else "Disconnecting...")
             
-        self.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)
+            # Re-enable button
+            self.ui.connectButton.setEnabled(True)
