@@ -24,29 +24,71 @@ class IBDataCollector:
         self.spy_price = 0
         self.underlying_symbol_price = 0
         self.fx_ratio = 0
+        self.option_strike = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
 
-    #     self._register_ib_callbacks()
-    #
-    #
-    # def _register_ib_callbacks(self):
-    #     """Register IB event callbacks for real-time data streaming."""
-    #     # Core connection events
-    #     self.ib.connectedEvent += self._on_connected
-    #     self.ib.disconnectedEvent += self._on_disconnected
-    #     self.ib.errorEvent += self._on_error
-    #
-    #     # Trading events
-    #     self.ib.orderStatusEvent += self._on_order_status_update
-    #     self.ib.execDetailsEvent += self._on_exec_details
-    #     self.ib.commissionReportEvent += self._on_commission_report
-    #
-    #     # Account events
-    #     self.ib.accountSummaryEvent += self._on_account_summary_update
-    #     self.ib.pnlEvent += self._on_pnl_update
-    #
-    #     logger.debug("IB event callbacks registered")
+        self._register_ib_callbacks()
 
+
+    def _register_ib_callbacks(self):
+        """Register IB event callbacks for real-time data streaming."""
+        # Core connection events
+        self.ib.connectedEvent += self._on_connected
+        self.ib.disconnectedEvent += self._on_disconnected
+        # self.ib.errorEvent += self._on_error
+
+        # Trading events
+        # self.ib.orderStatusEvent += self._on_order_status_update
+        # self.ib.execDetailsEvent += self._on_exec_details
+        # self.ib.commissionReportEvent += self._on_commission_report
+        #
+        # Account events
+        # self.ib.accountSummaryEvent += self._on_account_summary_update
+        # self.ib.pnlEvent += self._on_pnl_update
+
+        logger.debug("IB event callbacks registered")
+
+    async def _on_connected(self):
+        """Handle successful IB connection."""
+        try:
+            logger.info("✓ IB Connection established successfully")
+            self._connected = True
+            self.connection_attempts = 0
+            
+            # Emit connection success event
+            connection_data = {
+                'host': self.host,
+                'port': self.port,
+                'client_id': self.clientId,
+                'timestamp': datetime.now().isoformat()
+            }
+            logger.info(f"Connection data: {connection_data}")
+            
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_success'):
+                self.data_worker.connection_success.emit({'status': 'Connected'})
+        except Exception as e:
+            logger.error(f"Error in connection success handler: {e}")
+    
+    async def _on_disconnected(self):
+        """Handle IB disconnection."""
+        try:
+            logger.info("✗ IB Connection disconnected")
+            self._connected = False
+            
+            # Emit disconnection event
+            disconnection_data = {
+                'host': self.host,
+                'port': self.port,
+                'client_id': self.clientId,
+                'timestamp': datetime.now().isoformat()
+            }
+            logger.info(f"Disconnection data: {disconnection_data}")
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_disconnected'):
+                self.data_worker.connection_disconnected.emit({'status': 'Disconnected'})
+            
+        except Exception as e:
+            logger.error(f"Error in disconnection handler: {e}")
+    
     async def connect(self) -> bool:
         """Connect to TWS/IB Gateway with timeout and retry logic"""
         try:
@@ -182,9 +224,19 @@ class IBDataCollector:
                 'timestamp': datetime.now().isoformat()
             })
     
-    async def get_option_chain(self, symbol='SPY', num_strikes=10) -> pd.DataFrame:
+    async def get_option_chain(self, symbol='SPY') -> pd.DataFrame:
         """Get option chain data with improved error handling and validation"""
         try:
+            # Ensure we have the latest price
+            if self.underlying_symbol_price == 0:
+                await self.get_underlying_symbol_price(self.underlying_symbol)
+            if self.underlying_symbol_price == 0:
+                logger.error("Unable to get current stock price for strike selection")
+                return pd.DataFrame()
+            # Calculate the nearest strike price by rounding to the nearest whole number
+            self.option_strike = int(round(self.underlying_symbol_price))
+            logger.info(f"Nearest strike price (rounded): {self.option_strike}")
+
             # Create stock contract
             stock = Stock(symbol, 'SMART', 'USD')
             stock_qualified = await self.ib.qualifyContractsAsync(stock)
@@ -218,22 +270,6 @@ class IBDataCollector:
 
             # Select strikes around current price
             current_price = self.underlying_symbol_price
-            strikes = sorted([float(s) for s in chain.strikes])
-
-            # Find strikes around current price with better logic
-            selected_strikes = []
-            price_range = current_price * 0.1  # 10% range around current price
-            
-            for strike in strikes:
-                if abs(strike - current_price) <= price_range:
-                    selected_strikes.append(strike)
-
-            # Take the closest strikes
-            selected_strikes = sorted(selected_strikes, key=lambda x: abs(x - current_price))[:num_strikes]
-
-            if not selected_strikes:
-                logger.warning("No suitable strikes found around current price")
-                return pd.DataFrame()
 
             # Get nearest expirations
             expirations = sorted(chain.expirations)[:3]  # Get first 3 expirations
@@ -241,34 +277,34 @@ class IBDataCollector:
             option_data = []
 
             for expiration in expirations:
-                for strike in selected_strikes:
-                    try:
-                        # Create CALL option
-                        call_option = Option(symbol, expiration, strike, 'C', 'SMART')
-                        # Create PUT option
-                        put_option = Option(symbol, expiration, strike, 'P', 'SMART')
+                try:
+                    # Create CALL option
+                    call_option = Option(symbol, expiration, self.option_strike, 'C', 'SMART')
+                    # Create PUT option
+                    put_option = Option(symbol, expiration, self.option_strike, 'P', 'SMART')
 
-                        # Qualify contracts
-                        call_qualified = await self.ib.qualifyContractsAsync(call_option)
-                        put_qualified = await self.ib.qualifyContractsAsync(put_option)
+                    # Qualify contracts
+                    call_qualified = await self.ib.qualifyContractsAsync(call_option)
+                    put_qualified = await self.ib.qualifyContractsAsync(put_option)
 
-                        # Process CALL option
-                        if call_qualified and call_qualified[0]:
-                            call_data = await self._get_option_data(call_qualified[0], 'CALL')
-                            if call_data:
-                                option_data.append(call_data)
+                    # Process CALL option
+                    if call_qualified and call_qualified[0]:
+                        call_data = await self._get_option_data(call_qualified[0], 'CALL')
+                        if call_data:
+                            option_data.append(call_data)
 
-                        # Process PUT option
-                        if put_qualified and put_qualified[0]:
-                            put_data = await self._get_option_data(put_qualified[0], 'PUT')
-                            if put_data:
-                                option_data.append(put_data)
+                    # Process PUT option
+                    if put_qualified and put_qualified[0]:
+                        put_data = await self._get_option_data(put_qualified[0], 'PUT')
+                        if put_data:
+                            option_data.append(put_data)
 
-                    except Exception as e:
-                        logger.warning(f"Error processing option {symbol} {expiration} {strike}: {e}")
-                        continue
+                except Exception as e:
+                    logger.warning(f"Error processing option {symbol} {expiration} {self.option_strike}: {e}")
+                    continue
 
             if option_data:
+                print(option_data)
                 df = pd.DataFrame(option_data)
                 logger.info(f"Retrieved {len(df)} option contracts")
                 return df
@@ -583,10 +619,10 @@ class IBDataCollector:
             account_df = await self.get_account_metrics()
             data['account'] = account_df
             #
-            # # Get option chain
-            # logger.info("Getting option chain...")
-            # options_df = await self.get_option_chain()
-            # data['options'] = options_df
+            # Get option chain
+            logger.info("Getting option chain...")
+            options_df = await self.get_option_chain()
+            data['options'] = options_df
             #
             # Get active positions
             logger.info("Getting active positions...")

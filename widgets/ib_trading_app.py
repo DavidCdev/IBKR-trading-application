@@ -1,5 +1,3 @@
-from PyQt5.QtWidgets import QMainWindow, QMessageBox
-from PyQt5.QtCore import QThread, QTimer
 from ui.ib_trading_gui import Ui_MainWindow
 from utils.config_manager import AppConfig
 from widgets.settings_form import Settings_Form
@@ -8,11 +6,19 @@ from widgets.ai_prompt_form import AIPrompt_Form
 from utils.data_collector import DataCollectorWorker
 from utils.ai_engine import AI_Engine
 
-from typing import Dict, Any
+from typing import Dict, Any, Union
 import logging
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+try:
+    from PyQt5.QtWidgets import QMainWindow, QMessageBox
+    from PyQt5.QtCore import QThread, QTimer
+    logger.info("PyQt5 imports successful")
+except ImportError as e:
+    logger.error(f"PyQt5 import failed: {e}")
+    raise
+
 
 class IB_Trading_APP(QMainWindow):
     def __init__(self):
@@ -22,43 +28,130 @@ class IB_Trading_APP(QMainWindow):
 
 
         # Load configuration
-        self.config = AppConfig.load_from_file()
+        try:
+            logger.info("Loading configuration...")
+            self.config = AppConfig.load_from_file()
+            logger.info("Configuration loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load configuration: {e}")
+            logger.info("Creating default configuration...")
+            self.config = AppConfig()
+            self.config.save_to_file()
+            logger.info("Default configuration created and saved")
         
+        self.connection_status = 'disconnected'
         # Initialize data collector worker
-        self.data_worker = DataCollectorWorker(self.config)
-        self.worker_thread = QThread()
-        self.data_worker.moveToThread(self.worker_thread)
+        try:
+            logger.info("Initializing data collector worker...")
+            self.data_worker = DataCollectorWorker(self.config)
+            self.worker_thread = QThread()
+            self.data_worker.moveToThread(self.worker_thread)
+            logger.info("Data collector worker initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize data collector worker: {e}")
+            self.data_worker = None
+            self.worker_thread = None
         
         # Connect signals
-        self.data_worker.data_ready.connect(self.update_ui_with_data)
-        self.data_worker.connection_status_changed.connect(self.update_connection_status)
-        self.data_worker.error_occurred.connect(self.handle_error)
-        self.data_worker.price_updated.connect(self.update_real_time_price)
-        self.data_worker.fx_rate_updated.connect(self.update_fx_rate)
-        
-        # Connect thread signals
-        self.worker_thread.started.connect(self.data_worker.start_collection)
-        self.worker_thread.finished.connect(self.data_worker.cleanup)
+        if self.data_worker and self.worker_thread:
+            try:
+                self.data_worker.data_ready.connect(self.update_ui_with_data)
+                self.data_worker.connection_status_changed.connect(self.update_connection_status)
+                self.data_worker.error_occurred.connect(self.handle_error)
+                self.data_worker.price_updated.connect(self.update_real_time_price)
+                self.data_worker.fx_rate_updated.connect(self.update_fx_rate)
+                self.data_worker.connection_success.connect(self.update_connection_status)
+                self.data_worker.connection_disconnected.connect(self.update_connection_status)
+                
+                # Connect thread signals
+                self.worker_thread.started.connect(self.data_worker.start_collection)
+                self.worker_thread.finished.connect(self.data_worker.cleanup)
+                logger.info("Data worker signals connected successfully")
+            except Exception as e:
+                logger.error(f"Failed to connect data worker signals: {e}")
+        else:
+            logger.warning("Data worker not available, skipping signal connections")
         
         # Setup UI
         self.setup_ui()
-        self.setting_ui = Settings_Form(self.config)
-        self.ai_prompt_ui = AIPrompt_Form(self.config)
+        
+        # Initialize UI forms with error handling
+        try:
+            logger.info("Initializing Settings_Form...")
+            # Check if required UI files exist
+            import os
+            ui_file_path = os.path.join(os.path.dirname(__file__), '..', 'ui', 'settings_gui.py')
+            if not os.path.exists(ui_file_path):
+                logger.error(f"UI file not found: {ui_file_path}")
+                raise FileNotFoundError(f"UI file not found: {ui_file_path}")
+            
+            # Check if main UI file exists
+            main_ui_file_path = os.path.join(os.path.dirname(__file__), '..', 'ui', 'ib_trading_gui.py')
+            if not os.path.exists(main_ui_file_path):
+                logger.error(f"Main UI file not found: {main_ui_file_path}")
+                raise FileNotFoundError(f"Main UI file not found: {main_ui_file_path}")
+            
+            self.setting_ui = Settings_Form(self.config, self.connection_status)
+            logger.info("Settings_Form initialized successfully")
+            
+            logger.info("Initializing AIPrompt_Form...")
+            # Check if required AI prompt UI file exists
+            ai_ui_file_path = os.path.join(os.path.dirname(__file__), '..', 'ui', 'ai_prompt_gui.py')
+            if not os.path.exists(ai_ui_file_path):
+                logger.error(f"AI Prompt UI file not found: {ai_ui_file_path}")
+                raise FileNotFoundError(f"AI Prompt UI file not found: {ai_ui_file_path}")
+            
+            self.ai_prompt_ui = AIPrompt_Form(self.config)
+            logger.info("AIPrompt_Form initialized successfully")
+            
+            # Connect form signals
+            if hasattr(self.setting_ui.ui, 'cancelButton'):
+                self.setting_ui.ui.cancelButton.clicked.connect(self._close_setting_form)
+            if hasattr(self.setting_ui.ui, 'saveButton'):
+                self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
+                
+        except Exception as e:
+            logger.error(f"Error initializing UI forms: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            logger.error(f"Exception details: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            # Create minimal forms if there's an error
+            self.setting_ui = None
+            self.ai_prompt_ui = None
+        
         # Start data collection
-        self.worker_thread.start()
+        if self.worker_thread and self.data_worker:
+            try:
+                self.worker_thread.start()
+                logger.info("Data collection thread started successfully")
+            except Exception as e:
+                logger.error(f"Failed to start data collection thread: {e}")
+        else:
+            logger.warning("Data collection thread not available")
 
-        self.setting_ui.ui.cancelButton.clicked.connect(self._close_setting_form)
-        self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
-
-        self.ai_engine = AI_Engine(self.config)
+        try:
+            logger.info("Initializing AI engine...")
+            self.ai_engine = AI_Engine(self.config)
+            logger.info("AI engine initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize AI engine: {e}")
+            self.ai_engine = None
+        
         self.refresh_ui_with_whitespace()
+        
+        # Ensure setting_ui attribute exists even if initialization failed
+        if not hasattr(self, 'setting_ui'):
+            self.setting_ui = None
+        if not hasattr(self, 'ai_prompt_ui'):
+            self.ai_prompt_ui = None
 
     def setup_ui(self):
         """Setup the user interface"""
         self.setWindowTitle("IB Trading Application")
         
         # Set initial connection status
-        self.update_connection_status(False)
+        self.update_connection_status({'status': self.connection_status})
         
         # Initialize time label with current time
         if hasattr(self.ui, 'label_time'):
@@ -67,13 +160,23 @@ class IB_Trading_APP(QMainWindow):
         
         # Connect settings button
         if hasattr(self.ui, 'pushButton_settings'):
-            self.ui.pushButton_settings.clicked.connect(self.show_setting_ui)
+            try:
+                self.ui.pushButton_settings.clicked.connect(self.show_setting_ui)
+            except Exception as e:
+                logger.error(f"Error connecting settings button: {e}")
         
         # Connect AI prompt button
         if hasattr(self.ui, 'button_ai_prompt'):
-            self.ui.button_ai_prompt.clicked.connect(self.show_ai_prompt_ui)
+            try:
+                self.ui.button_ai_prompt.clicked.connect(self.show_ai_prompt_ui)
+            except Exception as e:
+                logger.error(f"Error connecting AI prompt button: {e}")
         
-        self.ui.button_refresh_ai.clicked.connect(self.refresh_ai)
+        if hasattr(self.ui, 'button_refresh_ai'):
+            try:
+                self.ui.button_refresh_ai.clicked.connect(self.refresh_ai)
+            except Exception as e:
+                logger.error(f"Error connecting refresh AI button: {e}")
         
         # Setup refresh timer for UI updates
         self.refresh_timer = QTimer()
@@ -82,6 +185,10 @@ class IB_Trading_APP(QMainWindow):
         
     def show_setting_ui(self):
         """Show the settings dialog"""
+        if self.setting_ui is None:
+            logger.error("Settings UI not available")
+            return
+            
         # Reload config values into UI before showing
         if hasattr(self.setting_ui, 'load_config_values'):
             self.setting_ui.load_config_values()
@@ -89,18 +196,41 @@ class IB_Trading_APP(QMainWindow):
 
     def refresh_ai(self):
         """Refresh the AI engine"""
-        self.ai_engine.refresh()
+        if hasattr(self, 'ai_engine') and self.ai_engine:
+            try:
+                self.ai_engine.refresh()
+            except Exception as e:
+                logger.error(f"Failed to refresh AI engine: {e}")
+        else:
+            logger.warning("AI engine not available")
 
     def show_ai_prompt_ui(self):
         """Show the AI prompt dialog"""
+        if not hasattr(self, 'ai_prompt_ui') or self.ai_prompt_ui is None:
+            logger.error("AI Prompt UI not available - attempting to reinitialize...")
+            try:
+                self.ai_prompt_ui = AIPrompt_Form(self.config)
+                logger.info("AIPrompt_Form reinitialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to reinitialize AIPrompt_Form: {e}")
+                return
         self.ai_prompt_ui.exec_()
 
     def _close_setting_form(self):
-        self.setting_ui.close()
+        if hasattr(self, 'setting_ui') and self.setting_ui:
+            self.setting_ui.close()
         
     def _save_setting_form(self):
         """Save all settings from the preferences UI to the config file"""
+        if not hasattr(self, 'setting_ui') or self.setting_ui is None:
+            logger.error("Settings UI not available")
+            return
+            
         try:
+            if not hasattr(self, 'config') or not self.config:
+                logger.error("Configuration not available")
+                return
+                
             # Get connection settings
             self.config.connection.update({
                 "host": self.setting_ui.ui.hostEdit.text(),
@@ -188,7 +318,7 @@ class IB_Trading_APP(QMainWindow):
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
         try:
-            if self.config.trading.get('underlying_symbol') is not None:
+            if hasattr(self, 'config') and self.config and self.config.trading and self.config.trading.get('underlying_symbol') is not None:
                 self.ui.label_spy_name.setText(f"{self.config.trading.get('underlying_symbol')}")
             else:
                 self.ui.label_spy_name.setText(f"---")
@@ -234,6 +364,16 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_pl_dollar_value.setText(f"${active_contract_data.get('pnl_dollar', '---')}")
                 self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
             
+            # Update option information data
+            if data.get('options') is not None and not data.get('options'):
+                logger.info("Updating Option Information Data in UI")
+                option_info = data['options'].iloc[0]
+                logger.info(f"Option information data: {option_info}")
+                # call_option_info = option_info[0]
+                # put_option_info = option_info[1]
+                
+                
+                # self.ui.label_option_info_value.setText(f"{option_info.get('option_info', '---')}")
             
             # # Update statistics
             # if data.get('statistics') and not data['statistics'].empty:
@@ -244,15 +384,37 @@ class IB_Trading_APP(QMainWindow):
         except Exception as e:
             logger.error(f"Error updating UI with data: {e}")
     
-    def update_connection_status(self, connected: bool):
+    def update_connection_status(self, data: Union[Dict[str, Any], bool]):
         """Update connection status in UI"""
-        status_text = "Connections Status: Connected" if connected else "Connections Status: Disconnected"
-        status_color = "green" if connected else "red"
+        # Handle both boolean and dictionary inputs
+        if isinstance(data, bool):
+            # Boolean input from connection_status_changed signal
+            status = 'Connected' if data else 'Disconnected'
+        else:
+            # Dictionary input from connection_success/connection_disconnected signals
+            status = data.get('status', 'Unknown')
+        
+        status_text = f"Connections Status: {status}"
+        status_color = "green" if status == 'Connected' else "red"
+        self.connection_status = status
         
         # Update status label if it exists in the UI
         if hasattr(self.ui, 'label_connection_status'):
             self.ui.label_connection_status.setText(status_text)
             self.ui.label_connection_status.setStyleSheet(f"color: {status_color}")
+            
+        if hasattr(self, 'setting_ui') and self.setting_ui and hasattr(self.setting_ui.ui, 'connectionStatusLabel'):
+            try:
+                self.setting_ui.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)
+                if self.connection_status == 'Connected':
+                    self.setting_ui.ui.connectionStatusLabel.setStyleSheet("color: green;")
+                    self.setting_ui.ui.connectButton.setText("Disconnect")
+                else:
+                    self.setting_ui.ui.connectionStatusLabel.setStyleSheet("color: red;")
+                    self.setting_ui.ui.connectButton.setText("Connect")
+            except Exception as e:
+                logger.error(f"Error updating setting UI connection status: {e}")
+
         
         logger.info(f"Connection status: {status_text}")
     
@@ -278,7 +440,7 @@ class IB_Trading_APP(QMainWindow):
             logger.info(f"Real-time price update: {symbol} = ${price:.2f} at {timestamp}")
             
             # Update the underlying symbol price in UI
-            if symbol == self.config.trading.get('underlying_symbol'):
+            if hasattr(self, 'config') and self.config and self.config.trading and symbol == self.config.trading.get('underlying_symbol'):
                 self.ui.label_spy_value.setText(f"${price:.2f}")
                     
         except Exception as e:
@@ -311,15 +473,26 @@ class IB_Trading_APP(QMainWindow):
         """Handle application shutdown"""
         try:
             # Stop data collection
-            self.data_worker.stop_collection()
+            if hasattr(self, 'data_worker') and self.data_worker:
+                try:
+                    self.data_worker.stop_collection()
+                except Exception as e:
+                    logger.error(f"Error stopping data collection: {e}")
             
             # Wait for thread to finish
-            if self.worker_thread.isRunning():
-                self.worker_thread.quit()
-                self.worker_thread.wait(5000)  # Wait up to 5 seconds
+            if hasattr(self, 'worker_thread') and self.worker_thread and self.worker_thread.isRunning():
+                try:
+                    self.worker_thread.quit()
+                    self.worker_thread.wait(5000)  # Wait up to 5 seconds
+                except Exception as e:
+                    logger.error(f"Error stopping worker thread: {e}")
             
             # Save configuration
-            self.config.save_to_file()
+            if hasattr(self, 'config') and self.config:
+                try:
+                    self.config.save_to_file()
+                except Exception as e:
+                    logger.error(f"Error saving configuration: {e}")
             
             logger.info("Application shutdown completed")
             event.accept()

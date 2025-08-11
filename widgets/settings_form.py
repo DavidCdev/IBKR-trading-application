@@ -7,14 +7,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Settings_Form(QDialog):
-    def __init__(self, config: AppConfig = None):
+    def __init__(self, config: AppConfig = None, connection_status: str = None):
         super().__init__()
         self.ui = Ui_PreferencesDialog()
         self.ui.setupUi(self)
         self.config = config
+        self.connection_status = connection_status
         if self.config:
             self.load_config_values()
-    
+        
+        # Set connection status safely
+        if hasattr(self.ui, 'connectionStatusLabel'):
+            self.ui.connectionStatusLabel.setText("Connection: " + (self.connection_status or "Disconnected"))
+            if self.connection_status == 'Connected':
+                self.ui.connectionStatusLabel.setStyleSheet("color: green;")
+            else:
+                self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+        
+        if hasattr(self.ui, 'connectButton'):
+            if self.connection_status == 'Connected':
+                self.ui.connectButton.setText("Disconnect")
+            else:
+                self.ui.connectButton.setText("Connect")
+                
+        self.ui.connectButton.clicked.connect(self.connect_button_clicked)
+            
     def load_config_values(self):
         """Load configuration values into the UI"""
         try:
@@ -92,3 +109,12 @@ class Settings_Form(QDialog):
                 combo.setCurrentIndex(index)
         except Exception as e:
             logger.warning(f"Could not set combo text '{text}': {e}")
+            
+    def connect_button_clicked(self):
+        """Handle connect button click"""
+        if self.connection_status == 'Connected':
+            self.connection_status = 'Disconnected'
+        else:
+            self.connection_status = 'Connected'
+            
+        self.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)

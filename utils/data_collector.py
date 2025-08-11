@@ -14,7 +14,8 @@ class DataCollectorWorker(QObject):
     error_occurred = pyqtSignal(str)
     price_updated = pyqtSignal(dict)  # Signal for real-time price updates
     fx_rate_updated = pyqtSignal(dict)  # Signal for real-time FX rate updates
-    
+    connection_success = pyqtSignal(dict)
+    connection_disconnected = pyqtSignal(dict)
     def __init__(self, config: AppConfig):
         super().__init__()
         self.config = config

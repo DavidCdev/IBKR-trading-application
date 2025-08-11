@@ -15,7 +15,9 @@ class AIPrompt_Form(QDialog):
         if self.config:
             self.load_config_values()
         else:
-            self.config.ai_prompt["prompt"] = "You are a helpful assistant that can answer questions and help with tasks."
+            # Create a default config if none provided
+            from utils.config_manager import AppConfig
+            self.config = AppConfig()
             self.config.save_to_file()
             
         self.ui.outputArea.textChanged.connect(self.on_prompt_input_changed)
