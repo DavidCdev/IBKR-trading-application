@@ -1,18 +1,16 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel
-import sys
+from ib_async import *
 
-print("Starting minimal test")
-app = QApplication(sys.argv)
-print("Created QApplication")
-window = QMainWindow()
-print("Created QMainWindow")
-window.setWindowTitle("Test Window")
-print("Set window title")
-label = QLabel("Hello World", window)
-print("Created QLabel")
-window.setCentralWidget(label)
-print("Set central widget")
-window.show()
-print("Called show()")
-app.exec()
-print("App finished")
+ib = IB()
+ib.connect('127.0.0.1', 7497, clientId=2)
+
+# Get account summary
+account = ib.managedAccounts()[0]
+all_info = ib.accountValues(account)
+summary = ib.accountSummary(account)
+for item in summary:
+    print(f"{item.tag}: {item.value}")
+
+# print(f"All info: {all_info}")
+for item in all_info:
+    print(f"{item.tag}: {item.value}")
+ib.disconnect()

@@ -49,6 +49,7 @@ class IB_Trading_APP(QMainWindow):
         self.setting_ui.ui.saveButton.clicked.connect(self._save_setting_form)
 
         self.ai_engine = AI_Engine(self.config)
+        self.refresh_ui_with_whitespace()
 
     def setup_ui(self):
         """Setup the user interface"""
@@ -167,6 +168,20 @@ class IB_Trading_APP(QMainWindow):
                 f"Failed to save settings: {str(e)}"
             )
         
+    def refresh_ui_with_whitespace(self):
+        """Refresh UI with whitespace"""
+        self.ui.label_spy_name.setText(f"---")
+        self.ui.label_spy_value.setText(f"---")
+        self.ui.label_usd_cad_value.setText(f"---")
+        self.ui.label_cad_usd_value.setText(f"---")
+        self.ui.label_account_value_value.setText(f"---")
+        self.ui.label_symbol_value.setText(f"---")
+        self.ui.label_quantity_value.setText(f"---")
+        self.ui.label_pl_dollar_value.setText(f"---")
+        self.ui.label_pl_percent_value.setText(f"---")
+        # self.ui.label_win_rate_value.setText(f"---")
+        # self.ui.label_total_trades_value.setText(f"---")
+        # self.ui.label_total_wins_value.setText(f"---")
 
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
@@ -189,7 +204,14 @@ class IB_Trading_APP(QMainWindow):
                 logger.info("Updating Account Data in UI")
                 account_data = data['account'].iloc[0]
                 account_value = account_data.get('NetLiquidation', 'N/A')
+                starting_value = account_data.get('StartingValue','---')
+                pnl_value_price = account_data.get('RealizedPnLPrice', 0)
+                pnl_value_percent = account_data.get('RealizedPnLPercent', 0)
+
                 self.ui.label_account_value_value.setText(f"${account_value}")
+                self.ui.label_starting_value_value.setText(f"${starting_value}")
+                self.ui.label_daily_pl_value.setText(f"${pnl_value_price}")
+                self.ui.label_daily_pl_percent_value.setText(f"${pnl_value_percent}")
                 logger.info(f"Account Net Liquidation: ${account_value}")
                 # Update account-related UI elements here
             #
