@@ -3,6 +3,7 @@ from utils.config_manager import AppConfig
 from utils.ib_connection import IBDataCollector
 import asyncio
 import logging
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,9 @@ class DataCollectorWorker(QObject):
         )
         self.is_running = False
         self.reconnect_attempts = 0
+        self._last_saved_high_water_mark = (
+            self.config.account.get('high_water_mark') if self.config and self.config.account else None
+        )
         
     def start_collection(self):
         """Start the data collection loop"""
@@ -45,7 +49,7 @@ class DataCollectorWorker(QObject):
                         self.connection_status_changed.emit(True)
                         self.reconnect_attempts = 0
                     else:
-                        await asyncio.sleep(self.config.reconnect_delay)
+                        await self._sleep_with_cancel(self.config.reconnect_delay)
                         continue
                 
                 # Collect data
@@ -53,16 +57,29 @@ class DataCollectorWorker(QObject):
                 if data:
                     self.data_ready.emit(data)
                     logger.info("Data collection completed successfully")
+
+                    # Persist updated high water mark if it changed
+                    try:
+                        current_hwm = self.collector.account_config.get('high_water_mark') if self.collector.account_config else None
+                        if current_hwm is not None and current_hwm != self._last_saved_high_water_mark:
+                            # Reflect into AppConfig and persist
+                            if self.config and self.config.account is not None:
+                                self.config.account['high_water_mark'] = current_hwm
+                                self.config.save_to_file()
+                                self._last_saved_high_water_mark = current_hwm
+                                logger.info(f"Persisted updated High Water Mark: {current_hwm}")
+                    except Exception as persist_err:
+                        logger.warning(f"Could not persist High Water Mark: {persist_err}")
                 else:
                     logger.warning("Data collection returned None")
                 
                 # Wait for next collection cycle
-                await asyncio.sleep(self.config.data_collection_interval)
+                await self._sleep_with_cancel(self.config.data_collection_interval)
                 
             except Exception as e:
                 logger.error(f"Error in data collection loop: {e}")
                 self.error_occurred.emit(str(e))
-                await asyncio.sleep(self.config.reconnect_delay)
+                await self._sleep_with_cancel(self.config.reconnect_delay)
     
     async def _reconnect(self) -> bool:
         """Attempt to reconnect with exponential backoff"""
@@ -72,10 +89,16 @@ class DataCollectorWorker(QObject):
         
         try:
             self.reconnect_attempts += 1
-            delay = min(self.config.reconnect_delay * (2 ** (self.reconnect_attempts - 1)), 60)
+            max_delay = self.config.connection.get("max_reconnect_delay", 60)
+            base_delay = self.config.reconnect_delay * (2 ** (self.reconnect_attempts - 1))
+            # Cap and add a small jitter to avoid thundering herd
+            delay = min(base_delay, max_delay) + random.uniform(0, 1.0)
             logger.info(f"Attempting to reconnect (attempt {self.reconnect_attempts}/{self.config.max_reconnect_attempts})")
             
-            await asyncio.sleep(delay)
+            # Allow prompt shutdown during backoff sleep
+            await self._sleep_with_cancel(delay)
+            if not self.is_running:
+                return False
             success = await self.collector.connect()
             
             if success:
@@ -92,9 +115,20 @@ class DataCollectorWorker(QObject):
     def cleanup(self):
         """Clean up resources"""
         try:
-            if self.collector.ib.isConnected():
-                self.collector.ib.disconnect()
-                logger.info("Disconnected from IB")
+            # Ensure proper cleanup via collector's disconnect to cancel subscriptions
+            self.collector.disconnect()
+            logger.info("Disconnected from IB")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
+
+    async def _sleep_with_cancel(self, total_seconds: float):
+        """Sleep in short intervals so we can react quickly to stop requests."""
+        try:
+            remaining = float(total_seconds)
+            interval = 0.2
+            while self.is_running and remaining > 0:
+                await asyncio.sleep(min(interval, remaining))
+                remaining -= interval
+        except Exception as e:
+            logger.debug(f"Sleep interrupted: {e}")
 

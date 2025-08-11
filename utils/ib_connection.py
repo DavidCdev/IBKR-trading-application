@@ -25,7 +25,28 @@ class IBDataCollector:
         self.underlying_symbol_price = 0
         self.fx_ratio = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
-        
+
+    #     self._register_ib_callbacks()
+    #
+    #
+    # def _register_ib_callbacks(self):
+    #     """Register IB event callbacks for real-time data streaming."""
+    #     # Core connection events
+    #     self.ib.connectedEvent += self._on_connected
+    #     self.ib.disconnectedEvent += self._on_disconnected
+    #     self.ib.errorEvent += self._on_error
+    #
+    #     # Trading events
+    #     self.ib.orderStatusEvent += self._on_order_status_update
+    #     self.ib.execDetailsEvent += self._on_exec_details
+    #     self.ib.commissionReportEvent += self._on_commission_report
+    #
+    #     # Account events
+    #     self.ib.accountSummaryEvent += self._on_account_summary_update
+    #     self.ib.pnlEvent += self._on_pnl_update
+    #
+    #     logger.debug("IB event callbacks registered")
+
     async def connect(self) -> bool:
         """Connect to TWS/IB Gateway with timeout and retry logic"""
         try:
@@ -68,7 +89,9 @@ class IBDataCollector:
             logger.error(f"Error during disconnect: {e}")
     
     async def get_symbol_price(self, symbol: str) -> Optional[float]:
-        """Get current underlying symbol price with improved error handling"""
+        """Get current underlying symbol price with improved error handling.
+        Returns the best available price as a float, or None on failure.
+        """
         try:
             temp_symbol = Stock(symbol, 'SMART', 'USD')
             
@@ -81,41 +104,32 @@ class IBDataCollector:
             # Request market data
             temp_symbol_ticker = self.ib.reqMktData(temp_symbol_qualified[0])
             self._active_subscriptions.add(temp_symbol_qualified[0])
-            
             # Wait for data with timeout
             await asyncio.sleep(2)
             
+            price: Optional[float] = None
             if temp_symbol_ticker.last and temp_symbol_ticker.last > 0:
-                logger.info(f"{symbol} Last Price: ${temp_symbol_ticker.last}")
-                self.temp_symbol_price = temp_symbol_ticker.last
-                # Cancel market data subscription
-                self.ib.cancelMktData(temp_symbol_qualified[0])
-                self._active_subscriptions.discard(temp_symbol_qualified[0])
-                
+                price = float(temp_symbol_ticker.last)
+                logger.info(f"{symbol} Last Price: ${price}")
             elif temp_symbol_ticker.close and temp_symbol_ticker.close > 0:
-                logger.info(f"{symbol} Previous Close: ${temp_symbol_ticker.close}")
-                self.temp_symbol_price = temp_symbol_ticker.close
-                # Cancel market data subscription
-                self.ib.cancelMktData(temp_symbol_qualified[0])
-                self._active_subscriptions.discard(temp_symbol_qualified[0])
-                
+                price = float(temp_symbol_ticker.close)
+                logger.info(f"{symbol} Previous Close: ${price}")
             elif temp_symbol_ticker.bid and temp_symbol_ticker.ask:
-                self.temp_symbol_price = (temp_symbol_ticker.bid + temp_symbol_ticker.ask) / 2
-                logger.info(f"{symbol} Mid Price: ${self.temp_symbol_price:.2f} (Bid: ${temp_symbol_ticker.bid}, Ask: ${temp_symbol_ticker.ask})")
-                # Cancel market data subscription
-                self.ib.cancelMktData(temp_symbol_qualified[0])
-                self._active_subscriptions.discard(temp_symbol_qualified[0])
-            
+                price = float((temp_symbol_ticker.bid + temp_symbol_ticker.ask) / 2)
+                logger.info(f"{symbol} Mid Price: ${price:.2f} (Bid: ${temp_symbol_ticker.bid}, Ask: ${temp_symbol_ticker.ask})")
             else:
                 logger.info("No price data available")
                 logger.info(f"Last: {temp_symbol_ticker.last}, Bid: {temp_symbol_ticker.bid}, Ask: {temp_symbol_ticker.ask}")
                 logger.info(f"Close: {temp_symbol_ticker.close}, Open: {temp_symbol_ticker.open}")
-                self.temp_symbol_price = 0
-                # Cancel market data subscription
+                price = None
+
+            # Cancel market data subscription in all cases
+            try:
                 self.ib.cancelMktData(temp_symbol_qualified[0])
+            finally:
                 self._active_subscriptions.discard(temp_symbol_qualified[0])
             
-            return self.temp_symbol_price
+            return price
                 
         except Exception as e:
             logger.error(f"Error getting {self.underlying_symbol} price: {e}")
@@ -127,6 +141,8 @@ class IBDataCollector:
             contract = Forex('USDCAD', 'IDEALPRO')
             await self.ib.qualifyContractsAsync(contract)  # Qualify the contract to populate conId
             ticker = self.ib.reqMktData(contract, '', False, False)
+            # Track this subscription like others
+            self._active_subscriptions.add(contract)
             await asyncio.sleep(2)  # Use await here!
             
             if ticker.last and ticker.last > 0:
@@ -369,7 +385,9 @@ class IBDataCollector:
             return pd.DataFrame()
     
     async def get_account_metrics(self) -> pd.DataFrame:
-        """Get account metrics with improved error handling"""
+        """Get account metrics with improved error handling.
+        High water mark is tracked consistently as a realized PnL value (currency units).
+        """
         try:
             # Get account summary
             account_values = await self.ib.accountSummaryAsync()
@@ -389,17 +407,25 @@ class IBDataCollector:
             liquidation_account_value = float(account_data.get('NetLiquidation', 0) or 0)
             realized_pn_l_account_value = float(account_data.get('RealizedPnL', 0) or 0)
             starting_value = liquidation_account_value - realized_pn_l_account_value
-            realized_pn_l_account_percent = (realized_pn_l_account_value / starting_value) * 100
+            realized_pn_l_account_percent = (realized_pn_l_account_value / starting_value) * 100 if starting_value else 0
 
-            high_water_mark = self.account_config.get('high_water_mark')
+            # Treat high_water_mark as a value in currency units consistently
+            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
             logger.info(f"High water mark: {high_water_mark}")
             
             if high_water_mark is None:
-                high_water_mark = realized_pn_l_account_percent
-            
+                high_water_mark = realized_pn_l_account_value
+            else:
+                try:
+                    high_water_mark = float(high_water_mark)
+                except Exception:
+                    # If persisted as string previously, coerce to float
+                    high_water_mark = realized_pn_l_account_value
+
             if realized_pn_l_account_value > high_water_mark:
                 high_water_mark = realized_pn_l_account_value
-                self.account_config['high_water_mark'] = high_water_mark
+                if self.account_config is not None:
+                    self.account_config['high_water_mark'] = high_water_mark
                 logger.info(f"High water mark updated to {high_water_mark}")
 
             # Create DataFrame with common metrics

@@ -231,8 +231,6 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_quantity_value.setText(f"{active_contract_data.get('position_size', '---')}")
                 self.ui.label_pl_dollar_value.setText(f"${active_contract_data.get('pnl_dollar', '---')}")
                 self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
-
-
             
             
             # # Update statistics
