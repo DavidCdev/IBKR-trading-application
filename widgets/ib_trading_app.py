@@ -34,6 +34,7 @@ class IB_Trading_APP(QMainWindow):
         self.data_worker.connection_status_changed.connect(self.update_connection_status)
         self.data_worker.error_occurred.connect(self.handle_error)
         self.data_worker.price_updated.connect(self.update_real_time_price)
+        self.data_worker.fx_rate_updated.connect(self.update_fx_rate)
         
         # Connect thread signals
         self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -282,6 +283,22 @@ class IB_Trading_APP(QMainWindow):
                     
         except Exception as e:
             logger.error(f"Error updating real-time price: {e}")
+    
+    def update_fx_rate(self, fx_rate_data: Dict[str, Any]):
+        """Handle real-time FX rate updates from IB"""
+        try:
+            symbol = fx_rate_data.get('symbol', 'Unknown')
+            rate = fx_rate_data.get('rate', 0)
+            timestamp = fx_rate_data.get('timestamp', '')
+
+            logger.info(f"Real-time FX rate update: {symbol} = {rate} at {timestamp}")
+
+            # Update the FX rate in UI
+            if symbol == 'USDCAD':
+                self.ui.label_usd_cad_value.setText(f"{rate:.4f}")
+                self.ui.label_cad_usd_value.setText(f"{1/rate:.4f}")
+        except Exception as e:
+            logger.error(f"Error updating FX rate: {e}")
     
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""

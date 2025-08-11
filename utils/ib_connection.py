@@ -107,36 +107,9 @@ class IBDataCollector:
             
             # Set up callback for real-time updates
             underlying_symbol_ticker.updateEvent += self._on_underlying_price_update
-            
-            # Wait for initial data with timeout
-            await asyncio.sleep(2)
-            
-            # Get initial price from ticker
-            price: Optional[float] = None
-            if underlying_symbol_ticker.last and underlying_symbol_ticker.last > 0:
-                price = float(underlying_symbol_ticker.last)
-                logger.info(f"{symbol} Initial Last Price: ${price}")
-            elif underlying_symbol_ticker.close and underlying_symbol_ticker.close > 0:
-                price = float(underlying_symbol_ticker.close)
-                logger.info(f"{symbol} Initial Previous Close: ${price}")
-            elif underlying_symbol_ticker.bid and underlying_symbol_ticker.ask:
-                price = float((underlying_symbol_ticker.bid + underlying_symbol_ticker.ask) / 2)
-                logger.info(f"{symbol} Initial Mid Price: ${price:.2f} (Bid: ${underlying_symbol_ticker.bid}, Ask: ${underlying_symbol_ticker.ask})")
-            else:
-                logger.info("No initial price data available")
-                logger.info(f"Last: {underlying_symbol_ticker.last}, Bid: {underlying_symbol_ticker.bid}, Ask: {underlying_symbol_ticker.ask}")
-                logger.info(f"Close: {underlying_symbol_ticker.close}, Open: {underlying_symbol_ticker.open}")
-                price = None
 
-            # Store the current price for real-time updates
-            if price is not None:
-                self.underlying_symbol_price = price
-            
-            return price
-                
         except Exception as e:
             logger.error(f"Error getting {symbol} price: {e}")
-            return None
 
     def _on_underlying_price_update(self, ticker):
         """Callback handler for real-time underlying symbol price updates"""
@@ -177,39 +150,37 @@ class IBDataCollector:
             ticker = self.ib.reqMktData(contract, '', False, False)
             # Track this subscription like others
             self._active_subscriptions.add(contract)
-            await asyncio.sleep(2)  # Use await here!
-            
-            if ticker.last and ticker.last > 0:
-                self.fx_ratio = ticker.last
-                logger.info(f"USD/CAD Ratio (last): {self.fx_ratio}")
-                # Cancel market data subscription
-                self.ib.cancelMktData(contract)
-                self._active_subscriptions.discard(contract)
-                
-            elif ticker.close and ticker.close > 0:
-                self.fx_ratio = ticker.close
-                logger.info(f"USD/CAD Ratio (close): {self.fx_ratio}")
-                # Cancel market data subscription
-                self.ib.cancelMktData(contract)
-                self._active_subscriptions.discard(contract)
-                
-            elif ticker.bid and ticker.ask:
-                self.fx_ratio = (ticker.bid + ticker.ask) / 2
-                logger.info(f"USD/CAD Ratio (mid): {self.fx_ratio}")
-                # Cancel market data subscription
-                self.ib.cancelMktData(contract)
-                self._active_subscriptions.discard(contract)
-                
-            else:
-                self.fx_ratio = 0
-                # Cancel market data subscription
-                self.ib.cancelMktData(contract)
-                self._active_subscriptions.discard(contract)
+            ticker.updateEvent += self._on_fx_ratio_update
+            await asyncio.sleep(1)
             
             return self.fx_ratio
         except Exception as e:
             logger.error(f"Error getting USD/CAD ratio: {e}")
             return None
+    
+    def _on_fx_ratio_update(self, ticker):
+        """Callback handler for real-time USD/CAD ratio updates"""
+        if ticker.last and ticker.last > 0:
+            self.fx_ratio = ticker.last
+            logger.info(f"USD/CAD Ratio (last): {self.fx_ratio}")
+        elif ticker.close and ticker.close > 0:
+            self.fx_ratio = ticker.close
+            logger.info(f"USD/CAD Ratio (close): {self.fx_ratio}")
+            
+        elif ticker.bid and ticker.ask:
+            self.fx_ratio = (ticker.bid + ticker.ask) / 2
+            logger.info(f"USD/CAD Ratio (mid): {self.fx_ratio}")
+            
+        else:
+            self.fx_ratio = 0
+            logger.info(f"USD/CAD Ratio (no data): {self.fx_ratio}")
+            
+        if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'fx_ratio_updated'):
+            self.data_worker.fx_ratio_updated.emit({
+                'symbol': 'USDCAD',
+                'price': self.fx_ratio,
+                'timestamp': datetime.now().isoformat()
+            })
     
     async def get_option_chain(self, symbol='SPY', num_strikes=10) -> pd.DataFrame:
         """Get option chain data with improved error handling and validation"""
@@ -601,8 +572,7 @@ class IBDataCollector:
 
             # # Get SPY price
             logger.info(f"Getting {self.underlying_symbol} price...")
-            self.underlying_symbol_price = await self.get_underlying_symbol_price(self.underlying_symbol)
-            data['underlying_symbol_price'] = self.underlying_symbol_price
+            await self.get_underlying_symbol_price(self.underlying_symbol)
 
             # Get USD/CAD ratio
             logger.info("Getting USD/CAD ratio...")
