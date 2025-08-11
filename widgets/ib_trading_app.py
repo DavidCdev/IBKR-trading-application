@@ -33,6 +33,7 @@ class IB_Trading_APP(QMainWindow):
         self.data_worker.data_ready.connect(self.update_ui_with_data)
         self.data_worker.connection_status_changed.connect(self.update_connection_status)
         self.data_worker.error_occurred.connect(self.handle_error)
+        self.data_worker.price_updated.connect(self.update_real_time_price)
         
         # Connect thread signals
         self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -265,6 +266,22 @@ class IB_Trading_APP(QMainWindow):
                 "Connection Error",
                 f"Connection issue detected: {error_message}\nPlease check your IB Gateway/TWS connection."
             )
+    
+    def update_real_time_price(self, price_data: Dict[str, Any]):
+        """Handle real-time price updates from IB"""
+        try:
+            symbol = price_data.get('symbol', 'Unknown')
+            price = price_data.get('price', 0)
+            timestamp = price_data.get('timestamp', '')
+            
+            logger.info(f"Real-time price update: {symbol} = ${price:.2f} at {timestamp}")
+            
+            # Update the underlying symbol price in UI
+            if symbol == self.config.trading.get('underlying_symbol'):
+                self.ui.label_spy_value.setText(f"${price:.2f}")
+                    
+        except Exception as e:
+            logger.error(f"Error updating real-time price: {e}")
     
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""

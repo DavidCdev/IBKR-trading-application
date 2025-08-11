@@ -88,53 +88,87 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
     
-    async def get_symbol_price(self, symbol: str) -> Optional[float]:
+    async def get_underlying_symbol_price(self, symbol: str) -> Optional[float]:
         """Get current underlying symbol price with improved error handling.
         Returns the best available price as a float, or None on failure.
         """
         try:
-            temp_symbol = Stock(symbol, 'SMART', 'USD')
+            underlying_symbol = Stock(symbol, 'SMART', 'USD')
             
             # Qualify the contract
-            temp_symbol_qualified = await self.ib.qualifyContractsAsync(temp_symbol)
-            if not temp_symbol_qualified or temp_symbol_qualified[0] is None:
+            underlying_symbol_qualified = await self.ib.qualifyContractsAsync(underlying_symbol)
+            if not underlying_symbol_qualified or underlying_symbol_qualified[0] is None:
                 logger.error(f"Could not qualify {symbol} contract")
                 return None
             
-            # Request market data
-            temp_symbol_ticker = self.ib.reqMktData(temp_symbol_qualified[0])
-            self._active_subscriptions.add(temp_symbol_qualified[0])
-            # Wait for data with timeout
+            # Request market data and set up real-time updates
+            underlying_symbol_ticker = self.ib.reqMktData(underlying_symbol_qualified[0])
+            self._active_subscriptions.add(underlying_symbol_qualified[0])
+            
+            # Set up callback for real-time updates
+            underlying_symbol_ticker.updateEvent += self._on_underlying_price_update
+            
+            # Wait for initial data with timeout
             await asyncio.sleep(2)
             
+            # Get initial price from ticker
             price: Optional[float] = None
-            if temp_symbol_ticker.last and temp_symbol_ticker.last > 0:
-                price = float(temp_symbol_ticker.last)
-                logger.info(f"{symbol} Last Price: ${price}")
-            elif temp_symbol_ticker.close and temp_symbol_ticker.close > 0:
-                price = float(temp_symbol_ticker.close)
-                logger.info(f"{symbol} Previous Close: ${price}")
-            elif temp_symbol_ticker.bid and temp_symbol_ticker.ask:
-                price = float((temp_symbol_ticker.bid + temp_symbol_ticker.ask) / 2)
-                logger.info(f"{symbol} Mid Price: ${price:.2f} (Bid: ${temp_symbol_ticker.bid}, Ask: ${temp_symbol_ticker.ask})")
+            if underlying_symbol_ticker.last and underlying_symbol_ticker.last > 0:
+                price = float(underlying_symbol_ticker.last)
+                logger.info(f"{symbol} Initial Last Price: ${price}")
+            elif underlying_symbol_ticker.close and underlying_symbol_ticker.close > 0:
+                price = float(underlying_symbol_ticker.close)
+                logger.info(f"{symbol} Initial Previous Close: ${price}")
+            elif underlying_symbol_ticker.bid and underlying_symbol_ticker.ask:
+                price = float((underlying_symbol_ticker.bid + underlying_symbol_ticker.ask) / 2)
+                logger.info(f"{symbol} Initial Mid Price: ${price:.2f} (Bid: ${underlying_symbol_ticker.bid}, Ask: ${underlying_symbol_ticker.ask})")
             else:
-                logger.info("No price data available")
-                logger.info(f"Last: {temp_symbol_ticker.last}, Bid: {temp_symbol_ticker.bid}, Ask: {temp_symbol_ticker.ask}")
-                logger.info(f"Close: {temp_symbol_ticker.close}, Open: {temp_symbol_ticker.open}")
+                logger.info("No initial price data available")
+                logger.info(f"Last: {underlying_symbol_ticker.last}, Bid: {underlying_symbol_ticker.bid}, Ask: {underlying_symbol_ticker.ask}")
+                logger.info(f"Close: {underlying_symbol_ticker.close}, Open: {underlying_symbol_ticker.open}")
                 price = None
 
-            # Cancel market data subscription in all cases
-            try:
-                self.ib.cancelMktData(temp_symbol_qualified[0])
-            finally:
-                self._active_subscriptions.discard(temp_symbol_qualified[0])
+            # Store the current price for real-time updates
+            if price is not None:
+                self.underlying_symbol_price = price
             
             return price
                 
         except Exception as e:
-            logger.error(f"Error getting {self.underlying_symbol} price: {e}")
+            logger.error(f"Error getting {symbol} price: {e}")
             return None
-        
+
+    def _on_underlying_price_update(self, ticker):
+        """Callback handler for real-time underlying symbol price updates"""
+        try:
+            if ticker.last and ticker.last > 0:
+                self.underlying_symbol_price = float(ticker.last)
+                logger.info(f"Real-time {self.underlying_symbol} Last Price: ${self.underlying_symbol_price}")
+            elif ticker.close and ticker.close > 0:
+                self.underlying_symbol_price = float(ticker.close)
+                logger.info(f"Real-time {self.underlying_symbol} Previous Close: ${self.underlying_symbol_price}")
+            elif ticker.bid and ticker.ask:
+                self.underlying_symbol_price = float((ticker.bid + ticker.ask) / 2)
+                logger.info(f"Real-time {self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${ticker.bid}, Ask: ${ticker.ask})")
+            else:
+                logger.debug("No real-time price data available")
+                logger.debug(f"Last: {ticker.last}, Bid: {ticker.bid}, Ask: {ticker.ask}")
+                logger.debug(f"Close: {ticker.close}, Open: {ticker.open}")
+                return
+            
+            # Emit signal for UI update if we have a data worker
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'price_updated'):
+                self.data_worker.price_updated.emit({
+                    'symbol': self.underlying_symbol,
+                    'price': self.underlying_symbol_price,
+                    'timestamp': datetime.now().isoformat()
+                })
+                
+        except Exception as e:
+            logger.error(f"Error in price update callback: {e}")
+
+
+
     async def get_fx_ratio(self):
         """Get current USD/CAD ratio with improved error handling"""
         try:
@@ -205,7 +239,7 @@ class IBDataCollector:
 
             # Get current stock price for strike selection
             if self.underlying_symbol_price == 0:
-                await self.get_symbol_price(self.underlying_symbol)
+                await self.get_underlying_symbol_price(self.underlying_symbol)
 
             if self.underlying_symbol_price == 0:
                 logger.error("Unable to get current stock price for strike selection")
@@ -313,11 +347,12 @@ class IBDataCollector:
             logger.warning(f"Error getting data for {option_type} option: {e}")
             return None
     
-    async def calculate_pnl_detailed(self, pos):
+    async def calculate_pnl_detailed(self, pos, underlying_symbol_price):
         results = []
         pnl_dollar = 0
         pnl_percent = 0
         currency = ''
+        current_price = underlying_symbol_price
         if 'USDCAD' in str(pos.contract):
             current_price = self.fx_ratio
             # Forex
@@ -327,7 +362,7 @@ class IBDataCollector:
 
         elif pos.contract.symbol == 'IBKR':
             # Option
-            current_price = await self.get_symbol_price(pos.contract.symbol)
+            # current_price = await self.get_symbol_price(pos.contract.symbol)
             if current_price is None:
                 logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
                 return results
@@ -337,7 +372,7 @@ class IBDataCollector:
 
         elif pos.contract.symbol == 'SPY':
             # Stock (Short)
-            current_price = await self.get_symbol_price(pos.contract.symbol)
+            # current_price = await self.get_symbol_price(pos.contract.symbol)
             if current_price is None:
                 logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
                 return results
@@ -370,7 +405,7 @@ class IBDataCollector:
                 logger.info(f"Position: {position}")
                 if position.contract.symbol == underlying_symbol:
                     try:
-                        pnl_detailed = await self.calculate_pnl_detailed(position)
+                        pnl_detailed = await self.calculate_pnl_detailed(position, self.underlying_symbol_price)
 
                     except Exception as e:
                         logger.warning(f"Error processing position: {e}")
@@ -566,7 +601,7 @@ class IBDataCollector:
 
             # # Get SPY price
             logger.info(f"Getting {self.underlying_symbol} price...")
-            self.underlying_symbol_price = await self.get_symbol_price(self.underlying_symbol)
+            self.underlying_symbol_price = await self.get_underlying_symbol_price(self.underlying_symbol)
             data['underlying_symbol_price'] = self.underlying_symbol_price
 
             # Get USD/CAD ratio

@@ -12,6 +12,7 @@ class DataCollectorWorker(QObject):
     data_ready = pyqtSignal(dict)
     connection_status_changed = pyqtSignal(bool)
     error_occurred = pyqtSignal(str)
+    price_updated = pyqtSignal(dict)  # Signal for real-time price updates
     
     def __init__(self, config: AppConfig):
         super().__init__()
@@ -23,6 +24,8 @@ class DataCollectorWorker(QObject):
             trading_config=config.trading,
             account_config = config.account
         )
+        # Pass reference to data worker for signal emission
+        self.collector.data_worker = self
         self.is_running = False
         self.reconnect_attempts = 0
         self._last_saved_high_water_mark = (
