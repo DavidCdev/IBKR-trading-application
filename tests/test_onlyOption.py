@@ -59,7 +59,8 @@ def get_option_details(ib, option, option_type):
             'ask': ticker.ask,
             'last': ticker.last,
             'volume': ticker.volume,
-            'open_interest': getattr(ticker, 'callOpenInterest', None),
+            'Call_Open_Interest': getattr(ticker, 'callOpenInterest', 0),
+            'Put_Open_Interest': getattr(ticker, 'putOpenInterest', 0),
             'delta': getattr(ticker.modelGreeks, 'delta', None) if ticker.modelGreeks else None,
             'gamma': getattr(ticker.modelGreeks, 'gamma', None) if ticker.modelGreeks else None,
             'theta': getattr(ticker.modelGreeks, 'theta', None) if ticker.modelGreeks else None,
@@ -85,7 +86,7 @@ calls_df = df[df['type'] == 'CALL'].sort_values('strike')
 puts_df = df[df['type'] == 'PUT'].sort_values('strike')
 
 print("\n=== CALL OPTIONS ===")
-print(calls_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'open_interest']].to_string(index=False))
+print(calls_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'Call_Open_Interest', 'Put_Open_Interest']].to_string(index=False))
 
 print("\n=== PUT OPTIONS ===")
-print(puts_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'open_interest']].to_string(index=False))
+print(puts_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'Call_Open_Interest', 'Put_Open_Interest']].to_string(index=False))
