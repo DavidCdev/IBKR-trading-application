@@ -1,20 +1,29 @@
-from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
-from threading import Timer
+import asyncio
+from ib_async import IB
 
-class PnlApp(EWrapper, EClient):
-    def __init__(self):
-        EClient.__init__(self, self)
+async def main():
+    ib = IB()
+    await ib.connectAsync('127.0.0.1', 7498, clientId=3)
+    print("Connected")
 
-    def pnl(self, reqId, dailyPnL, unrealizedPnL, realizedPnL):
-        print(f"Daily P&L: {dailyPnL}, Unrealized P&L: {unrealizedPnL}, Realized P&L: {realizedPnL}")
-        self.cancelPnL(reqId)  # Cancel if no longer needed
+    account = (ib.managedAccounts())[0]  # Get first managed account
 
-def main():
-    app = PnlApp()
-    app.connect("127.0.0.1", 7496, 0)
-    app.reqPnL(1, "YourAccountId", "")  # Subscribe to account P&L
-    app.run()
+    # Subscribe to P&L updates for the account
+    pnl = ib.reqPnL(account)
+
+    # Define an event handler for P&L updates
+    def on_pnl_update(pnl_obj):
+        print(f"P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
+
+    ib.pnlEvent += on_pnl_update
+
+    # Keep the program running to receive updates
+    try:
+        await asyncio.Future()  # Run forever
+    except asyncio.CancelledError:
+        pass
+    finally:
+        ib.disconnect()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
