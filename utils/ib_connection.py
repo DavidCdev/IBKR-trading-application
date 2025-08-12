@@ -227,13 +227,6 @@ class IBDataCollector:
     async def get_option_chain(self, symbol='SPY') -> pd.DataFrame:
         """Get option chain data with improved error handling and validation"""
         try:
-            # Ensure we have the latest price
-            if self.underlying_symbol_price == 0:
-                await self.get_underlying_symbol_price(self.underlying_symbol)
-            if self.underlying_symbol_price == 0:
-                logger.error("Unable to get current stock price for strike selection")
-                return pd.DataFrame()
-            # Calculate the nearest strike price by rounding to the nearest whole number
             self.option_strike = int(round(self.underlying_symbol_price))
             logger.info(f"Nearest strike price (rounded): {self.option_strike}")
 
@@ -260,17 +253,6 @@ class IBDataCollector:
             # Get the first chain (usually the most liquid exchange)
             chain = chains[0]
 
-            # Get current stock price for strike selection
-            if self.underlying_symbol_price == 0:
-                await self.get_underlying_symbol_price(self.underlying_symbol)
-
-            if self.underlying_symbol_price == 0:
-                logger.error("Unable to get current stock price for strike selection")
-                return pd.DataFrame()
-
-            # Select strikes around current price
-            current_price = self.underlying_symbol_price
-
             # Get nearest expirations
             expirations = sorted(chain.expirations)[:3]  # Get first 3 expirations
 
@@ -287,6 +269,7 @@ class IBDataCollector:
                     call_qualified = await self.ib.qualifyContractsAsync(call_option)
                     put_qualified = await self.ib.qualifyContractsAsync(put_option)
 
+                    print(f"Call qualified: {call_qualified}")
                     # Process CALL option
                     if call_qualified and call_qualified[0]:
                         call_data = await self._get_option_data(call_qualified[0], 'CALL')
@@ -320,7 +303,7 @@ class IBDataCollector:
         """Get market data for a specific option contract"""
         try:
             # Request market data
-            ticker = self.ib.reqMktData(contract)
+            option_ticker = self.ib.reqMktData(contract)
             self._active_subscriptions.add(contract)
             
             # Wait for data
@@ -332,16 +315,17 @@ class IBDataCollector:
                 'Expiration': contract.lastTradeDateOrContractMonth,
                 'Strike': contract.strike,
                 'Type': option_type,
-                # 'Bid': ticker.bid if ticker.bid else 0,
-                # 'Ask': ticker.ask if ticker.ask else 0,
-                # 'Last': ticker.last if ticker.last else 0,
-                # 'Volume': ticker.volume if ticker.volume else 0,
-                # 'Open_Interest': ticker.openInterest if ticker.openInterest else 0,
-                # 'Implied_Volatility': ticker.impliedVolatility if ticker.impliedVolatility else 0,
-                # 'Delta': ticker.delta if ticker.delta else 0,
-                # 'Gamma': ticker.gamma if ticker.gamma else 0,
-                # 'Theta': ticker.theta if ticker.theta else 0,
-                # 'Vega': ticker.vega if ticker.vega else 0
+                'Bid': ticker.bid if option_ticker.bid else 0,
+                'Ask': option_ticker.ask if option_ticker.ask else 0,
+                'Last': option_ticker.last if option_ticker.last else 0,
+                'Volume': option_ticker.volume if option_ticker.volume else 0,
+                'Call_Open_Interest': getattr(option_ticker, 'callOpenInterest', 0),
+                'Put_Open_Interest': getattr(option_ticker, 'putOpenInterest', 0),
+                'Delta': getattr(option_ticker.modelGreeks, 'delta', 0),
+                'Gamma': getattr(option_ticker.modelGreeks, 'gamma', 0),
+                'Theta': getattr(option_ticker.modelGreeks, 'theta', 0),
+                'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
+                'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
             }
             
             # Cancel market data subscription
