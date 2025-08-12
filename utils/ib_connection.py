@@ -315,7 +315,7 @@ class IBDataCollector:
                 'Expiration': contract.lastTradeDateOrContractMonth,
                 'Strike': contract.strike,
                 'Type': option_type,
-                'Bid': ticker.bid if option_ticker.bid else 0,
+                'Bid': option_ticker.bid if option_ticker.bid else 0,
                 'Ask': option_ticker.ask if option_ticker.ask else 0,
                 'Last': option_ticker.last if option_ticker.last else 0,
                 'Volume': option_ticker.volume if option_ticker.volume else 0,

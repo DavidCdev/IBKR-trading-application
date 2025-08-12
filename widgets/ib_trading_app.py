@@ -394,8 +394,27 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_strike_value.setText(f'{call_option_info["Strike"]}')
                 self.ui.label_expiration_value.setText(f'{tmp_expiration}')
 
-                # self.ui.label_option_info_value.setText(f"{option_info.get('option_info', '---')}")
-            
+                self.ui.label_call_bid_value.setText(f'{call_option_info["Bid"]}')
+                self.ui.label_call_ask_value.setText(f'{call_option_info["Ask"]}')
+                self.ui.label_call_delta_value.setText(f'{call_option_info["Delta"]}')
+                self.ui.label_call_gamma_value.setText(f'{call_option_info["Gamma"]}')
+                self.ui.label_call_theta_value.setText(f'{call_option_info["Theta"]}')
+                self.ui.label_call_vega_value.setText(f'{call_option_info["Vega"]}')
+                self.ui.label_call_openint_value.setText(f'{call_option_info["Put_Open_Interest"]}')
+                self.ui.label_call_volume_value.setText(f'{call_option_info["Volume"]}')
+
+
+                self.ui.label_put_bid_value.setText(f'{put_option_info["Bid"]}')
+                self.ui.label_put_ask_value.setText(f'{put_option_info["Ask"]}')
+                self.ui.label_put_delta_value.setText(f'{put_option_info["Delta"]}')
+                self.ui.label_put_gamma_value.setText(f'{put_option_info["Gamma"]}')
+                self.ui.label_put_theta_value.setText(f'{put_option_info["Theta"]}')
+                self.ui.label_put_vega_value.setText(f'{put_option_info["Vega"]}')
+                self.ui.label_put_openint_value.setText(f'{put_option_info["Put_Open_Interest"]}')
+                self.ui.label_put_volume_value.setText(f'{put_option_info["Volume"]}')
+
+
+
             # # Update statistics
             # if data.get('statistics') and not data['statistics'].empty:
             #     stats = data['statistics'].iloc[0]
