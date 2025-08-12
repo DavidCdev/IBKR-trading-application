@@ -3,46 +3,36 @@ import pandas as pd
 import time
 
 
-def get_complete_option_chain_sync(symbol, num_strikes=10):
-    """동기 방식으로 옵션 체인 가져오기"""
+def get_complete_option_chain_sync(option_symbol, num_strikes=10):
 
     # 연결
     ib = IB()
     ib.connect('127.0.0.1', 7497, clientId=2)
-
-    # 주식 정보
-    stock = Stock(symbol, 'SMART', 'USD')
-    ib.qualifyContracts(stock)
-
+    strike = 636.0
+    option_symbol = 'SPY'
+    stock = Stock(option_symbol, 'SMART', 'USD')
+    stock_qualified = ib.qualifyContracts(stock)
+    print(f"Stock qualified: {stock_qualified}")
+    stock_qualified = stock_qualified[0]
     # 옵션 매개변수 가져오기
-    chains = ib.reqSecDefOptParams(stock.symbol, '', stock.secType, stock.conId)
-
+    chains = ib.reqSecDefOptParams(stock_qualified.symbol, '', stock_qualified.secType, stock_qualified.conId)
+    chain = chains[0]
     option_data = []
+    expirations = sorted(chain.expirations)[:3]  # Get first 3 expirations
+    expiry = expirations[0]
 
-    for chain in chains[:1]:  # 첫 번째 체인만
-        expiry = chain.expirations[0]  # 첫 번째 만료일
+    call = Option(option_symbol, expiry, strike, 'C', 'SMART')
+    call_data = get_option_details(ib, call, 'CALL')
+    if call_data:
+        option_data.append(call_data)
 
-        # 행사가격 중 중간 부근 선택
-        strikes = sorted(chain.strikes)
-        mid_idx = len(strikes) // 2
-        selected_strikes = strikes[mid_idx - num_strikes // 2:mid_idx + num_strikes // 2]
+    # 풋 옵션
+    put = Option(option_symbol, expiry, strike, 'P', 'SMART')
+    put_data = get_option_details(ib, put, 'PUT')
+    if put_data:
+        option_data.append(put_data)
 
-        print(f"Processing {len(selected_strikes)} strikes for {expiry}")
-
-        for strike in selected_strikes:
-            # 콜 옵션
-            call = Option(symbol, expiry, strike, 'C', 'SMART')
-            call_data = get_option_details(ib, call, 'CALL')
-            if call_data:
-                option_data.append(call_data)
-
-            # 풋 옵션  
-            put = Option(symbol, expiry, strike, 'P', 'SMART')
-            put_data = get_option_details(ib, put, 'PUT')
-            if put_data:
-                option_data.append(put_data)
-
-            time.sleep(0.1)  # API 제한 방지
+    time.sleep(0.1)  # API 제한 방지
 
     ib.disconnect()
     return option_data
@@ -58,9 +48,8 @@ def get_option_details(ib, option, option_type):
         ib.sleep(1)  # 데이터 대기
 
         # Greeks 요청
-        ticker = ib.reqMktData(option, '104,105,106,100,101', False, False)
+        ticker = ib.reqMktData(option, '100,101,104,106', False, False)
         ib.sleep(1)
-
         data = {
             'type': option_type,
             'symbol': option.symbol,
@@ -70,7 +59,7 @@ def get_option_details(ib, option, option_type):
             'ask': ticker.ask,
             'last': ticker.last,
             'volume': ticker.volume,
-            'open_interest': getattr(ticker, 'openInterest', None),
+            'open_interest': getattr(ticker, 'callOpenInterest', None),
             'delta': getattr(ticker.modelGreeks, 'delta', None) if ticker.modelGreeks else None,
             'gamma': getattr(ticker.modelGreeks, 'gamma', None) if ticker.modelGreeks else None,
             'theta': getattr(ticker.modelGreeks, 'theta', None) if ticker.modelGreeks else None,
@@ -96,7 +85,7 @@ calls_df = df[df['type'] == 'CALL'].sort_values('strike')
 puts_df = df[df['type'] == 'PUT'].sort_values('strike')
 
 print("\n=== CALL OPTIONS ===")
-print(calls_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv']].to_string(index=False))
+print(calls_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'open_interest']].to_string(index=False))
 
 print("\n=== PUT OPTIONS ===")
-print(puts_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv']].to_string(index=False))
+print(puts_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'open_interest']].to_string(index=False))
