@@ -3,7 +3,7 @@ from ib_async import IB
 
 async def main():
     ib = IB()
-    await ib.connectAsync('127.0.0.1', 7498, clientId=3)
+    await ib.connectAsync('127.0.0.1', 7499, clientId=2)
     print("Connected")
 
     account = (ib.managedAccounts())[0]  # Get first managed account

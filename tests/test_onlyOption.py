@@ -7,7 +7,7 @@ def get_complete_option_chain_sync(option_symbol, num_strikes=10):
 
     # 연결
     ib = IB()
-    ib.connect('127.0.0.1', 7497, clientId=2)
+    ib.connect('127.0.0.1', 7499, clientId=2)
     strike = 642.0
     option_symbol = 'SPY'
     stock = Stock(option_symbol, 'SMART', 'USD')

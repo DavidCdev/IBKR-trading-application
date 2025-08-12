@@ -62,6 +62,8 @@ class IB_Trading_APP(QMainWindow):
                 self.data_worker.fx_rate_updated.connect(self.update_fx_rate)
                 self.data_worker.connection_success.connect(self.update_connection_status)
                 self.data_worker.connection_disconnected.connect(self.update_connection_status)
+                self.data_worker.calls_option_updated.connect(self.update_calls_option)
+                self.data_worker.puts_option_updated.connect(self.update_puts_option)
                 
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -325,6 +327,39 @@ class IB_Trading_APP(QMainWindow):
         # self.ui.label_total_trades_value.setText(f"---")
         # self.ui.label_total_wins_value.setText(f"---")
 
+    def update_calls_option(self, calls_data: Dict[str, Any]):
+        try:
+            print(f"UI Calls Data: {calls_data}")
+            self.ui.label_call_price_value.setText(f'{calls_data.get("Last")}')
+            self.ui.label_call_bid_value.setText(f'{calls_data.get("Bid")}')
+            self.ui.label_call_ask_value.setText(f'{calls_data.get("Ask")}')
+            self.ui.label_call_delta_value.setText(f'{calls_data.get("Delta"):.4f}')
+            self.ui.label_call_gamma_value.setText(f'{calls_data.get("Gamma"):.4f}')
+            self.ui.label_call_theta_value.setText(f'{calls_data.get("Theta"):.4f}')
+            self.ui.label_call_vega_value.setText(f'{calls_data.get("Vega"):.4f}')
+            self.ui.label_call_openint_value.setText(f'{calls_data.get("Call_Open_Interest")}')
+            self.ui.label_call_volume_value.setText(f'{calls_data.get("Volume")}')
+
+        except Exception as e:
+            logger.error(f"Error updating UI with calls option data: {e}")
+
+
+    def update_puts_option(self, puts_data: Dict[str, Any]):
+        try:
+            print(f"UI Puts Data: {puts_data}")
+            self.ui.label_put_price_value.setText(f'{puts_data.get("Last")}')
+            self.ui.label_put_bid_value.setText(f'{puts_data.get("Bid")}')
+            self.ui.label_put_ask_value.setText(f'{puts_data.get("Ask")}')
+            self.ui.label_put_delta_value.setText(f'{puts_data.get("Delta"):.4f}')
+            self.ui.label_put_gamma_value.setText(f'{puts_data.get("Gamma"):.4f}')
+            self.ui.label_put_theta_value.setText(f'{puts_data.get("Theta"):.4f}')
+            self.ui.label_put_vega_value.setText(f'{puts_data.get("Vega"):.4f}')
+            self.ui.label_put_openint_value.setText(f'{puts_data.get("Put_Open_Interest")}')
+            self.ui.label_put_volume_value.setText(f'{puts_data.get("Volume")}')
+
+        except Exception as e:
+            logger.error(f"Error updating UI with puts option data: {e}")
+
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
         try:
@@ -378,43 +413,17 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
 
             # Update option information data
-            if data.get('options') is not None and not data.get('options').empty:
-                logger.info("Updating Option Information Data in UI")
-                call_option_info = data['options'].iloc[0]
-                put_option_info = data['options'].iloc[1]
+            if data.get('options') is not None and not data['options'].empty:
+                logger.info(f"Updating Option Information Data in UI: {data['options']}")
 
-                tmp_expiration = call_option_info["Expiration"]
+                option_primary_data = data['options']
+                tmp_expiration = option_primary_data["Expiration"]
                 # Convert string format "20250810" to datetime then format as "2025-08-10"
                 if isinstance(tmp_expiration, str) and len(tmp_expiration) == 8:
                     tmp_expiration = datetime.strptime(tmp_expiration, "%Y%m%d").strftime("%Y-%m-%d")
-                # elif hasattr(tmp_expiration, 'strftime'):
-                #     # If it's already a datetime object
-                #     tmp_expiration = tmp_expiration.strftime("%Y-%m-%d")
-                
-                self.ui.label_strike_value.setText(f'{call_option_info["Strike"]}')
+
+                self.ui.label_strike_value.setText(f'{option_primary_data["Strike"]}')
                 self.ui.label_expiration_value.setText(f'{tmp_expiration}')
-
-                self.ui.label_call_price_value.setText(f'{call_option_info["Last"]}')
-                self.ui.label_call_bid_value.setText(f'{call_option_info["Bid"]}')
-                self.ui.label_call_ask_value.setText(f'{call_option_info["Ask"]}')
-                self.ui.label_call_delta_value.setText(f'{call_option_info["Delta"]:.4f}')
-                self.ui.label_call_gamma_value.setText(f'{call_option_info["Gamma"]:.4f}')
-                self.ui.label_call_theta_value.setText(f'{call_option_info["Theta"]:.4f}')
-                self.ui.label_call_vega_value.setText(f'{call_option_info["Vega"]:.4f}')
-                self.ui.label_call_openint_value.setText(f'{call_option_info["Call_Open_Interest"]}')
-                self.ui.label_call_volume_value.setText(f'{call_option_info["Volume"]}')
-
-                self.ui.label_put_price_value.setText(f'{put_option_info["Last"]}')
-                self.ui.label_put_bid_value.setText(f'{put_option_info["Bid"]}')
-                self.ui.label_put_ask_value.setText(f'{put_option_info["Ask"]}')
-                self.ui.label_put_delta_value.setText(f'{put_option_info["Delta"]:.4f}')
-                self.ui.label_put_gamma_value.setText(f'{put_option_info["Gamma"]:.4f}')
-                self.ui.label_put_theta_value.setText(f'{put_option_info["Theta"]:.4f}')
-                self.ui.label_put_vega_value.setText(f'{put_option_info["Vega"]:.4f}')
-                self.ui.label_put_openint_value.setText(f'{put_option_info["Put_Open_Interest"]}')
-                self.ui.label_put_volume_value.setText(f'{put_option_info["Volume"]}')
-
-
 
             # # Update statistics
             # if data.get('statistics') and not data['statistics'].empty:

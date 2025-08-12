@@ -239,26 +239,37 @@ class IBDataCollector:
             underlying_symbol_ticker = self.ib.reqMktData(underlying_symbol_qualified[0])
             self._active_subscriptions.add(underlying_symbol_qualified[0])
             
-            # Set up callback for real-time updates
-            underlying_symbol_ticker.updateEvent += self._on_underlying_price_update
+            # Set up callback for real-time updates with symbol context
+            underlying_symbol_ticker.updateEvent += lambda ticker, sym=symbol: self._on_underlying_price_update(ticker, sym)
+            
+            # Wait for initial price data
+            await asyncio.sleep(2)
+            
+            # Return the current price if available
+            if self.underlying_symbol_price > 0:
+                return self.underlying_symbol_price
+            else:
+                logger.warning(f"No price data available for {symbol} after waiting")
+                return None
 
         except Exception as e:
             logger.error(f"Error getting {symbol} price: {e}")
+            return None
 
-    def _on_underlying_price_update(self, ticker):
+    def _on_underlying_price_update(self, ticker, symbol=None):
         """Callback handler for real-time underlying symbol price updates"""
         try:
             old_price = self.underlying_symbol_price
             
             if ticker.last and ticker.last > 0:
                 self.underlying_symbol_price = float(ticker.last)
-                logger.info(f"Real-time {self.underlying_symbol} Last Price: ${self.underlying_symbol_price}")
+                logger.info(f"Real-time {symbol or self.underlying_symbol} Last Price: ${self.underlying_symbol_price}")
             elif ticker.close and ticker.close > 0:
                 self.underlying_symbol_price = float(ticker.close)
-                logger.info(f"Real-time {self.underlying_symbol} Previous Close: ${self.underlying_symbol_price}")
+                logger.info(f"Real-time {symbol or self.underlying_symbol} Previous Close: ${self.underlying_symbol_price}")
             elif ticker.bid and ticker.ask:
                 self.underlying_symbol_price = float((ticker.bid + ticker.ask) / 2)
-                logger.info(f"Real-time {self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${ticker.bid}, Ask: ${ticker.ask})")
+                logger.info(f"Real-time {symbol or self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${ticker.bid}, Ask: ${ticker.ask})")
             else:
                 logger.debug("No real-time price data available")
                 logger.debug(f"Last: {ticker.last}, Bid: {ticker.bid}, Ask: {ticker.ask}")
@@ -276,7 +287,7 @@ class IBDataCollector:
             # Emit signal for UI update if we have a data worker
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'price_updated'):
                 self.data_worker.price_updated.emit({
-                    'symbol': self.underlying_symbol,
+                    'symbol': symbol or self.underlying_symbol,
                     'price': self.underlying_symbol_price,
                     'timestamp': datetime.now().isoformat()
                 })
@@ -330,16 +341,19 @@ class IBDataCollector:
         """Get option chain data with improved error handling and validation"""
         try:
             # Calculate and update strike price
+            logger.info(f"Current underlying_symbol_price: {self.underlying_symbol_price}")
             if self.underlying_symbol_price > 0:
                 new_strike = int(round(self.underlying_symbol_price))
+                logger.info(f"Calculated new strike: {new_strike}")
                 if new_strike != self.option_strike:
                     self.option_strike = new_strike
                     self._previous_strike = new_strike
                     logger.info(f"Updated strike price to: {self.option_strike}")
             else:
                 self.option_strike = int(round(self.underlying_symbol_price)) if self.underlying_symbol_price > 0 else 0
-                self.under_option_strike = self.option_strike
+                logger.info(f"Set option_strike to: {self.option_strike}")
             
+            logger.info(f"Final option_strike: {self.option_strike}")
             if not self.option_strike:
                 logger.warning("No underlying price available for strike calculation")
                 return pd.DataFrame()
@@ -353,6 +367,7 @@ class IBDataCollector:
                 return pd.DataFrame()
 
             # Get option chain
+            logger.info(f"Requesting option chain for {stock_qualified[0].symbol}")
             chains = await self.ib.reqSecDefOptParamsAsync(
                 stock_qualified[0].symbol,
                 '',
@@ -364,8 +379,10 @@ class IBDataCollector:
                 logger.warning("No option chains found")
                 return pd.DataFrame()
 
+            logger.info(f"Found {len(chains)} option chains")
             # Get the first chain (usually the most liquid exchange)
             chain = chains[0]
+            logger.info(f"Using chain: {chain.exchange}, {len(chain.strikes)} strikes, {len(chain.expirations)} expirations")
             
             # Store available expirations for dynamic switching
             self._available_expirations = sorted(chain.expirations)
@@ -407,24 +424,43 @@ class IBDataCollector:
                     print(f"Call qualified: {call_qualified}")
                     # Process CALL option
                     if call_qualified and call_qualified[0]:
-                        call_data = await self._get_option_data(call_qualified[0], 'CALL')
-                        if call_data:
-                            option_data.append(call_data)
+                        call_option_data = {
+                            'Symbol': call_qualified[0].symbol,
+                            'Expiration': call_qualified[0].lastTradeDateOrContractMonth,
+                            'Strike': call_qualified[0].strike,
+                            'Type': 'CALL'
+                        }
+                        option_data.append(call_option_data)
+
+                        call_option_ticker = self.ib.reqMktData(call_qualified[0], '100,101,104,106', False, False)
+                        call_option_ticker.updateEvent += self._on_update_calloption
+                        self._active_subscriptions.add(call_qualified[0])
+                        await asyncio.sleep(1)
 
                     # Process PUT option
                     if put_qualified and put_qualified[0]:
-                        put_data = await self._get_option_data(put_qualified[0], 'PUT')
-                        if put_data:
-                            option_data.append(put_data)
+                        put_option_data = {
+                            'Symbol': put_qualified[0].symbol,
+                            'Expiration': put_qualified[0].lastTradeDateOrContractMonth,
+                            'Strike': put_qualified[0].strike,
+                            'Type': 'PUT'
+                        }
+                        option_data.append(put_option_data)
+
+                        put_option_ticker = self.ib.reqMktData(put_qualified[0], '100,101,104,106', False, False)
+                        put_option_ticker.updateEvent += self._on_update_putoption
+                        self._active_subscriptions.add(put_qualified[0])
+                        await asyncio.sleep(1)
 
                 except Exception as e:
                     logger.warning(f"Error processing option {symbol} {expiration} {self.option_strike}: {e}")
                     continue
 
             if option_data:
-                print(option_data)
+                logger.info(f"Creating DataFrame with {len(option_data)} option contracts")
+                logger.info(f"Option data: {option_data}")
                 df = pd.DataFrame(option_data)
-                logger.info(f"Retrieved {len(df)} option contracts for strike {self.option_strike}, expiration {self._current_expiration}")
+                logger.info(f"Retrieved {len(option_data)} option contracts for strike {self.option_strike}, expiration {self._current_expiration}")
                 return df
             else:
                 logger.warning("No option data retrieved")
@@ -433,47 +469,45 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting option chain: {e}")
             return pd.DataFrame()
-    
-    async def _get_option_data(self, contract, option_type: str) -> Optional[Dict[str, Any]]:
-        """Get market data for a specific option contract"""
-        try:
-            # Request market data
-            option_ticker = self.ib.reqMktData(contract, '100,101,104,106', False, False)
-            self._active_subscriptions.add(contract)
-            
-            # Wait for data
-            await asyncio.sleep(1)
-            print(f"Contract: {contract}")
-            print(f"Ticker: {option_ticker}")
-            # Extract data
-            data = {
-                'Symbol': contract.symbol,
-                'Expiration': contract.lastTradeDateOrContractMonth,
-                'Strike': contract.strike,
-                'Type': option_type,
-                'Bid': option_ticker.bid if option_ticker.bid else 0,
-                'Ask': option_ticker.ask if option_ticker.ask else 0,
-                'Last': option_ticker.last if option_ticker.last else 0,
-                'Volume': option_ticker.volume if option_ticker.volume else 0,
-                'Call_Open_Interest': getattr(option_ticker, 'callOpenInterest', 0),
-                'Put_Open_Interest': getattr(option_ticker, 'putOpenInterest', 0),
-                'Delta': getattr(option_ticker.modelGreeks, 'delta', 0),
-                'Gamma': getattr(option_ticker.modelGreeks, 'gamma', 0),
-                'Theta': getattr(option_ticker.modelGreeks, 'theta', 0),
-                'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
-                'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
-            }
-            
-            # Cancel market data subscription
-            self.ib.cancelMktData(contract)
-            self._active_subscriptions.discard(contract)
-            
-            return data
-            
-        except Exception as e:
-            logger.warning(f"Error getting data for {option_type} option: {e}")
-            return None
-    
+
+
+    def _on_update_calloption(self, option_ticker):
+        logger.info(f"Getting real-time Call Option Data in UI")
+        # logger.info(f"Call Option ticker: {option_ticker}")
+        tmp_data = {
+            'Bid': option_ticker.bid if option_ticker.bid else 0,
+            'Ask': option_ticker.ask if option_ticker.ask else 0,
+            'Last': option_ticker.last if option_ticker.last else 0,
+            'Volume': option_ticker.volume if option_ticker.volume else 0,
+            'Call_Open_Interest': getattr(option_ticker, 'callOpenInterest', 0),
+            'Delta': getattr(option_ticker.modelGreeks, 'delta', 0),
+            'Gamma': getattr(option_ticker.modelGreeks, 'gamma', 0),
+            'Theta': getattr(option_ticker.modelGreeks, 'theta', 0),
+            'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
+            'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
+        }
+        print(f"Calls option data: \n{tmp_data}")
+        self.data_worker.calls_option_updated.emit(tmp_data)
+
+
+    def _on_update_putoption(self, option_ticker):
+        logger.info(f"Getting real-time Puts Option Data in UI")
+        # logger.info(f"Puts Option ticker: {option_ticker}")
+        tmp_data = {
+            'Bid': option_ticker.bid if option_ticker.bid else 0,
+            'Ask': option_ticker.ask if option_ticker.ask else 0,
+            'Last': option_ticker.last if option_ticker.last else 0,
+            'Volume': option_ticker.volume if option_ticker.volume else 0,
+            'Put_Open_Interest': getattr(option_ticker, 'putOpenInterest', 0),
+            'Delta': getattr(option_ticker.modelGreeks, 'delta', 0),
+            'Gamma': getattr(option_ticker.modelGreeks, 'gamma', 0),
+            'Theta': getattr(option_ticker.modelGreeks, 'theta', 0),
+            'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
+            'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
+        }
+        print(f"Puts option data: \n{tmp_data}")
+        self.data_worker.puts_option_updated.emit(tmp_data)
+
     async def calculate_pnl_detailed(self, pos, underlying_symbol_price):
         results = []
         pnl_dollar = 0
@@ -728,7 +762,11 @@ class IBDataCollector:
 
             # Get underlying symbol price first (this sets up real-time monitoring)
             logger.info(f"Getting {self.underlying_symbol} price...")
-            await self.get_underlying_symbol_price(self.underlying_symbol)
+            price = await self.get_underlying_symbol_price(self.underlying_symbol)
+            if price is None:
+                logger.error(f"Failed to get {self.underlying_symbol} price")
+                return None
+            logger.info(f"Got {self.underlying_symbol} price: ${price}")
 
             # Get USD/CAD ratio
             logger.info("Getting USD/CAD ratio...")
