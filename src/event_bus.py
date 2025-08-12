@@ -95,7 +95,7 @@ class ResilientEventBus:
         self._performance_metrics = {
             'total_events': 0,
             'throttled_events': 0,
-            'avg_order_delay_ms': 0,
+            'avg_order_delay_ms': 0.0,
             'peak_events_per_second': 0,
             'priority_processing_stats': {}
         }

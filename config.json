@@ -10,7 +10,7 @@
         "max_reconnect_delay": 300
     },
     "trading": {
-        "underlying_symbol": "QQQ",
+        "underlying_symbol": "SPY",
         "risk_levels": [
             {
                 "loss_threshold": "0",
@@ -50,14 +50,21 @@
             "ENHANCED_EVENT_MONITOR": "Info",
             "ENHANCED_EVENT_MONITOR_GUI": "Info",
             "ENHANCED_LOGGING": "Info",
-            "EVENT_BUS": "Trace",
+            "EVENT_BUS": "INFO",
             "EVENT_MONITOR": "Info",
             "EVENT_MONITOR_GUI": "Info",
-            "GUI": "Trace",
+            "GUI": "DEBUG",
             "IB_CONNECTION": "Trace",
-            "MAIN": "Trace",
+            "MAIN": "INFO",
             "PERFORMANCE_OPTIMIZER": "Info",
-            "SUBSCRIPTION_MANAGER": "Trace"
+            "SUBSCRIPTION_MANAGER": "DEBUG"
         }
+    },
+    "ai_prompt": {
+        "prompt": "I am a AI assistant\n",
+        "context": "You are a helpful assistant that can answer questions and help with tasks."
+    },
+    "account": {
+        "high_water_mark": 10008032.2
     }
 }

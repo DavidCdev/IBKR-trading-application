@@ -290,7 +290,7 @@ The IB connection listens for the following events to perform actions:
 
 #### Connection Management
 - **`ib.connect`** - Initiates connection to IB TWS/Gateway
-  - Optional data: `{'host': '127.0.0.1', 'port': 7497, 'clientId': 1}`
+  - Optional data: `{'host': '127.0.0.1', 'port': 7498, 'clientId': 1}`
 - **`ib.disconnect`** - Disconnects from IB with cleanup
   - Optional data: `{}`
 
@@ -598,7 +598,7 @@ event_bus.emit('ib.connect', {})
 # Connect with custom settings
 event_bus.emit('ib.connect', {
     'host': '127.0.0.1',
-    'port': 7497,
+    'port': 7498,
     'clientId': 1
 })
 ```
@@ -871,7 +871,7 @@ python tests/25_bracket_order_sell_test.py
 **Before:**
 ```python
 # Basic connection with minimal error handling
-await self.ib.connectAsync(host='127.0.0.1', port=7497, clientId=1)
+await self.ib.connectAsync(host='127.0.0.1', port=7498, clientId=1)
 ```
 
 **After:**
@@ -925,7 +925,7 @@ await asyncio.sleep(0.5)  # Ensure disconnection completes
 {
     "connection": {
         "host": "127.0.0.1",
-        "port": 7497,
+        "port": 7498,
         "client_id": 1,
         "timeout": 30,
         "readonly": false,
@@ -950,7 +950,7 @@ await asyncio.sleep(0.5)  # Ensure disconnection completes
 - **Action:** Check "Enable ActiveX and Socket Clients"
 
 ### 2. Port Configuration
-- **TWS Default Port:** 7497
+- **TWS Default Port:** 7498
 - **Gateway Default Port:** 4001
 - **Note:** Can be changed if needed
 
@@ -972,7 +972,7 @@ await asyncio.sleep(0.5)  # Ensure disconnection completes
 from ib_async import *
 
 ib = IB()
-ib.connect('127.0.0.1', 7497, clientId=1)
+ib.connect('127.0.0.1', 7498, clientId=1)
 # Your code here
 ib.disconnect()
 ```
@@ -984,7 +984,7 @@ from ib_async import *
 
 async def main():
     ib = IB()
-    await ib.connectAsync('127.0.0.1', 7497, clientId=1)
+    await ib.connectAsync('127.0.0.1', 7498, clientId=1)
     # Your async code here
     ib.disconnect()
 
@@ -997,7 +997,7 @@ from ib_async import *
 util.startLoop()  # Required for notebooks
 
 ib = IB()
-ib.connect('127.0.0.1', 7497, clientId=1)
+ib.connect('127.0.0.1', 7498, clientId=1)
 # Your code here - no need to call ib.run()
 ```
 
@@ -1006,7 +1006,7 @@ ib.connect('127.0.0.1', 7497, clientId=1)
 ### 1. Basic Error Handling
 ```python
 try:
-    ib.connect('127.0.0.1', 7497, clientId=1)
+    ib.connect('127.0.0.1', 7498, clientId=1)
 except ConnectionRefusedError:
     print("TWS/Gateway not running or API not enabled")
 except Exception as e:
@@ -1087,8 +1087,8 @@ logger.info(f"Connection verified - Managed accounts: {accounts}")
 
 ### 2. Port Validation
 ```python
-if self._connection_params['port'] not in [7497, 4001]:
-    logger.warning(f"Unusual port {self._connection_params['port']} - expected 7497 (TWS) or 4001 (Gateway)")
+if self._connection_params['port'] not in [7498, 4001]:
+    logger.warning(f"Unusual port {self._connection_params['port']} - expected 7498 (TWS) or 4001 (Gateway)")
 ```
 
 ## Event-Driven Architecture
@@ -1125,7 +1125,7 @@ else:
 
 ### 1. Common Connection Issues
 - **Connection Refused:** TWS/Gateway not running or API not enabled
-- **Wrong Port:** Check if using 7497 (TWS) or 4001 (Gateway)
+- **Wrong Port:** Check if using 7498 (TWS) or 4001 (Gateway)
 - **Trusted IPs:** Ensure `127.0.0.1` is in trusted IPs list
 
 ### 2. Performance Issues
@@ -1166,13 +1166,13 @@ logger.info(f"Market data cleanup: {cleanup_results['successful']} successful, {
 ### 1. Readonly Mode
 ```python
 # Use readonly mode for testing
-ib.connect('127.0.0.1', 7497, clientId=1, readonly=True)
+ib.connect('127.0.0.1', 7498, clientId=1, readonly=True)
 ```
 
 ### 2. Client ID Management
 ```python
 # Each connection needs a unique client ID
-ib.connect('127.0.0.1', 7497, clientId=1)  # Use different numbers for multiple connections
+ib.connect('127.0.0.1', 7498, clientId=1)  # Use different numbers for multiple connections
 ```
 
 ### 3. Local Connections Only
@@ -1316,3 +1316,34 @@ The system successfully handles:
 - ✅ Test-verified functionality with 100% success rates
 
 This implementation serves as a complete reference for building robust IB trading systems with bracket order management and realistic market integration. 
+
+
+
+### New Features (2024)
+
+- **Historical Data Fetching**:  
+  Fetch historical 1-minute bar data for any contract (stock, option, etc.) via the event bus.
+  - **Event:** `market_data.request_historical`
+  - **Emits:** `market_data.historical_update`
+- **FX Rate Auto-Subscription & Calculation**:  
+  If the account base currency differs from the underlying’s currency, the system automatically subscribes to the relevant FX rate (e.g., USD.CAD), calculates both direct and reciprocal rates, and emits them for display.
+  - **Event:** `fx.request_rate`
+  - **Emits:** `fx.rate_update`
+
+### Example Usage
+
+```python
+# Fetch historical 1-minute bars for AAPL
+event_bus.emit('market_data.request_historical', {
+    'symbol': 'AAPL',
+    'secType': 'STK',
+    'duration': '1 D',
+    'barSize': '1 min'
+})
+
+# Request FX rate between account and underlying currency
+event_bus.emit('fx.request_rate', {
+    'underlying_symbol': 'AAPL',
+    'underlying_currency': 'USD'
+})
+```

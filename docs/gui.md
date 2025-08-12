@@ -193,7 +193,7 @@ The `risk_levels` list should contain dictionaries with the following structure:
 {
     "connection": {
         "host": "127.0.0.1",
-        "port": 7497,
+        "port": 7498,
         "client_id": 1
     },
     "trading": {

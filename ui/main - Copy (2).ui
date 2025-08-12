@@ -1,0 +1,1359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>731</width>
+    <height>540</height>
+   </rect>
+  </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>0</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="font">
+   <font>
+    <family>Segoe UI</family>
+    <pointsize>11</pointsize>
+   </font>
+  </property>
+  <property name="windowTitle">
+   <string>IB Trading GUI</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout_main">
+    <property name="spacing">
+     <number>16</number>
+    </property>
+    <property name="leftMargin">
+     <number>20</number>
+    </property>
+    <property name="topMargin">
+     <number>20</number>
+    </property>
+    <property name="rightMargin">
+     <number>20</number>
+    </property>
+    <property name="bottomMargin">
+     <number>20</number>
+    </property>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_top">
+      <property name="spacing">
+       <number>16</number>
+      </property>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <property name="spacing">
+         <number>16</number>
+        </property>
+        <item>
+         <widget class="QGroupBox" name="groupBox_trading_info">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>185</width>
+            <height>120</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+            <weight>75</weight>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="toolTip">
+           <string>Displays current trading information including SPY and currency rates.</string>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QGroupBox {
+        border: 2px solid #5dade2;
+        border-radius: 12px;
+        margin-top: 1ex;
+        font-weight: bold;
+        color: #2c3e50;
+        background-color: #fafdff;
+        box-shadow: 0 2px 8px rgba(90, 173, 226, 0.08);
+        padding-top: 10px;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 0 8px 0 8px;
+        background-color: #5dade2;
+        color: white;
+        border-radius: 6px;
+    }
+    </string>
+          </property>
+          <property name="title">
+           <string>Trading Information</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_trading">
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_5">
+             <property name="spacing">
+              <number>6</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="label_spy_name">
+               <property name="font">
+                <font>
+                 <pointsize>10</pointsize>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>  SPY:</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_spy_value">
+               <property name="font">
+                <font>
+                 <pointsize>12</pointsize>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>$498.33</string>
+               </property>
+               <property name="alignment">
+                <set>Qt::AlignCenter</set>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_usd_cad">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_usd_cad_name">
+               <property name="text">
+                <string>USD/CAD:</string>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_usd_cad_value">
+               <property name="text">
+                <string>1.3750</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_cad_usd">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_cad_usd_name">
+               <property name="text">
+                <string>CAD/USD:</string>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_cad_usd_value">
+               <property name="text">
+                <string>0.7272</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="groupBox_active_contract">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>185</width>
+            <height>120</height>
+           </size>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>10</pointsize>
+            <weight>75</weight>
+            <bold>true</bold>
+           </font>
+          </property>
+          <property name="toolTip">
+           <string>Information about the currently active contract in your portfolio.</string>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QGroupBox {
+        border: 2px solid #f39c12;
+        border-radius: 12px;
+        margin-top: 1ex;
+        font-weight: bold;
+        color: #2c3e50;
+        background-color: #fafdff;
+        box-shadow: 0 2px 8px rgba(243, 156, 18, 0.08);
+        padding-top: 10px;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 0 8px 0 8px;
+        background-color: #f39c12;
+        color: white;
+        border-radius: 6px;
+    }
+    </string>
+          </property>
+          <property name="title">
+           <string>Active Contract</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_4">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_pl_percent">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_pl_percent_name">
+               <property name="text">
+                <string>P/L (%):</string>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_pl_percent_value">
+               <property name="text">
+                <string>0.00%</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_pl_dollar">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_pl_dollar_name">
+               <property name="text">
+                <string>P/L ($):</string>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_pl_dollar_value">
+               <property name="text">
+                <string>$0.00</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_quantity">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_quantity_name">
+               <property name="text">
+                <string>Quantity:</string>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_quantity_value">
+               <property name="text">
+                <string>10</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_symbol">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_symbol_name">
+               <property name="text">
+                <string>Symbol:</string>
+               </property>
+              </widget>
+             </item>
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_symbol_value">
+               <property name="text">
+                <string>SPY 500C</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBox_option_info">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>270</width>
+          <height>240</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>Shows detailed information for the selected option contract.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QGroupBox {
+    border: 2px solid #5dade2;
+    border-radius: 12px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: #2c3e50;
+    background-color: #fafdff;
+    box-shadow: 0 2px 8px rgba(90, 173, 226, 0.08);
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px 0 8px;
+    background-color: #5dade2;
+    color: white;
+    border-radius: 6px;
+}
+</string>
+        </property>
+        <property name="title">
+         <string>Option Information</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_option_info">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_strike_exp">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_strike">
+             <item>
+              <widget class="QLabel" name="label_strike_name">
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Strike:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_strike_value">
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>$502</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_expiration">
+             <item>
+              <widget class="QLabel" name="label_expiration_name">
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Expiration:</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="label_expiration_value">
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>2025-08-07</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_puts_calls">
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_puts">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_puts_title">
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Puts</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_price">
+               <item alignment="Qt::AlignHCenter">
+                <widget class="QLabel" name="label_put_price_value">
+                 <property name="font">
+                  <font>
+                   <weight>75</weight>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="text">
+                  <string>$2.80</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_bid">
+               <item>
+                <widget class="QLabel" name="label_put_bid_name">
+                 <property name="text">
+                  <string>Bid:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_bid_value">
+                 <property name="text">
+                  <string>$2.79</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_ask">
+               <item>
+                <widget class="QLabel" name="label_put_ask_name">
+                 <property name="text">
+                  <string>Ask:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_ask_value">
+                 <property name="text">
+                  <string>$2.81</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_delta">
+               <item>
+                <widget class="QLabel" name="label_put_delta_name">
+                 <property name="text">
+                  <string>Delta:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_delta_value">
+                 <property name="text">
+                  <string>-0.45</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_gamma">
+               <item>
+                <widget class="QLabel" name="label_put_gamma_name">
+                 <property name="text">
+                  <string>Gamma:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_gamma_value">
+                 <property name="text">
+                  <string>0.04</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_theta">
+               <item>
+                <widget class="QLabel" name="label_put_theta_name">
+                 <property name="text">
+                  <string>Theta:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_theta_value">
+                 <property name="text">
+                  <string>-0.05</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_vega">
+               <item>
+                <widget class="QLabel" name="label_put_vega_name">
+                 <property name="text">
+                  <string>Vega:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_vega_value">
+                 <property name="text">
+                  <string>0.13</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_openint">
+               <item>
+                <widget class="QLabel" name="label_put_openint_name">
+                 <property name="text">
+                  <string>Open Int:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_openint_value">
+                 <property name="text">
+                  <string>18,765</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_put_volume">
+               <item>
+                <widget class="QLabel" name="label_put_volume_name">
+                 <property name="text">
+                  <string>Volume:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_put_volume_value">
+                 <property name="text">
+                  <string>4,321</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QVBoxLayout" name="verticalLayout_calls">
+             <item alignment="Qt::AlignHCenter">
+              <widget class="QLabel" name="label_calls_title">
+               <property name="font">
+                <font>
+                 <weight>75</weight>
+                 <bold>true</bold>
+                </font>
+               </property>
+               <property name="text">
+                <string>Calls</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_price">
+               <item alignment="Qt::AlignHCenter">
+                <widget class="QLabel" name="label_call_price_value">
+                 <property name="font">
+                  <font>
+                   <weight>75</weight>
+                   <bold>true</bold>
+                  </font>
+                 </property>
+                 <property name="text">
+                  <string>$3.10</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_bid">
+               <item>
+                <widget class="QLabel" name="label_call_bid_name">
+                 <property name="text">
+                  <string>Bid:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_bid_value">
+                 <property name="text">
+                  <string>$3.09</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_ask">
+               <item>
+                <widget class="QLabel" name="label_call_ask_name">
+                 <property name="text">
+                  <string>Ask:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_ask_value">
+                 <property name="text">
+                  <string>$3.11</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_delta">
+               <item>
+                <widget class="QLabel" name="label_call_delta_name">
+                 <property name="text">
+                  <string>Delta:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_delta_value">
+                 <property name="text">
+                  <string>0.55</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_gamma">
+               <item>
+                <widget class="QLabel" name="label_call_gamma_name">
+                 <property name="text">
+                  <string>Gamma:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_gamma_value">
+                 <property name="text">
+                  <string>0.04</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_theta">
+               <item>
+                <widget class="QLabel" name="label_call_theta_name">
+                 <property name="text">
+                  <string>Theta:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_theta_value">
+                 <property name="text">
+                  <string>-0.06</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_vega">
+               <item>
+                <widget class="QLabel" name="label_call_vega_name">
+                 <property name="text">
+                  <string>Vega:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_vega_value">
+                 <property name="text">
+                  <string>0.13</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_openint">
+               <item>
+                <widget class="QLabel" name="label_call_openint_name">
+                 <property name="text">
+                  <string>Open Int:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_openint_value">
+                 <property name="text">
+                  <string>12,345</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item>
+              <layout class="QHBoxLayout" name="horizontalLayout_call_volume">
+               <item>
+                <widget class="QLabel" name="label_call_volume_name">
+                 <property name="text">
+                  <string>Volume:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="label_call_volume_value">
+                 <property name="text">
+                  <string>6,789</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBox_ai_insights">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>200</width>
+          <height>120</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>AI-generated insights, strategies, and alerts for your trading session.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QGroupBox {
+    border: 2px solid #4a90e2;
+    border-radius: 12px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: #2c3e50;
+    background-color: #fafdff;
+    box-shadow: 0 2px 8px rgba(74, 144, 226, 0.08);
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px 0 8px;
+    background-color: #4a90e2;
+    color: white;
+    border-radius: 6px;
+}</string>
+        </property>
+        <property name="title">
+         <string>🤖 AI Insights</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_ai">
+         <property name="spacing">
+          <number>12</number>
+         </property>
+         <property name="topMargin">
+          <number>20</number>
+         </property>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_bias">
+           <item>
+            <widget class="QLabel" name="label_ai_bias_name">
+             <property name="text">
+              <string>Bias:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_ai_bias_value">
+             <property name="text">
+              <string>Bullish</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_strategy">
+           <item>
+            <widget class="QLabel" name="label_ai_strategy_name">
+             <property name="text">
+              <string>Strategy:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextBrowser" name="textbrowser_ai_strategy_value">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="text" stdset="0">
+              <string>Consider a bull call spread: Buy SPY 500C, sell SPY 510C. Target profit $400, max risk $200. Monitor for breakout above $502. Adjust stop to $497 if volatility increases.</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_keylevel">
+           <item>
+            <widget class="QLabel" name="label_ai_keylevel_name">
+             <property name="text">
+              <string>Key Level:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_ai_keylevel_value">
+             <property name="text">
+              <string>$502.00</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_alert">
+           <item>
+            <widget class="QLabel" name="label_ai_alert_name">
+             <property name="text">
+              <string>Alert:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTextBrowser" name="textbrowser_ai_alert_value">
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="html">
+              <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+p, li { white-space: pre-wrap; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p align=&quot;center&quot; style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;12&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="text" stdset="0">
+              <string>⚠️ Unusual options volume detected in SPY 500C. Watch for sharp price swings at market open. Consider reducing position size if implied volatility rises above 25%.</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_bottom">
+      <property name="spacing">
+       <number>16</number>
+      </property>
+      <item>
+       <widget class="QGroupBox" name="groupBox_account_metrics">
+        <property name="toolTip">
+         <string>Key account metrics including value, high water mark, and daily P&amp;L.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QGroupBox {
+    border: 2px solid #27ae60;
+    border-radius: 12px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: #2c3e50;
+    background-color: #fafdff;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.08);
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px 0 8px;
+    background-color: #27ae60;
+    color: white;
+    border-radius: 6px;
+}
+</string>
+        </property>
+        <property name="title">
+         <string>Account Metrics</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_account">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_account_value">
+           <item>
+            <widget class="QLabel" name="label_account_value_name">
+             <property name="text">
+              <string>Account Value:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_account_value_value">
+             <property name="text">
+              <string>$105,123.45</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_starting_value">
+           <item>
+            <widget class="QLabel" name="label_starting_value_name">
+             <property name="text">
+              <string>Starting Value:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_starting_value_value">
+             <property name="text">
+              <string>$100,000.00</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_high_water">
+           <item>
+            <widget class="QLabel" name="label_high_water_name">
+             <property name="text">
+              <string>High Water Mark:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_high_water_value">
+             <property name="text">
+              <string>$106,543.21</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_daily_pl">
+           <item>
+            <widget class="QLabel" name="label_daily_pl_name">
+             <property name="text">
+              <string>Daily P&amp;L:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_daily_pl_value">
+             <property name="text">
+              <string>$5,123.45</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_daily_pl_percent">
+           <item>
+            <widget class="QLabel" name="label_daily_pl_percent_name">
+             <property name="text">
+              <string>Daily P&amp;L %:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_daily_pl_percent_value">
+             <property name="text">
+              <string>5.12%</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBox_trade_statistics">
+        <property name="toolTip">
+         <string>Summary of your trading performance and statistics.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QGroupBox {
+    border: 2px solid #e67e22;
+    border-radius: 12px;
+    margin-top: 1ex;
+    font-weight: bold;
+    color: #2c3e50;
+    background-color: #fafdff;
+    box-shadow: 0 2px 8px rgba(230, 126, 34, 0.08);
+    padding-top: 10px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 8px 0 8px;
+    background-color: #e67e22;
+    color: white;
+    border-radius: 6px;
+}
+</string>
+        </property>
+        <property name="title">
+         <string>Trade Statistics</string>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_stats">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_win_rate">
+           <item>
+            <widget class="QLabel" name="label_win_rate_name">
+             <property name="text">
+              <string>Win Rate:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_win_rate_value">
+             <property name="text">
+              <string>75.00%</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_total_wins_count">
+           <item>
+            <widget class="QLabel" name="label_total_wins_count_name">
+             <property name="text">
+              <string>Total Wins (count):</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_total_wins_count_value">
+             <property name="text">
+              <string>15</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_total_wins_sum">
+           <item>
+            <widget class="QLabel" name="label_total_wins_sum_name">
+             <property name="text">
+              <string>Total Wins (sum):</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_total_wins_sum_value">
+             <property name="text">
+              <string>$7,500.00</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_total_losses_count">
+           <item>
+            <widget class="QLabel" name="label_total_losses_count_name">
+             <property name="text">
+              <string>Total Losses (count):</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_total_losses_count_value">
+             <property name="text">
+              <string>5</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_total_losses_sum">
+           <item>
+            <widget class="QLabel" name="label_total_losses_sum_name">
+             <property name="text">
+              <string>Total Losses (sum):</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_total_losses_sum_value">
+             <property name="text">
+              <string>$2,500.00</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_total_trades">
+           <item>
+            <widget class="QLabel" name="label_total_trades_name">
+             <property name="text">
+              <string>Total Trades:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_total_trades_value">
+             <property name="text">
+              <string>20</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_status_area">
+      <item>
+       <widget class="QPushButton" name="pushButton_settings">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>12</width>
+          <height>12</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>30</width>
+          <height>30</height>
+         </size>
+        </property>
+        <property name="font">
+         <font>
+          <weight>50</weight>
+          <bold>false</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>⚙ </string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_connection_status">
+        <property name="font">
+         <font>
+          <pointsize>9</pointsize>
+         </font>
+        </property>
+        <property name="text">
+         <string>Connection: Connected</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Expanding</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>0</width>
+          <height>0</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="button_refresh_ai">
+        <property name="minimumSize">
+         <size>
+          <width>100</width>
+          <height>25</height>
+         </size>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>8</pointsize>
+          <weight>75</weight>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="toolTip">
+         <string>Refresh the AI insights and recommendations.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 7px 16px;
+    font-weight: bold;
+    font-size: 8pt;
+    transition: background 0.2s;
+}
+QPushButton:hover {
+    background-color: #229954;
+}
+QPushButton:pressed {
+    background-color: #1e8449;
+}</string>
+        </property>
+        <property name="text">
+         <string>🔄 Refresh AI</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="button_ai_prompt">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>0</height>
+         </size>
+        </property>
+        <property name="font">
+         <font>
+          <pointsize>8</pointsize>
+          <weight>75</weight>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="toolTip">
+         <string>Open the AI prompt dialog to ask for trading insights or strategies.</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QPushButton {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 7px 16px;
+    font-weight: bold;
+    font-size: 8pt;
+    transition: background 0.2s;
+}
+QPushButton:hover {
+    background-color: #2980b9;
+}
+QPushButton:pressed {
+    background-color: #21618c;
+}</string>
+        </property>
+        <property name="text">
+         <string>💬 AI Prompt</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_time">
+        <property name="font">
+         <font>
+          <pointsize>8</pointsize>
+         </font>
+        </property>
+        <property name="text">
+         <string>09:42:49 PM</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QStatusBar" name="statusbar">
+   <property name="layoutDirection">
+    <enum>Qt::LeftToRight</enum>
+   </property>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
