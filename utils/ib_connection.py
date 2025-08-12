@@ -228,6 +228,7 @@ class IBDataCollector:
         """Get option chain data with improved error handling and validation"""
         try:
             self.option_strike = int(round(self.underlying_symbol_price))
+            self.under_option_strike = int(round(self.underlying_symbol_price))
             logger.info(f"Nearest strike price (rounded): {self.option_strike}")
 
             # Create stock contract

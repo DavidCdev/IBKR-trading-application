@@ -400,7 +400,7 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_call_gamma_value.setText(f'{call_option_info["Gamma"]}')
                 self.ui.label_call_theta_value.setText(f'{call_option_info["Theta"]}')
                 self.ui.label_call_vega_value.setText(f'{call_option_info["Vega"]}')
-                self.ui.label_call_openint_value.setText(f'{call_option_info["Put_Open_Interest"]}')
+                self.ui.label_call_openint_value.setText(f'{call_option_info["Call_Open_Interest"]}')
                 self.ui.label_call_volume_value.setText(f'{call_option_info["Volume"]}')
 
 
