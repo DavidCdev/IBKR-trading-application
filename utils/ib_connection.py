@@ -438,12 +438,13 @@ class IBDataCollector:
         """Get market data for a specific option contract"""
         try:
             # Request market data
-            option_ticker = self.ib.reqMktData(contract)
+            option_ticker = self.ib.reqMktData(contract, '100,101,104,106', False, False)
             self._active_subscriptions.add(contract)
             
             # Wait for data
             await asyncio.sleep(1)
             print(f"Contract: {contract}")
+            print(f"Ticker: {option_ticker}")
             # Extract data
             data = {
                 'Symbol': contract.symbol,

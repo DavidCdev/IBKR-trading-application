@@ -8,7 +8,7 @@ def get_complete_option_chain_sync(option_symbol, num_strikes=10):
     # 연결
     ib = IB()
     ib.connect('127.0.0.1', 7497, clientId=2)
-    strike = 636.0
+    strike = 642.0
     option_symbol = 'SPY'
     stock = Stock(option_symbol, 'SMART', 'USD')
     stock_qualified = ib.qualifyContracts(stock)
@@ -86,7 +86,7 @@ calls_df = df[df['type'] == 'CALL'].sort_values('strike')
 puts_df = df[df['type'] == 'PUT'].sort_values('strike')
 
 print("\n=== CALL OPTIONS ===")
-print(calls_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'Call_Open_Interest', 'Put_Open_Interest']].to_string(index=False))
+print(calls_df[['strike', 'bid', 'ask', 'last', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'Call_Open_Interest', 'Put_Open_Interest']].to_string(index=False))
 
 print("\n=== PUT OPTIONS ===")
-print(puts_df[['strike', 'bid', 'ask', 'volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'Call_Open_Interest', 'Put_Open_Interest']].to_string(index=False))
+print(puts_df[['strike', 'bid', 'ask', 'last','volume', 'delta', 'gamma', 'theta', 'vega', 'iv', 'Call_Open_Interest', 'Put_Open_Interest']].to_string(index=False))
