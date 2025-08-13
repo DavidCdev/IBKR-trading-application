@@ -26,6 +26,8 @@ class IBDataCollector:
         self.timeout = timeout
         self.spy_price = 0
         self.underlying_symbol_price = 0
+        self.daily_pnl = 0
+        self.account_liquidation = 0
         self.fx_ratio = 0
         self.option_strike = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
@@ -321,7 +323,7 @@ class IBDataCollector:
         elif ticker.close and ticker.close > 0:
             self.fx_ratio = ticker.close
             logger.info(f"USD/CAD Ratio (close): {self.fx_ratio}")
-            
+
         elif ticker.bid and ticker.ask:
             self.fx_ratio = (ticker.bid + ticker.ask) / 2
             logger.info(f"USD/CAD Ratio (mid): {self.fx_ratio}")
@@ -330,10 +332,10 @@ class IBDataCollector:
             self.fx_ratio = 0
             logger.info(f"USD/CAD Ratio (no data): {self.fx_ratio}")
             
-        if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'fx_ratio_updated'):
-            self.data_worker.fx_ratio_updated.emit({
+        if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'fx_rate_updated'):
+            self.data_worker.fx_rate_updated.emit({
                 'symbol': 'USDCAD',
-                'price': self.fx_ratio,
+                'rate': self.fx_ratio,
                 'timestamp': datetime.now().isoformat()
             })
     
@@ -386,6 +388,7 @@ class IBDataCollector:
             
             # Store available expirations for dynamic switching
             self._available_expirations = sorted(chain.expirations)
+            logger.info(f"Available expirations: {self._available_expirations[:5]}...")  # Show first 5
             
             # Set initial expiration if not set
             if not self._current_expiration:
@@ -398,20 +401,28 @@ class IBDataCollector:
                 expirations = [self._current_expiration] + self._available_expirations[current_index+1:current_index+3]
             else:
                 expirations = sorted(chain.expirations)[:3]  # Fallback to first 3 expirations
+            
+            logger.info(f"Selected expirations: {expirations}")
+            logger.info(f"Looking for options with strike: {self.option_strike}")
 
             option_data = []
             contracts_cache = {}
 
             for expiration in expirations:
                 try:
+                    logger.info(f"Processing expiration: {expiration}")
                     # Create CALL option
                     call_option = Option(symbol, expiration, self.option_strike, 'C', 'SMART')
                     # Create PUT option
                     put_option = Option(symbol, expiration, self.option_strike, 'P', 'SMART')
 
+                    logger.info(f"Created options: CALL {call_option}, PUT {put_option}")
                     # Qualify contracts
                     call_qualified = await self.ib.qualifyContractsAsync(call_option)
                     put_qualified = await self.ib.qualifyContractsAsync(put_option)
+                    
+                    logger.info(f"Call qualification result: {call_qualified}")
+                    logger.info(f"Put qualification result: {put_qualified}")
 
                     # Cache contracts for quick resubscription
                     cache_key = f"{self.option_strike}_{expiration}"
@@ -431,6 +442,7 @@ class IBDataCollector:
                             'Type': 'CALL'
                         }
                         option_data.append(call_option_data)
+                        logger.info(f"Added CALL option data: {call_option_data}")
 
                         call_option_ticker = self.ib.reqMktData(call_qualified[0], '100,101,104,106', False, False)
                         call_option_ticker.updateEvent += self._on_update_calloption
@@ -446,6 +458,7 @@ class IBDataCollector:
                             'Type': 'PUT'
                         }
                         option_data.append(put_option_data)
+                        logger.info(f"Added PUT option data: {put_option_data}")
 
                         put_option_ticker = self.ib.reqMktData(put_qualified[0], '100,101,104,106', False, False)
                         put_option_ticker.updateEvent += self._on_update_putoption
@@ -456,6 +469,7 @@ class IBDataCollector:
                     logger.warning(f"Error processing option {symbol} {expiration} {self.option_strike}: {e}")
                     continue
 
+            logger.info(f"Finished processing all expirations. Total option_data collected: {len(option_data)}")
             if option_data:
                 logger.info(f"Creating DataFrame with {len(option_data)} option contracts")
                 logger.info(f"Option data: {option_data}")
@@ -579,7 +593,51 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting active positions: {e}")
             return pd.DataFrame()
-    
+    # Define an event handler for P&L updates
+    def on_pnl_update(self, pnl_obj):
+        print(f"P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
+        self.daily_pnl = pnl_obj.dailyPnL
+        daily_pnl_percent = self.daily_pnl / (self.account_liquidation - self.daily_pnl)
+        self.data_worker.daily_pnl_update.emit({
+            'daily_pnl_price': self.daily_pnl,
+            'daily_pnl_percent': daily_pnl_percent
+        })
+
+    def on_account_summary_update(self, account_summary):
+        for item in account_summary:
+            if item.tag == 'NetLiquidation':
+                self.account_liquidation = float(item.value)
+                break
+        starting_value = self.account_liquidation - self.daily_pnl
+        # Treat high_water_mark as a value in currency units consistently
+        high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
+        logger.info(f"High water mark: {high_water_mark}")
+
+        if high_water_mark is None:
+            high_water_mark = self.account_liquidation
+        else:
+            try:
+                high_water_mark = float(high_water_mark)
+            except Exception:
+                # If persisted as string previously, coerce to float
+                high_water_mark = self.account_liquidation
+
+        if self.account_liquidation > high_water_mark:
+            high_water_mark = self.account_liquidation
+            if self.account_config is not None:
+                self.account_config['high_water_mark'] = high_water_mark
+            logger.info(f"High water mark updated to {high_water_mark}")
+
+        # Create DataFrame with common metrics
+        metrics = {
+            'NetLiquidation': self.account_liquidation,
+            'StartingValue': starting_value,
+            'HighWaterMark': high_water_mark,
+        }
+        logger.info(f"Updated Account Metrics: {metrics}")
+        self.data_worker.account_summary_update.emit(metrics)
+
+
     async def get_account_metrics(self) -> pd.DataFrame:
         """Get account metrics with improved error handling.
         High water mark is tracked consistently as a realized PnL value (currency units).
@@ -587,66 +645,13 @@ class IBDataCollector:
         try:
             # Get account summary
             account_values = await self.ib.accountSummaryAsync()
-            
-            if not account_values:
-                logger.warning("No account values received")
-                return pd.DataFrame()
-            
-            # Create account data dictionary
-            account_data = {}
-            for value in account_values:
-                try:
-                    account_data[value.tag] = value.value
-                except Exception as e:
-                    logger.warning(f"Error processing account value {value.tag}: {e}")
-                    continue
-            liquidation_account_value = float(account_data.get('NetLiquidation', 0) or 0)
-            realized_pn_l_account_value = float(account_data.get('RealizedPnL', 0) or 0)
-            starting_value = liquidation_account_value - realized_pn_l_account_value
-            realized_pn_l_account_percent = (realized_pn_l_account_value / starting_value) * 100 if starting_value else 0
+            account = (self.ib.managedAccounts())[0]  # Get first managed account
 
-            # Treat high_water_mark as a value in currency units consistently
-            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
-            logger.info(f"High water mark: {high_water_mark}")
-            
-            if high_water_mark is None:
-                high_water_mark = liquidation_account_value
-            else:
-                try:
-                    high_water_mark = float(high_water_mark)
-                except Exception:
-                    # If persisted as string previously, coerce to float
-                    high_water_mark = liquidation_account_value
+            # Subscribe to P&L updates for the account
+            pnl = self.ib.reqPnL(account)
+            self.ib.pnlEvent += self.on_pnl_update
+            self.ib.accountSummaryEvent += self.on_account_summary_update
 
-            if liquidation_account_value > high_water_mark:
-                high_water_mark = liquidation_account_value
-                if self.account_config is not None:
-                    self.account_config['high_water_mark'] = high_water_mark
-                logger.info(f"High water mark updated to {high_water_mark}")
-
-            # Create DataFrame with common metrics
-            metrics = {
-                'NetLiquidation': liquidation_account_value,
-                'StartingValue':starting_value,
-                'HighWaterMark': high_water_mark,
-                'RealizedPnLPrice': round(realized_pn_l_account_value, 2),
-                'RealizedPnLPercent': round(realized_pn_l_account_percent, 2),
-                'TotalCashValue': account_data.get('TotalCashValue', 0),
-                'GrossPositionValue': account_data.get('GrossPositionValue', 0),
-                'BuyingPower': account_data.get('BuyingPower', 0),
-                'AvailableFunds': account_data.get('AvailableFunds', 0),
-                'ExcessLiquidity': account_data.get('ExcessLiquidity', 0),
-                'Cushion': account_data.get('Cushion', 0),
-                'FullInitMarginReq': account_data.get('FullInitMarginReq', 0),
-                'FullMaintMarginReq': account_data.get('FullMaintMarginReq', 0),
-                'FullAvailableFunds': account_data.get('FullAvailableFunds', 0),
-                'Currency': account_data.get('Currency', 'USD')
-            }
-            
-            df = pd.DataFrame([metrics])
-            logger.info("Account metrics retrieved successfully")
-            return df
-            
         except Exception as e:
             logger.error(f"Error getting account metrics: {e}")
             return pd.DataFrame()

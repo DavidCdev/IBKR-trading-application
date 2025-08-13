@@ -64,6 +64,8 @@ class IB_Trading_APP(QMainWindow):
                 self.data_worker.connection_disconnected.connect(self.update_connection_status)
                 self.data_worker.calls_option_updated.connect(self.update_calls_option)
                 self.data_worker.puts_option_updated.connect(self.update_puts_option)
+                self.data_worker.daily_pnl_update.connect(self.update_daily_pnl_updated)
+                self.data_worker.account_summary_update.connect(self.update_account_summary)
                 
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -417,12 +419,12 @@ class IB_Trading_APP(QMainWindow):
                 logger.info(f"Updating Option Information Data in UI: {data['options']}")
 
                 option_primary_data = data['options']
-                tmp_expiration = option_primary_data["Expiration"]
+                tmp_expiration = option_primary_data["Expiration"][0]
                 # Convert string format "20250810" to datetime then format as "2025-08-10"
                 if isinstance(tmp_expiration, str) and len(tmp_expiration) == 8:
                     tmp_expiration = datetime.strptime(tmp_expiration, "%Y%m%d").strftime("%Y-%m-%d")
 
-                self.ui.label_strike_value.setText(f'{option_primary_data["Strike"]}')
+                self.ui.label_strike_value.setText(f'{option_primary_data["Strike"][0]}')
                 self.ui.label_expiration_value.setText(f'{tmp_expiration}')
 
             # # Update statistics
@@ -511,7 +513,27 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_cad_usd_value.setText(f"{1/rate:.4f}")
         except Exception as e:
             logger.error(f"Error updating FX rate: {e}")
-    
+
+    def update_daily_pnl_updated(self, daily_pnl_data: Dict[str, Any]):
+        try:
+            daily_pnl_price = daily_pnl_data.get('daily_pnl_price', 0)
+            daily_pnl_percent = daily_pnl_data.get('daily_pnl_percent', 0)
+            self.ui.label_daily_pl_value.setText(f"${daily_pnl_price:.2f}")
+            self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.2f}%")
+            logger.info(f"GUI updated Daily pnl price : {daily_pnl_price:.2f}   Percent: {daily_pnl_percent:.2f}%")
+
+        except Exception as e:
+            logger.error(f"Error updating Daily Pnl rate: {e}")
+
+    def update_account_summary(self, account_summary: Dict[str, Any]):
+        try:
+            self.ui.label_account_value_value.setText(f"${account_summary['NetLiquidation']:.2f}")
+            self.ui.label_starting_value_value.setText(f"${account_summary['StartingValue']:.2f}")
+            self.ui.label_high_water_value.setText(f"${account_summary['HighWaterMark']:.2f}")
+
+        except Exception as e:
+            logger.error(f"Error updating Daily Pnl rate: {e}")
+
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""
         # Update the time label with current time

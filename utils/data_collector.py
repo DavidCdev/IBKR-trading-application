@@ -18,6 +18,8 @@ class DataCollectorWorker(QObject):
     connection_disconnected = pyqtSignal(dict)
     puts_option_updated = pyqtSignal(dict)
     calls_option_updated = pyqtSignal(dict)
+    daily_pnl_update = pyqtSignal(dict)
+    account_summary_update = pyqtSignal(dict)
 
     def __init__(self, config: AppConfig):
         super().__init__()
