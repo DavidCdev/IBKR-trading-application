@@ -644,13 +644,59 @@ class IBDataCollector:
         """
         try:
             # Get account summary
-            account_values = await self.ib.accountSummaryAsync()
             account = (self.ib.managedAccounts())[0]  # Get first managed account
 
             # Subscribe to P&L updates for the account
             pnl = self.ib.reqPnL(account)
             self.ib.pnlEvent += self.on_pnl_update
             self.ib.accountSummaryEvent += self.on_account_summary_update
+
+            account_values = await self.ib.accountSummaryAsync()
+
+            if not account_values:
+                logger.warning("No account values received")
+                return pd.DataFrame()
+
+            # Create account data dictionary
+            account_data = {}
+            for value in account_values:
+                try:
+                    account_data[value.tag] = value.value
+                except Exception as e:
+                    logger.warning(f"Error processing account value {value.tag}: {e}")
+                    continue
+            self.account_liquidation = float(account_data.get('NetLiquidation', 0) or 0)
+            starting_value = self.account_liquidation - self.daily_pnl
+
+            # Treat high_water_mark as a value in currency units consistently
+            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
+            logger.info(f"High water mark: {high_water_mark}")
+
+            if high_water_mark is None:
+                high_water_mark = self.account_liquidation
+            else:
+                try:
+                    high_water_mark = float(high_water_mark)
+                except Exception:
+                    # If persisted as string previously, coerce to float
+                    high_water_mark = self.account_liquidation
+
+            if self.account_liquidation > high_water_mark:
+                high_water_mark = self.account_liquidation
+                if self.account_config is not None:
+                    self.account_config['high_water_mark'] = high_water_mark
+                logger.info(f"High water mark updated to {high_water_mark}")
+
+            # Create DataFrame with common metrics
+            metrics = {
+                'NetLiquidation': self.account_liquidation,
+                'StartingValue': starting_value,
+                'HighWaterMark': high_water_mark,
+            }
+
+            df = pd.DataFrame([metrics])
+            logger.info("Account metrics retrieved successfully")
+            return df
 
         except Exception as e:
             logger.error(f"Error getting account metrics: {e}")

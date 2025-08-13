@@ -385,14 +385,10 @@ class IB_Trading_APP(QMainWindow):
                 account_data = data['account'].iloc[0]
                 account_value = account_data.get('NetLiquidation', 'N/A')
                 starting_value = account_data.get('StartingValue','---')
-                pnl_value_price = account_data.get('RealizedPnLPrice', 0)
-                pnl_value_percent = account_data.get('RealizedPnLPercent', 0)
                 high_water_mark = account_data.get('HighWaterMark', '---')
 
                 self.ui.label_account_value_value.setText(f"${account_value}")
                 self.ui.label_starting_value_value.setText(f"${starting_value}")
-                self.ui.label_daily_pl_value.setText(f"${pnl_value_price}")
-                self.ui.label_daily_pl_percent_value.setText(f"{pnl_value_percent}%")
                 self.ui.label_high_water_value.setText(f"${high_water_mark}")
                 logger.info(f"Account Net Liquidation: ${account_value}")
                 # Update account-related UI elements here
@@ -516,11 +512,12 @@ class IB_Trading_APP(QMainWindow):
 
     def update_daily_pnl_updated(self, daily_pnl_data: Dict[str, Any]):
         try:
+            logger.info(f"Updating daily PNL update: {daily_pnl_data}")
             daily_pnl_price = daily_pnl_data.get('daily_pnl_price', 0)
             daily_pnl_percent = daily_pnl_data.get('daily_pnl_percent', 0)
             self.ui.label_daily_pl_value.setText(f"${daily_pnl_price:.2f}")
-            self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.2f}%")
-            logger.info(f"GUI updated Daily pnl price : {daily_pnl_price:.2f}   Percent: {daily_pnl_percent:.2f}%")
+            self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.10f}%")
+            logger.info(f"GUI updated Daily pnl price : {daily_pnl_price}   Percent: {daily_pnl_percent}%")
 
         except Exception as e:
             logger.error(f"Error updating Daily Pnl rate: {e}")
