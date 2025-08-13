@@ -62,6 +62,10 @@ class IB_Trading_APP(QMainWindow):
                 self.data_worker.fx_rate_updated.connect(self.update_fx_rate)
                 self.data_worker.connection_success.connect(self.update_connection_status)
                 self.data_worker.connection_disconnected.connect(self.update_connection_status)
+                self.data_worker.calls_option_updated.connect(self.update_calls_option)
+                self.data_worker.puts_option_updated.connect(self.update_puts_option)
+                self.data_worker.daily_pnl_update.connect(self.update_daily_pnl_updated)
+                self.data_worker.account_summary_update.connect(self.update_account_summary)
                 
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -325,6 +329,39 @@ class IB_Trading_APP(QMainWindow):
         # self.ui.label_total_trades_value.setText(f"---")
         # self.ui.label_total_wins_value.setText(f"---")
 
+    def update_calls_option(self, calls_data: Dict[str, Any]):
+        try:
+            print(f"UI Calls Data: {calls_data}")
+            self.ui.label_call_price_value.setText(f'{calls_data.get("Last")}')
+            self.ui.label_call_bid_value.setText(f'{calls_data.get("Bid")}')
+            self.ui.label_call_ask_value.setText(f'{calls_data.get("Ask")}')
+            self.ui.label_call_delta_value.setText(f'{calls_data.get("Delta"):.4f}')
+            self.ui.label_call_gamma_value.setText(f'{calls_data.get("Gamma"):.4f}')
+            self.ui.label_call_theta_value.setText(f'{calls_data.get("Theta"):.4f}')
+            self.ui.label_call_vega_value.setText(f'{calls_data.get("Vega"):.4f}')
+            self.ui.label_call_openint_value.setText(f'{calls_data.get("Call_Open_Interest")}')
+            self.ui.label_call_volume_value.setText(f'{calls_data.get("Volume")}')
+
+        except Exception as e:
+            logger.error(f"Error updating UI with calls option data: {e}")
+
+
+    def update_puts_option(self, puts_data: Dict[str, Any]):
+        try:
+            print(f"UI Puts Data: {puts_data}")
+            self.ui.label_put_price_value.setText(f'{puts_data.get("Last")}')
+            self.ui.label_put_bid_value.setText(f'{puts_data.get("Bid")}')
+            self.ui.label_put_ask_value.setText(f'{puts_data.get("Ask")}')
+            self.ui.label_put_delta_value.setText(f'{puts_data.get("Delta"):.4f}')
+            self.ui.label_put_gamma_value.setText(f'{puts_data.get("Gamma"):.4f}')
+            self.ui.label_put_theta_value.setText(f'{puts_data.get("Theta"):.4f}')
+            self.ui.label_put_vega_value.setText(f'{puts_data.get("Vega"):.4f}')
+            self.ui.label_put_openint_value.setText(f'{puts_data.get("Put_Open_Interest")}')
+            self.ui.label_put_volume_value.setText(f'{puts_data.get("Volume")}')
+
+        except Exception as e:
+            logger.error(f"Error updating UI with puts option data: {e}")
+
     def update_ui_with_data(self, data: Dict[str, Any]):
         """Update UI with collected data"""
         try:
@@ -348,14 +385,10 @@ class IB_Trading_APP(QMainWindow):
                 account_data = data['account'].iloc[0]
                 account_value = account_data.get('NetLiquidation', 'N/A')
                 starting_value = account_data.get('StartingValue','---')
-                pnl_value_price = account_data.get('RealizedPnLPrice', 0)
-                pnl_value_percent = account_data.get('RealizedPnLPercent', 0)
                 high_water_mark = account_data.get('HighWaterMark', '---')
 
                 self.ui.label_account_value_value.setText(f"${account_value}")
                 self.ui.label_starting_value_value.setText(f"${starting_value}")
-                self.ui.label_daily_pl_value.setText(f"${pnl_value_price}")
-                self.ui.label_daily_pl_percent_value.setText(f"{pnl_value_percent}%")
                 self.ui.label_high_water_value.setText(f"${high_water_mark}")
                 logger.info(f"Account Net Liquidation: ${account_value}")
                 # Update account-related UI elements here
@@ -378,24 +411,18 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
 
             # Update option information data
-            if data.get('options') is not None and not data.get('options').empty:
-                logger.info("Updating Option Information Data in UI")
-                call_option_info = data['options'].iloc[0]
-                put_option_info = data['options'].iloc[1]
+            if data.get('options') is not None and not data['options'].empty:
+                logger.info(f"Updating Option Information Data in UI: {data['options']}")
 
-                tmp_expiration = call_option_info["Expiration"]
+                option_primary_data = data['options']
+                tmp_expiration = option_primary_data["Expiration"][0]
                 # Convert string format "20250810" to datetime then format as "2025-08-10"
                 if isinstance(tmp_expiration, str) and len(tmp_expiration) == 8:
                     tmp_expiration = datetime.strptime(tmp_expiration, "%Y%m%d").strftime("%Y-%m-%d")
-                # elif hasattr(tmp_expiration, 'strftime'):
-                #     # If it's already a datetime object
-                #     tmp_expiration = tmp_expiration.strftime("%Y-%m-%d")
-                
-                self.ui.label_strike_value.setText(f'{call_option_info["Strike"]}')
+
+                self.ui.label_strike_value.setText(f'{option_primary_data["Strike"][0]}')
                 self.ui.label_expiration_value.setText(f'{tmp_expiration}')
 
-                # self.ui.label_option_info_value.setText(f"{option_info.get('option_info', '---')}")
-            
             # # Update statistics
             # if data.get('statistics') and not data['statistics'].empty:
             #     stats = data['statistics'].iloc[0]
@@ -482,7 +509,28 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_cad_usd_value.setText(f"{1/rate:.4f}")
         except Exception as e:
             logger.error(f"Error updating FX rate: {e}")
-    
+
+    def update_daily_pnl_updated(self, daily_pnl_data: Dict[str, Any]):
+        try:
+            logger.info(f"Updating daily PNL update: {daily_pnl_data}")
+            daily_pnl_price = daily_pnl_data.get('daily_pnl_price', 0)
+            daily_pnl_percent = daily_pnl_data.get('daily_pnl_percent', 0)
+            self.ui.label_daily_pl_value.setText(f"${daily_pnl_price:.2f}")
+            self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.10f}%")
+            logger.info(f"GUI updated Daily pnl price : {daily_pnl_price}   Percent: {daily_pnl_percent}%")
+
+        except Exception as e:
+            logger.error(f"Error updating Daily Pnl rate: {e}")
+
+    def update_account_summary(self, account_summary: Dict[str, Any]):
+        try:
+            self.ui.label_account_value_value.setText(f"${account_summary['NetLiquidation']:.2f}")
+            self.ui.label_starting_value_value.setText(f"${account_summary['StartingValue']:.2f}")
+            self.ui.label_high_water_value.setText(f"${account_summary['HighWaterMark']:.2f}")
+
+        except Exception as e:
+            logger.error(f"Error updating Daily Pnl rate: {e}")
+
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""
         # Update the time label with current time

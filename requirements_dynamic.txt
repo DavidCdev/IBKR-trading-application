@@ -1,0 +1,2 @@
+# Additional dependencies for dynamic strike price and expiration monitoring
+pytz>=2023.3
