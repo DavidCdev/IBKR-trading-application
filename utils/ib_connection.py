@@ -597,7 +597,7 @@ class IBDataCollector:
     def on_pnl_update(self, pnl_obj):
         print(f"P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
         self.daily_pnl = pnl_obj.dailyPnL
-        daily_pnl_percent = self.daily_pnl / (self.account_liquidation - self.daily_pnl)
+        daily_pnl_percent = 100 * self.daily_pnl / (self.account_liquidation - self.daily_pnl)
         self.data_worker.daily_pnl_update.emit({
             'daily_pnl_price': self.daily_pnl,
             'daily_pnl_percent': daily_pnl_percent
@@ -840,9 +840,9 @@ class IBDataCollector:
             data['active_contract'] = positions_df
 
             # # Get trade statistics
-            # logger.info("Getting trade statistics...")
-            # stats_df = await self.get_trade_statistics()
-            # data['statistics'] = stats_df
+            logger.info("Getting trade statistics...")
+            stats_df = await self.get_trade_statistics()
+            data['statistics'] = stats_df
             
             logger.info("Data collection completed successfully")
             return data

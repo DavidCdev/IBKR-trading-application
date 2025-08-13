@@ -516,7 +516,7 @@ class IB_Trading_APP(QMainWindow):
             daily_pnl_price = daily_pnl_data.get('daily_pnl_price', 0)
             daily_pnl_percent = daily_pnl_data.get('daily_pnl_percent', 0)
             self.ui.label_daily_pl_value.setText(f"${daily_pnl_price:.2f}")
-            self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.10f}%")
+            self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.4f}%")
             logger.info(f"GUI updated Daily pnl price : {daily_pnl_price}   Percent: {daily_pnl_percent}%")
 
         except Exception as e:
