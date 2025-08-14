@@ -256,28 +256,47 @@ current_prices = {
 def calculate_pnl_detailed(positions, current_prices):
     results = []
     for pos in positions:
+        # Determine if position is long or short
+        is_long = pos.position > 0
+        is_short = pos.position < 0
+        position_size = abs(pos.position)  # Use absolute value for calculations
+        
         if 'USDCAD' in str(pos.contract):
-            # Forex
-            pnl_dollar = pos.position * (current_prices['USDCAD'] - pos.avgCost)
-            pnl_percent = ((current_prices['USDCAD'] - pos.avgCost) / pos.avgCost) * 100
+            # Forex - same logic for long/short
+            if is_long:
+                pnl_dollar = position_size * (current_prices['USDCAD'] - pos.avgCost)
+                pnl_percent = ((current_prices['USDCAD'] - pos.avgCost) / pos.avgCost) * 100
+            else:  # is_short
+                pnl_dollar = position_size * (pos.avgCost - current_prices['USDCAD'])
+                pnl_percent = ((pos.avgCost - current_prices['USDCAD']) / pos.avgCost) * 100
             currency = 'CAD'
 
         elif pos.contract.symbol == 'IBKR':
             # Option
-            pnl_dollar = pos.position * (current_prices['IBKR_OPTION'] - pos.avgCost)
-            pnl_percent = ((current_prices['IBKR_OPTION'] - pos.avgCost) / pos.avgCost) * 100
+            if is_long:
+                pnl_dollar = position_size * (current_prices['IBKR_OPTION'] - pos.avgCost)
+                pnl_percent = ((current_prices['IBKR_OPTION'] - pos.avgCost) / pos.avgCost) * 100
+            else:  # is_short
+                pnl_dollar = position_size * (pos.avgCost - current_prices['IBKR_OPTION'])
+                pnl_percent = ((pos.avgCost - current_prices['IBKR_OPTION']) / pos.avgCost) * 100
             currency = 'USD'
 
         elif pos.contract.symbol == 'SPY':
-            # Stock (Short)
-            pnl_dollar = pos.position * (current_prices['SPY'] - pos.avgCost)
-            pnl_percent = -((current_prices['SPY'] - pos.avgCost) / pos.avgCost) * 100 * (-1 if pos.position < 0 else 1)
+            # Stock
+            if is_long:
+                pnl_dollar = position_size * (current_prices['SPY'] - pos.avgCost)
+                pnl_percent = ((current_prices['SPY'] - pos.avgCost) / pos.avgCost) * 100
+            else:  # is_short
+                pnl_dollar = position_size * (pos.avgCost - current_prices['SPY'])
+                pnl_percent = ((pos.avgCost - current_prices['SPY']) / pos.avgCost) * 100
             currency = 'USD'
 
         results.append({
             'symbol': pos.contract.symbol if hasattr(pos.contract, 'symbol') else 'USDCAD',
             'position_size': pos.position,
+            'position_type': 'LONG' if is_long else 'SHORT',
             'avg_cost': pos.avgCost,
+            'current_price': current_prices.get(pos.contract.symbol, current_prices.get('USDCAD')),
             'pnl_dollar': round(pnl_dollar, 2),
             'pnl_percent': round(pnl_percent, 2),
             'currency': currency

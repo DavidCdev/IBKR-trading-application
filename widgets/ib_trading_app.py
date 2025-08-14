@@ -611,11 +611,18 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_strike_value.setText(f'{option_primary_data["Strike"][0]}')
                 self.ui.label_expiration_value.setText(f'{tmp_expiration}')
 
-            # # Update statistics
-            # if data.get('statistics') and not data['statistics'].empty:
-            #     stats = data['statistics'].iloc[0]
-            #     win_rate = stats.get('Win_Rate', 0)
-            #     logger.info(f"Win rate: {win_rate:.2f}%")
+            # Update statistics
+            statistics = data.get('statistics')
+            if statistics is not None and not statistics.empty:
+                stats = statistics.iloc[0]
+                win_rate = stats.get('Win_Rate', 0)
+                self.ui.label_win_rate_value.setText(f"{win_rate:.2f}%")
+                self.ui.label_total_trades_value.setText(f"{stats.get('Total_Trades', 0)}")
+                self.ui.label_total_wins_count_value.setText(f"{stats.get('Total_Wins_Count', 0)}")
+                self.ui.label_total_losses_count_value.setText(f"{stats.get('Total_Losses_Count', 0)}")
+                self.ui.label_total_losses_sum_value.setText(f"${stats.get('Total_Losses_Sum', 0):.2f}")
+                self.ui.label_total_wins_sum_value.setText(f"${stats.get('Total_Wins_Sum', 0):.2f}")
+                logger.info(f"Win rate: {win_rate:.2f}%")
                 
         except Exception as e:
             logger.error(f"Error updating UI with data: {e}")

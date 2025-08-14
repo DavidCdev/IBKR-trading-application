@@ -2,13 +2,14 @@ import asyncio
 from typing import Optional, Dict, Any
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pytz
 from threading import Thread, Event
 import time
 from .smart_logger import get_logger, log_connection_event, log_error_with_context
 from .performance_monitor import monitor_function, monitor_async_function
 from .trading_manager import TradingManager
+from collections import defaultdict, deque
 
 logger = get_logger("IB_CONNECTION")
 
@@ -873,51 +874,97 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting account metrics: {e}")
             return pd.DataFrame()
-    
-    async def get_trade_statistics(self, days_back=30) -> pd.DataFrame:
+
+    async def get_today_option_executions(self, symbol='SPY'):
+        executions = await self.ib.reqExecutionsAsync()
+        today = date.today()
+        trades = []
+
+        for trade in executions:
+            exec_date = trade.execution.time.astimezone().date()
+            contract = trade.contract
+
+            if (
+                    exec_date == today and
+                    contract.secType == 'OPT' and
+                    contract.symbol == symbol and
+                    contract.right in ['C', 'P']
+            ):
+                trades.append(trade)
+
+        return trades
+
+    async def match_trades_and_calculate_pnl(self, trades):
+        open_positions = defaultdict(deque)  # {contract key: deque of fills}
+        closed_trades = []
+
+        for trade in trades:
+            contract = trade.contract
+            exec = trade.execution
+            side = exec.side.upper()  # BOT or SLD
+            quantity = exec.shares
+            price = exec.price
+            time = exec.time
+            multiplier = int(contract.multiplier) if contract.multiplier else 100
+            key = (contract.symbol, contract.lastTradeDateOrContractMonth,
+                   contract.strike, contract.right)
+
+            position = {
+                'time': time,
+                'side': side,
+                'qty': quantity,
+                'price': price,
+                'contract': contract
+            }
+
+            if side == 'BOT':
+                open_positions[key].append(position)
+            elif side == 'SLD':
+                # Try to find matching buy(s)
+                remaining_qty = quantity
+                while remaining_qty > 0 and open_positions[key]:
+                    buy_trade = open_positions[key][0]
+                    match_qty = min(remaining_qty, buy_trade['qty'])
+
+                    pnl = (price - buy_trade['price']) * match_qty * multiplier
+
+                    closed_trades.append({
+                        'buy_time': buy_trade['time'],
+                        'sell_time': time,
+                        'contract': contract,
+                        'buy_price': buy_trade['price'],
+                        'sell_price': price,
+                        'qty': match_qty,
+                        'pnl': pnl
+                    })
+
+                    # Adjust unmatched quantities
+                    buy_trade['qty'] -= match_qty
+                    remaining_qty -= match_qty
+
+                    if buy_trade['qty'] == 0:
+                        open_positions[key].popleft()
+            # You can repeat the same if you short first and buy-to-cover later.
+            # For simplicity, we’re only handling BOT then SLD
+        return closed_trades
+
+
+    async def get_trade_statistics(self) -> pd.DataFrame:
         """Get trade statistics with improved error handling"""
         try:
             # Get completed orders
-            trades = await self.ib.tradesAsync()
-            
-            if not trades:
-                logger.info("No trades found")
-                return self._create_empty_stats()
-            
-            # Filter trades by date
-            cutoff_date = datetime.now() - timedelta(days=days_back)
-            recent_trades = []
-            
-            for trade in trades:
-                try:
-                    if trade.orderStatus.status == 'Filled':
-                        # Parse fill time
-                        fill_time = datetime.strptime(
-                            trade.orderStatus.filledTime, 
-                            '%Y%m%d %H:%M:%S'
-                        )
-                        if fill_time >= cutoff_date:
-                            recent_trades.append(trade)
-                except Exception as e:
-                    logger.warning(f"Error processing trade: {e}")
-                    continue
-            
-            if not recent_trades:
-                logger.info(f"No trades found in the last {days_back} days")
-                return self._create_empty_stats()
-            
+            all_trades = await self.get_today_option_executions(self.underlying_symbol)
+            closed_trades = await self.match_trades_and_calculate_pnl(all_trades)
+                        
+           
             # Calculate statistics
             wins = []
             losses = []
             
-            for trade in recent_trades:
+            
+            for trade in closed_trades:
                 try:
-                    # Calculate P&L (simplified calculation)
-                    if hasattr(trade, 'realizedPNL'):
-                        pnl = trade.realizedPNL
-                    else:
-                        # Estimate P&L from order details
-                        pnl = 0  # This would need more complex calculation
+                    pnl = trade['pnl']
                     
                     if pnl > 0:
                         wins.append(pnl)
