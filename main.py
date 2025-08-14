@@ -1,20 +1,12 @@
 import sys
 import asyncio
-import logging
 from PyQt5.QtWidgets import QApplication
 
 from widgets.ib_trading_app import IB_Trading_APP
+from utils.smart_logger import get_logger, log_connection_event
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('trading_app.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+# Initialize smart logging system
+logger = get_logger("MAIN")
 
 
 
@@ -25,13 +17,15 @@ def main():
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
     
     try:
+        logger.info("Starting IB Trading Application")
+        
         app = QApplication(sys.argv)
         
         # Create and show main window
         main_window = IB_Trading_APP()
         main_window.show()
         
-        logger.info("IB Trading Application started")
+        logger.info("IB Trading Application GUI initialized successfully")
         
         # Run the application
         sys.exit(app.exec_())
@@ -39,7 +33,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.error(f"Unexpected error during application startup: {e}")
         sys.exit(1)
 
 
