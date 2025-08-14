@@ -119,17 +119,25 @@ class IB_Trading_APP(QMainWindow):
                 try:
                     def on_connection_success(data):
                         status = data.get('status', 'Connected')
+                        message = data.get('message', '')
                         logger.info(f"Main app: Connection success signal received: {status}")
                         self.setting_ui.update_connection_status(status)
+                        if message and hasattr(self.setting_ui, 'log_connection_event'):
+                            self.setting_ui.log_connection_event(message, "Info")
                     
                     def on_connection_disconnected(data):
                         status = data.get('status', 'Disconnected')
+                        message = data.get('message', '')
                         logger.info(f"Main app: Connection disconnected signal received: {status}")
                         self.setting_ui.update_connection_status(status)
+                        if message and hasattr(self.setting_ui, 'log_connection_event'):
+                            self.setting_ui.log_connection_event(message, "Info")
                     
                     def on_error(msg):
                         logger.info(f"Main app: Error signal received: {msg}")
                         self.setting_ui.update_connection_status("Error")
+                        if hasattr(self.setting_ui, 'log_connection_event'):
+                            self.setting_ui.log_connection_event(msg, "Error")
                     
                     self.data_worker.connection_success.connect(on_connection_success)
                     self.data_worker.connection_disconnected.connect(on_connection_disconnected)

@@ -136,7 +136,7 @@ class IBDataCollector:
         logger.debug("IB event callbacks registered")
 
     async def _on_connected(self):
-        """Handle successful IB connection."""
+        """Handle IB connection success."""
         try:
             logger.info("IB Connection established successfully")
             self._connected = True
@@ -152,7 +152,10 @@ class IBDataCollector:
             logger.info(f"Connection data: {connection_data}")
             
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_success'):
-                self.data_worker.connection_success.emit({'status': 'Connected'})
+                self.data_worker.connection_success.emit({
+                    'status': 'Connected',
+                    'message': f'Successfully connected to {self.host}:{self.port} (Client ID: {self.clientId})'
+                })
         except Exception as e:
             logger.error(f"Error in connection success handler: {e}")
     
@@ -171,7 +174,10 @@ class IBDataCollector:
             }
             logger.info(f"Disconnection data: {disconnection_data}")
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_disconnected'):
-                self.data_worker.connection_disconnected.emit({'status': 'Disconnected'})
+                self.data_worker.connection_disconnected.emit({
+                    'status': 'Disconnected',
+                    'message': f'Disconnected from {self.host}:{self.port} (Client ID: {self.clientId})'
+                })
             
         except Exception as e:
             logger.error(f"Error in disconnection handler: {e}")
@@ -180,6 +186,13 @@ class IBDataCollector:
         """Connect to TWS/IB Gateway with timeout and retry logic"""
         try:
             logger.info(f"Attempting to connect to IB at {self.host}:{self.port}")
+            
+            # Emit connection attempt event
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_success'):
+                self.data_worker.connection_success.emit({
+                    'status': 'Connecting...',
+                    'message': f'Attempting to connect to {self.host}:{self.port} (Client ID: {self.clientId})'
+                })
             
             # Set connection timeout
             await asyncio.wait_for(
@@ -196,14 +209,27 @@ class IBDataCollector:
             
         except asyncio.TimeoutError:
             logger.error(f"Connection timeout after {self.timeout} seconds")
+            # Emit timeout error
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'error_occurred'):
+                self.data_worker.error_occurred.emit(f"Connection timeout after {self.timeout} seconds")
             return False
         except Exception as e:
             logger.error(f"Connection failed: {e}")
+            # Emit connection error
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'error_occurred'):
+                self.data_worker.error_occurred.emit(f"Connection failed: {str(e)}")
             return False
     
     def disconnect(self):
         """Safely disconnect from IB and cleanup resources"""
         try:
+            # Emit disconnection attempt event
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_disconnected'):
+                self.data_worker.connection_disconnected.emit({
+                    'status': 'Disconnecting...',
+                    'message': f'Disconnecting from {self.host}:{self.port} (Client ID: {self.clientId})'
+                })
+            
             # Stop dynamic monitoring
             self.stop_dynamic_monitoring()
             
@@ -223,6 +249,9 @@ class IBDataCollector:
                 
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
+            # Emit disconnect error
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'error_occurred'):
+                self.data_worker.error_occurred.emit(f"Error during disconnect: {str(e)}")
     
     async def get_underlying_symbol_price(self, symbol: str) -> Optional[float]:
         """Get current underlying symbol price with improved error handling.

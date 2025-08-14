@@ -67,6 +67,9 @@ class DataCollectorWorker(QObject):
             # The connection will be handled by the collection loop
             logger.info("Manual connection request processed")
             
+            # Emit connection attempt signal for logging
+            self.connection_success.emit({'status': 'Connecting...', 'message': 'Manual connection attempt started'})
+            
         except Exception as e:
             logger.error(f"Error in connect_to_ib: {e}")
             self.error_occurred.emit(f"Connection setup error: {str(e)}")
@@ -133,6 +136,8 @@ class DataCollectorWorker(QObject):
                     # Only attempt reconnection if manual disconnect was not requested
                     if not self._manual_disconnect_requested:
                         logger.info("Attempting automatic reconnection...")
+                        # Emit reconnection attempt signal for logging
+                        self.connection_success.emit({'status': 'Reconnecting...', 'message': f'Automatic reconnection attempt {self.reconnect_attempts + 1}'})
                         if await self._reconnect():
                             self.connection_status_changed.emit(True)
                             self.reconnect_attempts = 0

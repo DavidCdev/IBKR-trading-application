@@ -3,6 +3,7 @@ from PyQt5 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.settings_gui import Ui_PreferencesDialog
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ class Settings_Form(QDialog):
                 self.ui.connectButton.setText("Connect")
                 
         self.ui.connectButton.clicked.connect(self.connect_button_clicked)
+        
+        # Add initial log message
+        self.log_connection_event("Connection log initialized", "Info")
             
     def load_config_values(self):
         """Load configuration values into the UI"""
@@ -147,6 +151,30 @@ class Settings_Form(QDialog):
         except Exception as e:
             logger.error(f"Error getting connection settings from UI: {e}")
             return None
+    
+    def log_connection_event(self, message: str, level: str = "Info"):
+        """Log a connection event to the connectionLogText widget"""
+        try:
+            if hasattr(self.ui, 'connectionLogText'):
+                # Get current timestamp
+                timestamp = datetime.now().strftime("%I:%M:%S %p")
+                
+                # Format the log message
+                log_entry = f"[{timestamp}] {level}: {message}\n"
+                
+                # Append to the text widget
+                self.ui.connectionLogText.append(log_entry)
+                
+                # Auto-scroll to the bottom
+                cursor = self.ui.connectionLogText.textCursor()
+                cursor.movePosition(cursor.End)
+                self.ui.connectionLogText.setTextCursor(cursor)
+                
+                logger.info(f"Connection log: {message}")
+            else:
+                logger.warning("connectionLogText widget not found in UI")
+        except Exception as e:
+            logger.error(f"Error logging to connection log: {e}")
             
     def connect_button_clicked(self):
         """Handle connect button click"""
@@ -154,6 +182,7 @@ class Settings_Form(QDialog):
             # Disconnect from IB
             if self.data_worker and hasattr(self.data_worker, 'disconnect_from_ib'):
                 try:
+                    self.log_connection_event("Manual disconnect requested", "Info")
                     logger.info("Disconnecting from IB via DataCollectorWorker")
                     self.data_worker.disconnect_from_ib()
                     self.connection_status = 'Disconnecting...'
@@ -167,6 +196,7 @@ class Settings_Form(QDialog):
                     def check_disconnect_status():
                         if not self.data_worker.collector.ib.isConnected():
                             logger.info("Disconnect completed, updating button state")
+                            self.log_connection_event("Disconnect completed successfully", "Info")
                             self.update_connection_status('Disconnected')
                         else:
                             # Still connected, try again in 1 second
@@ -177,6 +207,7 @@ class Settings_Form(QDialog):
                     
                 except Exception as e:
                     logger.error(f"Error disconnecting from IB: {e}")
+                    self.log_connection_event(f"Error disconnecting: {str(e)}", "Error")
                     self.ui.connectionStatusLabel.setText("Connection: Error disconnecting")
                     self.ui.connectionStatusLabel.setStyleSheet("color: red;")
                     # Re-enable button on error
@@ -184,6 +215,7 @@ class Settings_Form(QDialog):
                     self.ui.connectButton.setText("Disconnect")
             else:
                 logger.warning("No data worker available for disconnection")
+                self.log_connection_event("No data worker available for disconnection", "Warning")
                 self.ui.connectionStatusLabel.setText("Connection: No data worker")
                 self.ui.connectionStatusLabel.setStyleSheet("color: red;")
         else:
@@ -195,6 +227,7 @@ class Settings_Form(QDialog):
                     # Get current connection settings from UI
                     connection_settings = self.get_current_connection_settings()
                     if connection_settings:
+                        self.log_connection_event(f"Manual connect requested to {connection_settings['host']}:{connection_settings['port']} (Client ID: {connection_settings['client_id']})", "Info")
                         logger.info(f"Using connection settings from UI: {connection_settings}")
                         self.data_worker.connect_to_ib(connection_settings)
                         
@@ -205,6 +238,7 @@ class Settings_Form(QDialog):
                         self.ui.connectButton.setEnabled(False)
                     else:
                         logger.warning("Invalid connection settings, cannot connect")
+                        self.log_connection_event("Invalid connection settings, cannot connect", "Error")
                         self.ui.connectionStatusLabel.setText("Connection: Invalid settings")
                         self.ui.connectionStatusLabel.setStyleSheet("color: red;")
                         # Keep button enabled and show "Connect" text
@@ -213,6 +247,7 @@ class Settings_Form(QDialog):
                         
                 except Exception as e:
                     logger.error(f"Error connecting to IB: {e}")
+                    self.log_connection_event(f"Error connecting: {str(e)}", "Error")
                     self.ui.connectionStatusLabel.setText("Connection: Error connecting")
                     self.ui.connectionStatusLabel.setStyleSheet("color: red;")
                     # Re-enable button on error
@@ -220,6 +255,7 @@ class Settings_Form(QDialog):
                     self.ui.connectButton.setText("Connect")
             else:
                 logger.warning("No data worker available for connection")
+                self.log_connection_event("No data worker available for connection", "Warning")
                 self.ui.connectionStatusLabel.setText("Connection: No data worker")
                 self.ui.connectionStatusLabel.setStyleSheet("color: red;")
     
@@ -233,14 +269,20 @@ class Settings_Form(QDialog):
             if status == 'Connected':
                 self.ui.connectionStatusLabel.setStyleSheet("color: green;")
                 self.ui.connectButton.setText("Disconnect")
+                self.log_connection_event("Connection established successfully", "Info")
                 logger.info("Settings form: Button set to 'Disconnect'")
             elif status == 'Disconnected':
                 self.ui.connectionStatusLabel.setStyleSheet("color: red;")
                 self.ui.connectButton.setText("Connect")
+                self.log_connection_event("Connection disconnected", "Info")
                 logger.info("Settings form: Button set to 'Connect'")
             else:
                 self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
                 self.ui.connectButton.setText("Connecting..." if "Connecting" in status else "Disconnecting...")
+                if "Connecting" in status:
+                    self.log_connection_event("Connection attempt in progress...", "Info")
+                elif "Disconnecting" in status:
+                    self.log_connection_event("Disconnection in progress...", "Info")
                 logger.info(f"Settings form: Button set to '{self.ui.connectButton.text()}'")
             
             # Re-enable button
