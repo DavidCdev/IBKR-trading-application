@@ -385,9 +385,42 @@ class IB_Trading_APP(QMainWindow):
         self.ui.label_quantity_value.setText(f"---")
         self.ui.label_pl_dollar_value.setText(f"---")
         self.ui.label_pl_percent_value.setText(f"---")
-        # self.ui.label_win_rate_value.setText(f"---")
-        # self.ui.label_total_trades_value.setText(f"---")
-        # self.ui.label_total_wins_value.setText(f"---")
+        
+        # Clear option information fields
+        self.ui.label_strike_value.setText(f"---")
+        self.ui.label_expiration_value.setText(f"---")
+        self.ui.label_call_price_value.setText(f"---")
+        self.ui.label_call_bid_value.setText(f"---")
+        self.ui.label_call_ask_value.setText(f"---")
+        self.ui.label_call_delta_value.setText(f"---")
+        self.ui.label_call_gamma_value.setText(f"---")
+        self.ui.label_call_theta_value.setText(f"---")
+        self.ui.label_call_vega_value.setText(f"---")
+        self.ui.label_call_openint_value.setText(f"---")
+        self.ui.label_call_volume_value.setText(f"---")
+        self.ui.label_put_price_value.setText(f"---")
+        self.ui.label_put_bid_value.setText(f"---")
+        self.ui.label_put_ask_value.setText(f"---")
+        self.ui.label_put_delta_value.setText(f"---")
+        self.ui.label_put_gamma_value.setText(f"---")
+        self.ui.label_put_theta_value.setText(f"---")
+        self.ui.label_put_vega_value.setText(f"---")
+        self.ui.label_put_openint_value.setText(f"---")
+        self.ui.label_put_volume_value.setText(f"---")
+        self.ui.label_account_value_value.setText(f"---")
+        self.ui.label_starting_value_value.setText(f"---")
+        self.ui.label_high_water_value.setText(f"---")
+        self.ui.label_daily_pl_value.setText(f"---")
+        self.ui.label_daily_pl_percent_value.setText(f"---")
+        
+        
+        self.ui.label_win_rate_value.setText(f"---")
+        self.ui.label_total_trades_value.setText(f"---")
+        self.ui.label_total_wins_count_value.setText(f"---")
+        self.ui.label_total_losses_count_value.setText(f"---")
+        self.ui.label_total_losses_sum_value.setText(f"---")
+        self.ui.label_total_trades_value.setText(f"---")
+        self.ui.label_total_wins_sum_value.setText(f"---")
 
     def refresh_main_gui_with_config(self):
         """Refresh the main GUI with current configuration values"""
@@ -407,6 +440,28 @@ class IB_Trading_APP(QMainWindow):
             self.ui.label_pl_dollar_value.setText(f"---")
             self.ui.label_pl_percent_value.setText(f"---")
             
+            # Clear option information fields that are affected by symbol change
+            self.ui.label_strike_value.setText(f"---")
+            self.ui.label_expiration_value.setText(f"---")
+            self.ui.label_call_price_value.setText(f"---")
+            self.ui.label_call_bid_value.setText(f"---")
+            self.ui.label_call_ask_value.setText(f"---")
+            self.ui.label_call_delta_value.setText(f"---")
+            self.ui.label_call_gamma_value.setText(f"---")
+            self.ui.label_call_theta_value.setText(f"---")
+            self.ui.label_call_vega_value.setText(f"---")
+            self.ui.label_call_openint_value.setText(f"---")
+            self.ui.label_call_volume_value.setText(f"---")
+            self.ui.label_put_price_value.setText(f"---")
+            self.ui.label_put_bid_value.setText(f"---")
+            self.ui.label_put_ask_value.setText(f"---")
+            self.ui.label_put_delta_value.setText(f"---")
+            self.ui.label_put_gamma_value.setText(f"---")
+            self.ui.label_put_theta_value.setText(f"---")
+            self.ui.label_put_vega_value.setText(f"---")
+            self.ui.label_put_openint_value.setText(f"---")
+            self.ui.label_put_volume_value.setText(f"---")
+                        
             logger.info("Main GUI refreshed successfully")
             
         except Exception as e:
@@ -427,6 +482,10 @@ class IB_Trading_APP(QMainWindow):
             self.ui.label_quantity_value.setText(f"---")
             self.ui.label_pl_dollar_value.setText(f"---")
             self.ui.label_pl_percent_value.setText(f"---")
+            
+            # Clear option information fields that are affected by symbol change
+            self.ui.label_strike_value.setText(f"---")
+            self.ui.label_expiration_value.setText(f"---")
             
             logger.info(f"Main GUI updated with new underlying symbol: {underlying_symbol}")
             

@@ -5,7 +5,7 @@ import time as time_module
 
 async def main():
     ib = IB()
-    await ib.connectAsync('127.0.0.1', 7499, clientId=2)
+    await ib.connectAsync('127.0.0.1', 7497, clientId=3)
     print("Connected")
 
     account = (ib.managedAccounts())[0]  # Get first managed account
@@ -17,6 +17,7 @@ async def main():
 
     # Subscribe to P&L updates for the account
     pnl = ib.reqPnL(account)
+    print(f"PNL: {pnl}")
     
     # Subscribe to account summary updates
     ib.reqAccountSummaryAsync()
@@ -66,7 +67,7 @@ async def main():
                 print(f"   Daily Starting Value: ${daily_starting_value:.2f}")
                 print(f"   Daily P&L: {pnl_color} ${daily_pnl:.2f}")
                 print(f"   Daily P&L %: {percent_color} {daily_pnl_percent:.2f}%")
-                print(f"   Unrealized P&L: ${pnl_obj.unrealizedPnL:.2f}" if 'pnl_obj' in locals() else "   Unrealized P&L: N/A")
+                # print(f"   Unrealized P&L: ${pnl_obj.unrealizedPnL:.2f}" if 'pnl_obj' in locals() else "   Unrealized P&L: N/A")
                 print("-" * 50)
             
             last_account_update = current_time

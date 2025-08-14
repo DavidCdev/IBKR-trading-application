@@ -632,11 +632,18 @@ class IBDataCollector:
                 return pd.DataFrame()
             
             pnl_detailed = []
+
+            # Resolve the current price for the requested underlying symbol at calculation time
+            # This avoids using a stale global price from a previously selected symbol
+            current_price = await self.get_underlying_symbol_price(underlying_symbol)
+
             for position in positions:
                 logger.info(f"Position: {position}")
                 if position.contract.symbol == underlying_symbol:
                     try:
-                        pnl_detailed = await self.calculate_pnl_detailed(position, self.underlying_symbol_price)
+                        # Accumulate results for matching positions using the symbol-specific price
+                        pnl_results = await self.calculate_pnl_detailed(position, current_price)
+                        pnl_detailed.extend(pnl_results)
 
                     except Exception as e:
                         logger.warning(f"Error processing position: {e}")
