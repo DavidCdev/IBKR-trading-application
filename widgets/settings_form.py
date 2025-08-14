@@ -124,10 +124,27 @@ class Settings_Form(QDialog):
                     self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
                     self.ui.connectButton.setText("Disconnecting...")
                     self.ui.connectButton.setEnabled(False)
+                    
+                    # Set up a timer to check if disconnect completed and update button state
+                    from PyQt5.QtCore import QTimer
+                    def check_disconnect_status():
+                        if not self.data_worker.collector.ib.isConnected():
+                            logger.info("Disconnect completed, updating button state")
+                            self.update_connection_status('Disconnected')
+                        else:
+                            # Still connected, try again in 1 second
+                            QTimer.singleShot(1000, check_disconnect_status)
+                    
+                    # Check after 2 seconds
+                    QTimer.singleShot(2000, check_disconnect_status)
+                    
                 except Exception as e:
                     logger.error(f"Error disconnecting from IB: {e}")
                     self.ui.connectionStatusLabel.setText("Connection: Error disconnecting")
                     self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+                    # Re-enable button on error
+                    self.ui.connectButton.setEnabled(True)
+                    self.ui.connectButton.setText("Disconnect")
             else:
                 logger.warning("No data worker available for disconnection")
                 self.ui.connectionStatusLabel.setText("Connection: No data worker")
@@ -147,6 +164,9 @@ class Settings_Form(QDialog):
                     logger.error(f"Error connecting to IB: {e}")
                     self.ui.connectionStatusLabel.setText("Connection: Error connecting")
                     self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+                    # Re-enable button on error
+                    self.ui.connectButton.setEnabled(True)
+                    self.ui.connectButton.setText("Connect")
             else:
                 logger.warning("No data worker available for connection")
                 self.ui.connectionStatusLabel.setText("Connection: No data worker")
@@ -154,6 +174,7 @@ class Settings_Form(QDialog):
     
     def update_connection_status(self, status: str):
         """Update connection status from external source (e.g., signal handlers)"""
+        logger.info(f"Settings form: Updating connection status to: {status}")
         self.connection_status = status
         
         if hasattr(self.ui, 'connectionStatusLabel'):
@@ -161,12 +182,18 @@ class Settings_Form(QDialog):
             if status == 'Connected':
                 self.ui.connectionStatusLabel.setStyleSheet("color: green;")
                 self.ui.connectButton.setText("Disconnect")
+                logger.info("Settings form: Button set to 'Disconnect'")
             elif status == 'Disconnected':
                 self.ui.connectionStatusLabel.setStyleSheet("color: red;")
                 self.ui.connectButton.setText("Connect")
+                logger.info("Settings form: Button set to 'Connect'")
             else:
                 self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
                 self.ui.connectButton.setText("Connecting..." if "Connecting" in status else "Disconnecting...")
+                logger.info(f"Settings form: Button set to '{self.ui.connectButton.text()}'")
             
             # Re-enable button
             self.ui.connectButton.setEnabled(True)
+            logger.info(f"Settings form: Button enabled: {self.ui.connectButton.isEnabled()}")
+        else:
+            logger.warning("Settings form: connectionStatusLabel not found in UI")

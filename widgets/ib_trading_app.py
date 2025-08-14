@@ -117,9 +117,23 @@ class IB_Trading_APP(QMainWindow):
             # Connect settings form to data worker signals for connection status updates
             if self.setting_ui and self.data_worker:
                 try:
-                    self.data_worker.connection_success.connect(lambda data: self.setting_ui.update_connection_status(data.get('status', 'Connected')))
-                    self.data_worker.connection_disconnected.connect(lambda data: self.setting_ui.update_connection_status(data.get('status', 'Disconnected')))
-                    self.data_worker.error_occurred.connect(lambda msg: self.setting_ui.update_connection_status("Error"))
+                    def on_connection_success(data):
+                        status = data.get('status', 'Connected')
+                        logger.info(f"Main app: Connection success signal received: {status}")
+                        self.setting_ui.update_connection_status(status)
+                    
+                    def on_connection_disconnected(data):
+                        status = data.get('status', 'Disconnected')
+                        logger.info(f"Main app: Connection disconnected signal received: {status}")
+                        self.setting_ui.update_connection_status(status)
+                    
+                    def on_error(msg):
+                        logger.info(f"Main app: Error signal received: {msg}")
+                        self.setting_ui.update_connection_status("Error")
+                    
+                    self.data_worker.connection_success.connect(on_connection_success)
+                    self.data_worker.connection_disconnected.connect(on_connection_disconnected)
+                    self.data_worker.error_occurred.connect(on_error)
                     logger.info("Settings form signal connections established")
                 except Exception as e:
                     logger.error(f"Failed to connect settings form signals: {e}")

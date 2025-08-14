@@ -31,9 +31,9 @@ class AppConfig:
                 "client_id": 1,
                 "timeout": 30,
                 "readonly": False,
-                "max_reconnect_attempts": 10,
-                "reconnect_delay": 15,
-                "max_reconnect_delay": 300
+                "max_reconnect_attempts": 5,
+                "reconnect_delay": 3,
+                "max_reconnect_delay": 30
             }
         
         if self.trading is None:

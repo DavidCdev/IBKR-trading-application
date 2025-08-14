@@ -35,6 +35,7 @@ class DataCollectorWorker(QObject):
         self.collector.data_worker = self
         self.is_running = False
         self.reconnect_attempts = 0
+        self._manual_disconnect_requested = False  # Flag to track manual disconnect requests
         self._last_saved_high_water_mark = (
             self.config.account.get('high_water_mark') if self.config and self.config.account else None
         )
@@ -52,42 +53,37 @@ class DataCollectorWorker(QObject):
         """Manually connect to IB (called from settings form)"""
         try:
             logger.info("Manual connection request from settings form")
-            # Create a new event loop for this connection attempt
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            async def connect_async():
-                try:
-                    success = await self.collector.connect()
-                    if success:
-                        logger.info("Manual connection successful")
-                        # Emit connection success signal
-                        self.connection_success.emit({'status': 'Connected'})
-                    else:
-                        logger.error("Manual connection failed")
-                        self.error_occurred.emit("Failed to connect to IB")
-                except Exception as e:
-                    logger.error(f"Error during manual connection: {e}")
-                    self.error_occurred.emit(f"Connection error: {str(e)}")
-                finally:
-                    loop.close()
-            
-            # Run the connection in the new event loop
-            loop.run_until_complete(connect_async())
+            # Reset manual disconnect flag to allow reconnection
+            self._manual_disconnect_requested = False
+            logger.info(f"Manual disconnect flag reset to: {self._manual_disconnect_requested}")
+            # Reset reconnect attempts to allow fresh connection
+            self.reconnect_attempts = 0
+            # The connection will be handled by the collection loop
+            logger.info("Manual connection request processed")
             
         except Exception as e:
             logger.error(f"Error in connect_to_ib: {e}")
             self.error_occurred.emit(f"Connection setup error: {str(e)}")
     
+    def reset_manual_disconnect_flag(self):
+        """Reset the manual disconnect flag to allow automatic reconnection"""
+        self._manual_disconnect_requested = False
+        logger.info("Manual disconnect flag reset - automatic reconnection enabled")
+    
     def disconnect_from_ib(self):
         """Manually disconnect from IB (called from settings form)"""
         try:
             logger.info("Manual disconnection request from settings form")
+            # Set flag to prevent automatic reconnection
+            self._manual_disconnect_requested = True
+            logger.info(f"Manual disconnect flag set to: {self._manual_disconnect_requested}")
             # Disconnect the collector
             self.collector.disconnect()
             logger.info("Manual disconnection successful")
-            # Emit disconnection signal
+            # Emit disconnection signal with proper status
             self.connection_disconnected.emit({'status': 'Disconnected'})
+            # Also emit connection status changed signal
+            self.connection_status_changed.emit(False)
             
         except Exception as e:
             logger.error(f"Error in disconnect_from_ib: {e}")
@@ -99,12 +95,21 @@ class DataCollectorWorker(QObject):
             try:
                 # Check connection status
                 if not self.collector.ib.isConnected():
+                    logger.info(f"IB not connected. Manual disconnect flag: {self._manual_disconnect_requested}")
                     self.connection_status_changed.emit(False)
-                    if await self._reconnect():
-                        self.connection_status_changed.emit(True)
-                        self.reconnect_attempts = 0
+                    # Only attempt reconnection if manual disconnect was not requested
+                    if not self._manual_disconnect_requested:
+                        logger.info("Attempting automatic reconnection...")
+                        if await self._reconnect():
+                            self.connection_status_changed.emit(True)
+                            self.reconnect_attempts = 0
+                        else:
+                            await self._sleep_with_cancel(self.config.reconnect_delay)
+                            continue
                     else:
-                        await self._sleep_with_cancel(self.config.reconnect_delay)
+                        # Manual disconnect was requested, don't reconnect automatically
+                        logger.info("Manual disconnect requested, skipping automatic reconnection")
+                        await self._sleep_with_cancel(self.config.data_collection_interval)
                         continue
                 
                 # Collect data
@@ -158,6 +163,8 @@ class DataCollectorWorker(QObject):
             
             if success:
                 logger.info("Reconnection successful")
+                # Reset manual disconnect flag since we're now connected
+                self._manual_disconnect_requested = False
                 return True
             else:
                 logger.warning(f"Reconnection attempt {self.reconnect_attempts} failed")

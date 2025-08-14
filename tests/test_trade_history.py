@@ -11,10 +11,11 @@ start_time = '20250801-00:00:00'  # June 1, 2024 start
 
 # Note: IB API does not support filtering to end_time directly.
 # You can only filter ON or SINCE a given start time.
-
+completed_orders = ib.reqCompletedOrders(True)
+print(f"Completed orders: {len(completed_orders)}")
 # Create ExecutionFilter with a starting time
 filter = ExecutionFilter(time=start_time)
-
+print(f"Filter: {filter}")
 # Request executions filtered by time
 executions = ib.reqExecutions(filter)
 
