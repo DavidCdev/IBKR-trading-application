@@ -111,6 +111,43 @@ class Settings_Form(QDialog):
         except Exception as e:
             logger.warning(f"Could not set combo text '{text}': {e}")
             
+    def get_current_connection_settings(self):
+        """Get current connection settings from the UI"""
+        try:
+            host = self.ui.hostEdit.text().strip()
+            port = int(self.ui.portEdit.text().strip())
+            client_id = int(self.ui.clientIdEdit.text().strip())
+            
+            # Validate settings
+            if not host:
+                logger.error("Host cannot be empty")
+                return None
+            
+            if port <= 0 or port > 65535:
+                logger.error(f"Invalid port number: {port}")
+                return None
+            
+            if client_id < 0:
+                logger.error(f"Invalid client ID: {client_id}")
+                return None
+            
+            return {
+                'host': host,
+                'port': port,
+                'client_id': client_id
+            }
+        except ValueError as e:
+            logger.error(f"Error parsing connection settings from UI: {e}")
+            # Return default values if parsing fails
+            return {
+                'host': '127.0.0.1',
+                'port': 7497,
+                'client_id': 1
+            }
+        except Exception as e:
+            logger.error(f"Error getting connection settings from UI: {e}")
+            return None
+            
     def connect_button_clicked(self):
         """Handle connect button click"""
         if self.connection_status == 'Connected':
@@ -154,12 +191,26 @@ class Settings_Form(QDialog):
             if self.data_worker and hasattr(self.data_worker, 'connect_to_ib'):
                 try:
                     logger.info("Connecting to IB via DataCollectorWorker")
-                    self.data_worker.connect_to_ib()
-                    self.connection_status = 'Connecting...'
-                    self.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)
-                    self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
-                    self.ui.connectButton.setText("Connecting...")
-                    self.ui.connectButton.setEnabled(False)
+                    
+                    # Get current connection settings from UI
+                    connection_settings = self.get_current_connection_settings()
+                    if connection_settings:
+                        logger.info(f"Using connection settings from UI: {connection_settings}")
+                        self.data_worker.connect_to_ib(connection_settings)
+                        
+                        self.connection_status = 'Connecting...'
+                        self.ui.connectionStatusLabel.setText("Connection: " + self.connection_status)
+                        self.ui.connectionStatusLabel.setStyleSheet("color: orange;")
+                        self.ui.connectButton.setText("Connecting...")
+                        self.ui.connectButton.setEnabled(False)
+                    else:
+                        logger.warning("Invalid connection settings, cannot connect")
+                        self.ui.connectionStatusLabel.setText("Connection: Invalid settings")
+                        self.ui.connectionStatusLabel.setStyleSheet("color: red;")
+                        # Keep button enabled and show "Connect" text
+                        self.ui.connectButton.setEnabled(True)
+                        self.ui.connectButton.setText("Connect")
+                        
                 except Exception as e:
                     logger.error(f"Error connecting to IB: {e}")
                     self.ui.connectionStatusLabel.setText("Connection: Error connecting")

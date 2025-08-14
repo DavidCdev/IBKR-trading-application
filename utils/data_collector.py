@@ -49,10 +49,16 @@ class DataCollectorWorker(QObject):
         """Stop the data collection loop"""
         self.is_running = False
     
-    def connect_to_ib(self):
+    def connect_to_ib(self, connection_settings=None):
         """Manually connect to IB (called from settings form)"""
         try:
             logger.info("Manual connection request from settings form")
+            
+            # Update connection settings if provided
+            if connection_settings:
+                logger.info(f"Updating connection settings: {connection_settings}")
+                self._update_connection_settings(connection_settings)
+            
             # Reset manual disconnect flag to allow reconnection
             self._manual_disconnect_requested = False
             logger.info(f"Manual disconnect flag reset to: {self._manual_disconnect_requested}")
@@ -64,6 +70,33 @@ class DataCollectorWorker(QObject):
         except Exception as e:
             logger.error(f"Error in connect_to_ib: {e}")
             self.error_occurred.emit(f"Connection setup error: {str(e)}")
+    
+    def _update_connection_settings(self, connection_settings):
+        """Update the collector's connection settings"""
+        try:
+            # Update the collector's connection parameters
+            self.collector.host = connection_settings.get('host', self.collector.host)
+            self.collector.port = connection_settings.get('port', self.collector.port)
+            self.collector.clientId = connection_settings.get('client_id', self.collector.clientId)
+            
+            # Update the config object as well
+            if self.config and self.config.connection:
+                self.config.connection['host'] = self.collector.host
+                self.config.connection['port'] = self.collector.port
+                self.config.connection['client_id'] = self.collector.clientId
+                
+                # Save the updated config to file
+                try:
+                    self.config.save_to_file()
+                    logger.info("Connection settings saved to config file")
+                except Exception as save_error:
+                    logger.warning(f"Could not save connection settings to config file: {save_error}")
+            
+            logger.info(f"Connection settings updated - Host: {self.collector.host}, Port: {self.collector.port}, Client ID: {self.collector.clientId}")
+            
+        except Exception as e:
+            logger.error(f"Error updating connection settings: {e}")
+            raise
     
     def reset_manual_disconnect_flag(self):
         """Reset the manual disconnect flag to allow automatic reconnection"""
@@ -154,6 +187,7 @@ class DataCollectorWorker(QObject):
             # Cap and add a small jitter to avoid thundering herd
             delay = min(base_delay, max_delay) + random.uniform(0, 1.0)
             logger.info(f"Attempting to reconnect (attempt {self.reconnect_attempts}/{self.config.max_reconnect_attempts})")
+            logger.info(f"Using connection settings - Host: {self.collector.host}, Port: {self.collector.port}, Client ID: {self.collector.clientId}")
             
             # Allow prompt shutdown during backoff sleep
             await self._sleep_with_cancel(delay)
