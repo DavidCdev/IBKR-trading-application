@@ -70,7 +70,7 @@ class IB_Trading_APP(QMainWindow):
                 self.data_worker.account_summary_update.connect(self.update_account_summary)
                 self.data_worker.trading_config_updated.connect(self.on_trading_config_updated)
                 self.data_worker.active_contracts_pnl_refreshed.connect(self.update_active_contracts_pnl)
-                
+                self.data_worker.closed_trades_update.connect(self.update_closed_trades)
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
                 self.worker_thread.finished.connect(self.data_worker.cleanup)
@@ -620,7 +620,7 @@ class IB_Trading_APP(QMainWindow):
                 self.ui.label_total_trades_value.setText(f"{stats.get('Total_Trades', 0)}")
                 self.ui.label_total_wins_count_value.setText(f"{stats.get('Total_Wins_Count', 0)}")
                 self.ui.label_total_losses_count_value.setText(f"{stats.get('Total_Losses_Count', 0)}")
-                self.ui.label_total_losses_sum_value.setText(f"${stats.get('Total_Losses_Sum', 0):.2f}")
+                self.ui.label_total_losses_sum_value.setText(f"-${stats.get('Total_Losses_Sum', 0):.2f}")
                 self.ui.label_total_wins_sum_value.setText(f"${stats.get('Total_Wins_Sum', 0):.2f}")
                 logger.info(f"Win rate: {win_rate:.2f}%")
                 
@@ -733,6 +733,17 @@ class IB_Trading_APP(QMainWindow):
             self.ui.label_pl_dollar_value.setText(f"{active_contracts_pnl['pnl_dollar']:.2f}$")
         except Exception as e:
             logger.error(f"Error updating active contracts PNL: {e}")
+
+    def update_closed_trades(self, stats: Dict[str, Any]):
+        try:
+            logger.info(f"Updating closed trades: {stats}")
+            self.ui.label_total_trades_value.setText(f"{stats['Total_Trades']}")
+            self.ui.label_total_wins_count_value.setText(f"{stats['Total_Wins_Count']}")
+            self.ui.label_total_losses_count_value.setText(f"{stats['Total_Losses_Count']}")
+            self.ui.label_total_losses_sum_value.setText(f"-${stats['Total_Losses_Sum']:.2f}")
+            self.ui.label_total_wins_sum_value.setText(f"${stats['Total_Wins_Sum']:.2f}")
+        except Exception as e:
+            logger.error(f"Error updating closed trades: {e}")
 
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""

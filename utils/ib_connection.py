@@ -36,6 +36,7 @@ class IBDataCollector:
         self.option_strike = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
         self.pos = None
+        self.closed_trades = None
         
         # Dynamic strike price and expiration monitoring
         self._previous_strike = 0
@@ -948,21 +949,127 @@ class IBDataCollector:
             # For simplicity, we’re only handling BOT then SLD
         return closed_trades
 
+    def on_exec_details(self, trade, fill):
+        open_positions = defaultdict(deque)  # key: contract id tuple -> deque of opens
+        multiplier_default = 100
+        today = date.today()
+        
+        contract = trade.contract
+        exec = fill.execution
 
+        # Filter only options trades (calls/puts) and only today’s trades
+        if (
+                contract.secType != 'OPT' or
+                contract.right not in ['C', 'P'] or
+                contract.symbol != self.underlying_symbol
+        ):
+            return
+
+        symbol_key = (
+            contract.symbol,
+            contract.lastTradeDateOrContractMonth,
+            contract.strike,
+            contract.right
+        )
+
+        side = exec.side.upper()  # BOT or SLD
+        time_filled = exec.time
+        fill_qty = exec.shares
+        price = exec.price
+        multiplier = int(contract.multiplier) if contract.multiplier else multiplier_default
+
+        if time_filled.astimezone().date() != today:
+            return
+
+        fill_data = {
+            'contract': contract,
+            'side': side,
+            'time': time_filled,
+            'qty': fill_qty,
+            'price': price,
+            'multiplier': multiplier,
+        }
+
+        if side == 'BOT':
+            open_positions[symbol_key].append(fill_data)
+        elif side == 'SLD':
+            # match to existing buys FIFO
+            remain_to_match = fill_qty
+            while remain_to_match > 0 and open_positions[symbol_key]:
+                opener = open_positions[symbol_key][0]
+                match_qty = min(opener['qty'], remain_to_match)
+                pnl = (price - opener['price']) * match_qty * multiplier
+
+                self.closed_trades.append({
+                    'contract': contract,
+                    'qty': match_qty,
+                    'buy_price': opener['price'],
+                    'sell_price': price,
+                    'pnl': pnl,
+                    'buy_time': opener['time'],
+                    'sell_time': time_filled
+                })
+
+                print(f"Closed Trade: {match_qty}x {symbol_key} P&L = {pnl:.2f}")
+
+                # Adjust remaining qtys
+                opener['qty'] -= match_qty
+                remain_to_match -= match_qty
+
+                if opener['qty'] == 0:
+                    open_positions[symbol_key].popleft()
+
+        # Calculate statistics
+        wins = []
+        losses = []
+
+        for trade in self.closed_trades:
+            try:
+                pnl = trade['pnl']
+
+                if pnl > 0:
+                    wins.append(pnl)
+                elif pnl < 0:
+                    losses.append(abs(pnl))
+
+            except Exception as e:
+                logger.warning(f"Error calculating P&L for trade: {e}")
+                continue
+
+            # Calculate statistics
+        total_trades = len(wins) + len(losses)
+        if total_trades == 0:
+            return self._create_empty_stats()
+
+        win_rate = (len(wins) / total_trades) * 100 if total_trades > 0 else 0
+
+        stats = {
+            'Win_Rate': win_rate,
+            'Total_Wins_Count': len(wins),
+            'Total_Wins_Sum': sum(wins),
+            'Total_Losses_Count': len(losses),
+            'Total_Losses_Sum': sum(losses),
+            'Total_Trades': total_trades,
+            'Average_Win': sum(wins) / len(wins) if wins else 0,
+            'Average_Loss': sum(losses) / len(losses) if losses else 0,
+            'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
+        }
+        
+        self.data_worker.closed_trades_update.emit(stats)
+        
     async def get_trade_statistics(self) -> pd.DataFrame:
         """Get trade statistics with improved error handling"""
         try:
+
             # Get completed orders
             all_trades = await self.get_today_option_executions(self.underlying_symbol)
-            closed_trades = await self.match_trades_and_calculate_pnl(all_trades)
-                        
-           
+            self.closed_trades = await self.match_trades_and_calculate_pnl(all_trades)
+        
             # Calculate statistics
             wins = []
             losses = []
             
-            
-            for trade in closed_trades:
+            for trade in self.closed_trades:
                 try:
                     pnl = trade['pnl']
                     
@@ -993,7 +1100,7 @@ class IBDataCollector:
                 'Average_Loss': sum(losses) / len(losses) if losses else 0,
                 'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
             }
-            
+            self.ib.execDetailsEvent += self.on_exec_details
             logger.info(f"Trade statistics calculated: {total_trades} trades, {win_rate:.2f}% win rate")
             return pd.DataFrame([stats])
             
