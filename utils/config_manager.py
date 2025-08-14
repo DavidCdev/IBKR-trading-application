@@ -2,9 +2,10 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Any
-import logging
+from .smart_logger import get_logger, log_error_with_context
+from .performance_monitor import monitor_function
 
-logger = logging.getLogger(__name__)
+logger = get_logger("CONFIG_MANAGER")
 
 @dataclass
 class AppConfig:

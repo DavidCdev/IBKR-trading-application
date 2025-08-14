@@ -2,9 +2,9 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.ai_prompt_gui import Ui_AiPromptPanel
-import logging
+from utils.smart_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("AI_PROMPT")
 
 class AIPrompt_Form(QDialog):
     def __init__(self, config: AppConfig = None):

@@ -2,10 +2,11 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from utils.config_manager import AppConfig
 from utils.ib_connection import IBDataCollector
 import asyncio
-import logging
 import random
+from .smart_logger import get_logger, log_error_with_context
+from .performance_monitor import monitor_function
 
-logger = logging.getLogger(__name__)
+logger = get_logger("DATA_COLLECTOR")
 
 class DataCollectorWorker(QObject):
     """Worker class for data collection in a separate thread"""
@@ -20,6 +21,7 @@ class DataCollectorWorker(QObject):
     calls_option_updated = pyqtSignal(dict)
     daily_pnl_update = pyqtSignal(dict)
     account_summary_update = pyqtSignal(dict)
+    trading_config_updated = pyqtSignal(dict)  # Signal for trading configuration updates
 
     def __init__(self, config: AppConfig):
         super().__init__()
@@ -99,6 +101,45 @@ class DataCollectorWorker(QObject):
             
         except Exception as e:
             logger.error(f"Error updating connection settings: {e}")
+            raise
+    
+    def update_trading_config(self, trading_config):
+        """Update the collector's trading configuration"""
+        try:
+            logger.info(f"Updating trading configuration: {trading_config}")
+            
+            # Update the collector's trading configuration
+            self.collector.trading_config = trading_config
+            self.collector.underlying_symbol = trading_config.get('underlying_symbol', self.collector.underlying_symbol)
+            
+            # Update the config object as well
+            if self.config and self.config.trading:
+                self.config.trading.update(trading_config)
+                
+                # Save the updated config to file
+                try:
+                    self.config.save_to_file()
+                    logger.info("Trading configuration saved to config file")
+                except Exception as save_error:
+                    logger.warning(f"Could not save trading configuration to config file: {save_error}")
+            
+            logger.info(f"Trading configuration updated - Underlying Symbol: {self.collector.underlying_symbol}")
+            
+            # Emit signal to notify other components of the configuration change
+            self.trading_config_updated.emit({
+                'underlying_symbol': self.collector.underlying_symbol,
+                'trading_config': trading_config
+            })
+            
+            # If connected, restart data collection with new configuration
+            if self.collector.ib.isConnected():
+                logger.info("Restarting data collection with new trading configuration")
+                # This will trigger a reconnection with the new configuration
+                self._manual_disconnect_requested = False
+                self.reconnect_attempts = 0
+            
+        except Exception as e:
+            logger.error(f"Error updating trading configuration: {e}")
             raise
     
     def reset_manual_disconnect_flag(self):

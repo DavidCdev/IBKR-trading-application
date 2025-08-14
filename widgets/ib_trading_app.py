@@ -7,10 +7,11 @@ from utils.data_collector import DataCollectorWorker
 from utils.ai_engine import AI_Engine
 
 from typing import Dict, Any, Union
-import logging
 from datetime import datetime
+from utils.smart_logger import get_logger, log_error_with_context
+from utils.performance_monitor import monitor_function
 
-logger = logging.getLogger(__name__)
+logger = get_logger("GUI")
 try:
     from PyQt5.QtWidgets import QMainWindow, QMessageBox
     from PyQt5.QtCore import QThread, QTimer
@@ -66,6 +67,7 @@ class IB_Trading_APP(QMainWindow):
                 self.data_worker.puts_option_updated.connect(self.update_puts_option)
                 self.data_worker.daily_pnl_update.connect(self.update_daily_pnl_updated)
                 self.data_worker.account_summary_update.connect(self.update_account_summary)
+                self.data_worker.trading_config_updated.connect(self.on_trading_config_updated)
                 
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -323,8 +325,29 @@ class IB_Trading_APP(QMainWindow):
             # Save to file
             self.config.save_to_file()
             
+            # Update data worker with new trading configuration
+            if hasattr(self, 'data_worker') and self.data_worker:
+                try:
+                    # Get the updated trading configuration
+                    updated_trading_config = {
+                        "underlying_symbol": self.config.trading.get("underlying_symbol"),
+                        "trade_delta": self.config.trading.get("trade_delta"),
+                        "max_trade_value": self.config.trading.get("max_trade_value"),
+                        "runner": self.config.trading.get("runner"),
+                        "risk_levels": self.config.trading.get("risk_levels", [])
+                    }
+                    
+                    # Update the data worker's trading configuration
+                    self.data_worker.update_trading_config(updated_trading_config)
+                    logger.info("Data worker trading configuration updated")
+                except Exception as e:
+                    logger.error(f"Error updating data worker trading configuration: {e}")
+            
             # Close the settings dialog
             self.setting_ui.close()
+            
+            # Refresh main GUI with updated configuration
+            self.refresh_main_gui_with_config()
             
             logger.info("Settings saved successfully")
             
@@ -350,6 +373,74 @@ class IB_Trading_APP(QMainWindow):
         # self.ui.label_win_rate_value.setText(f"---")
         # self.ui.label_total_trades_value.setText(f"---")
         # self.ui.label_total_wins_value.setText(f"---")
+
+    def refresh_main_gui_with_config(self):
+        """Refresh the main GUI with current configuration values"""
+        try:
+            logger.info("Refreshing main GUI with updated configuration")
+            
+            # Update underlying symbol display
+            if hasattr(self, 'config') and self.config and self.config.trading:
+                underlying_symbol = self.config.trading.get('underlying_symbol', '---')
+                self.ui.label_spy_name.setText(f"{underlying_symbol}")
+                logger.info(f"Updated underlying symbol display to: {underlying_symbol}")
+            
+            # Clear other values that might be affected by symbol change
+            self.ui.label_spy_value.setText(f"---")
+            self.ui.label_symbol_value.setText(f"---")
+            self.ui.label_quantity_value.setText(f"---")
+            self.ui.label_pl_dollar_value.setText(f"---")
+            self.ui.label_pl_percent_value.setText(f"---")
+            
+            logger.info("Main GUI refreshed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing main GUI: {e}")
+
+    def on_trading_config_updated(self, config_data: dict):
+        """Handle trading configuration updates from data worker"""
+        try:
+            logger.info(f"Trading configuration update received: {config_data}")
+            
+            # Update the underlying symbol display
+            underlying_symbol = config_data.get('underlying_symbol', '---')
+            self.ui.label_spy_name.setText(f"{underlying_symbol}")
+            
+            # Clear values that are affected by symbol change
+            self.ui.label_spy_value.setText(f"---")
+            self.ui.label_symbol_value.setText(f"---")
+            self.ui.label_quantity_value.setText(f"---")
+            self.ui.label_pl_dollar_value.setText(f"---")
+            self.ui.label_pl_percent_value.setText(f"---")
+            
+            logger.info(f"Main GUI updated with new underlying symbol: {underlying_symbol}")
+            
+        except Exception as e:
+            logger.error(f"Error handling trading configuration update: {e}")
+
+    def reload_configuration(self):
+        """Reload configuration from file and update data worker"""
+        try:
+            logger.info("Reloading configuration from file")
+            
+            # Reload configuration from file
+            self.config = AppConfig.load_from_file()
+            
+            # Update data worker with new configuration
+            if hasattr(self, 'data_worker') and self.data_worker:
+                # Update trading configuration
+                if self.config and self.config.trading:
+                    self.data_worker.update_trading_config(self.config.trading)
+                    logger.info("Data worker updated with reloaded configuration")
+            
+            # Refresh main GUI
+            self.refresh_main_gui_with_config()
+            
+            logger.info("Configuration reloaded successfully")
+            
+        except Exception as e:
+            logger.error(f"Error reloading configuration: {e}")
+
 
     def update_calls_option(self, calls_data: Dict[str, Any]):
         try:

@@ -1,7 +1,7 @@
 from utils.config_manager import AppConfig
-import logging
+from .smart_logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("AI_ENGINE")
 
 class AI_Engine:
     def __init__(self, config: AppConfig):

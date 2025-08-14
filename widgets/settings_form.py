@@ -2,10 +2,10 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.settings_gui import Ui_PreferencesDialog
-import logging
+from utils.smart_logger import get_logger, log_error_with_context
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+logger = get_logger("SETTINGS")
 
 class Settings_Form(QDialog):
     def __init__(self, config: AppConfig = None, connection_status: str = None, data_worker=None):

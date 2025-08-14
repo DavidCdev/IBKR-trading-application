@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from typing import Optional, Dict, Any
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
@@ -7,7 +6,10 @@ from datetime import datetime, timedelta
 import pytz
 from threading import Thread, Event
 import time
-logger = logging.getLogger(__name__)
+from .smart_logger import get_logger, log_connection_event, log_error_with_context
+from .performance_monitor import monitor_function, monitor_async_function
+
+logger = get_logger("IB_CONNECTION")
 
 
 class IBDataCollector:
@@ -182,10 +184,11 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error in disconnection handler: {e}")
     
+    @monitor_async_function("IB_CONNECTION.connect", threshold_ms=5000)
     async def connect(self) -> bool:
         """Connect to TWS/IB Gateway with timeout and retry logic"""
         try:
-            logger.info(f"Attempting to connect to IB at {self.host}:{self.port}")
+            log_connection_event("CONNECT_ATTEMPT", self.host, self.port, "Connecting")
             
             # Emit connection attempt event
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_success'):
@@ -200,6 +203,7 @@ class IBDataCollector:
                 timeout=self.timeout
             )
             
+            log_connection_event("CONNECT_SUCCESS", self.host, self.port, "Connected")
             logger.info("Successfully connected to Interactive Brokers")
             
             # Start dynamic monitoring after successful connection
@@ -208,21 +212,26 @@ class IBDataCollector:
             return True
             
         except asyncio.TimeoutError:
+            log_connection_event("CONNECT_TIMEOUT", self.host, self.port, "Timeout")
             logger.error(f"Connection timeout after {self.timeout} seconds")
             # Emit timeout error
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'error_occurred'):
                 self.data_worker.error_occurred.emit(f"Connection timeout after {self.timeout} seconds")
             return False
         except Exception as e:
-            logger.error(f"Connection failed: {e}")
+            log_connection_event("CONNECT_FAILED", self.host, self.port, "Failed")
+            log_error_with_context(e, "Connection attempt failed", host=self.host, port=self.port, client_id=self.clientId)
             # Emit connection error
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'error_occurred'):
                 self.data_worker.error_occurred.emit(f"Connection failed: {str(e)}")
             return False
     
+    @monitor_function("IB_CONNECTION.disconnect")
     def disconnect(self):
         """Safely disconnect from IB and cleanup resources"""
         try:
+            log_connection_event("DISCONNECT_ATTEMPT", self.host, self.port, "Disconnecting")
+            
             # Emit disconnection attempt event
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_disconnected'):
                 self.data_worker.connection_disconnected.emit({
@@ -245,10 +254,12 @@ class IBDataCollector:
             # Disconnect from IB
             if self.ib.isConnected():
                 self.ib.disconnect()
+                log_connection_event("DISCONNECT_SUCCESS", self.host, self.port, "Disconnected")
                 logger.info("Disconnected from Interactive Brokers")
                 
         except Exception as e:
-            logger.error(f"Error during disconnect: {e}")
+            log_connection_event("DISCONNECT_FAILED", self.host, self.port, "Failed")
+            log_error_with_context(e, "Disconnect operation failed", host=self.host, port=self.port, client_id=self.clientId)
             # Emit disconnect error
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'error_occurred'):
                 self.data_worker.error_occurred.emit(f"Error during disconnect: {str(e)}")
