@@ -478,66 +478,66 @@ class IBDataCollector:
             option_data = []
             contracts_cache = {}
 
-            for expiration in expirations:
-                try:
-                    logger.info(f"Processing expiration: {expiration}")
-                    # Create CALL option
-                    call_option = Option(symbol, expiration, self.option_strike, 'C', 'SMART')
-                    # Create PUT option
-                    put_option = Option(symbol, expiration, self.option_strike, 'P', 'SMART')
+                
+            expiration = expirations[0]
+            try:
+                logger.info(f"Processing expiration: {expiration}")
+                # Create CALL option
+                call_option = Option(symbol, expiration, self.option_strike, 'C', 'SMART')
+                # Create PUT option
+                put_option = Option(symbol, expiration, self.option_strike, 'P', 'SMART')
 
-                    logger.info(f"Created options: CALL {call_option}, PUT {put_option}")
-                    # Qualify contracts
-                    call_qualified = await self.ib.qualifyContractsAsync(call_option)
-                    put_qualified = await self.ib.qualifyContractsAsync(put_option)
-                    
-                    logger.info(f"Call qualification result: {call_qualified}")
-                    logger.info(f"Put qualification result: {put_qualified}")
+                logger.info(f"Created options: CALL {call_option}, PUT {put_option}")
+                # Qualify contracts
+                call_qualified = await self.ib.qualifyContractsAsync(call_option)
+                put_qualified = await self.ib.qualifyContractsAsync(put_option)
+                
+                logger.info(f"Call qualification result: {call_qualified}")
+                logger.info(f"Put qualification result: {put_qualified}")
 
-                    # Cache contracts for quick resubscription
-                    cache_key = f"{self.option_strike}_{expiration}"
-                    contracts_cache[cache_key] = {
-                        'call': call_qualified[0] if call_qualified and call_qualified[0] else None,
-                        'put': put_qualified[0] if put_qualified and put_qualified[0] else None
+                # Cache contracts for quick resubscription
+                cache_key = f"{self.option_strike}_{expiration}"
+                contracts_cache[cache_key] = {
+                    'call': call_qualified[0] if call_qualified and call_qualified[0] else None,
+                    'put': put_qualified[0] if put_qualified and put_qualified[0] else None
+                }
+                self._cached_option_contracts[cache_key] = contracts_cache[cache_key]
+
+                print(f"Call qualified: {call_qualified}")
+                # Process CALL option
+                if call_qualified and call_qualified[0]:
+                    call_option_data = {
+                        'Symbol': call_qualified[0].symbol,
+                        'Expiration': call_qualified[0].lastTradeDateOrContractMonth,
+                        'Strike': call_qualified[0].strike,
+                        'Type': 'CALL'
                     }
-                    self._cached_option_contracts[cache_key] = contracts_cache[cache_key]
+                    option_data.append(call_option_data)
+                    logger.info(f"Added CALL option data: {call_option_data}")
 
-                    print(f"Call qualified: {call_qualified}")
-                    # Process CALL option
-                    if call_qualified and call_qualified[0]:
-                        call_option_data = {
-                            'Symbol': call_qualified[0].symbol,
-                            'Expiration': call_qualified[0].lastTradeDateOrContractMonth,
-                            'Strike': call_qualified[0].strike,
-                            'Type': 'CALL'
-                        }
-                        option_data.append(call_option_data)
-                        logger.info(f"Added CALL option data: {call_option_data}")
+                    call_option_ticker = self.ib.reqMktData(call_qualified[0], '100,101,104,106', False, False)
+                    call_option_ticker.updateEvent += self._on_update_calloption
+                    self._active_subscriptions.add(call_qualified[0])
+                    await asyncio.sleep(1)
 
-                        call_option_ticker = self.ib.reqMktData(call_qualified[0], '100,101,104,106', False, False)
-                        call_option_ticker.updateEvent += self._on_update_calloption
-                        self._active_subscriptions.add(call_qualified[0])
-                        await asyncio.sleep(1)
+                # Process PUT option
+                if put_qualified and put_qualified[0]:
+                    put_option_data = {
+                        'Symbol': put_qualified[0].symbol,
+                        'Expiration': put_qualified[0].lastTradeDateOrContractMonth,
+                        'Strike': put_qualified[0].strike,
+                        'Type': 'PUT'
+                    }
+                    option_data.append(put_option_data)
+                    logger.info(f"Added PUT option data: {put_option_data}")
 
-                    # Process PUT option
-                    if put_qualified and put_qualified[0]:
-                        put_option_data = {
-                            'Symbol': put_qualified[0].symbol,
-                            'Expiration': put_qualified[0].lastTradeDateOrContractMonth,
-                            'Strike': put_qualified[0].strike,
-                            'Type': 'PUT'
-                        }
-                        option_data.append(put_option_data)
-                        logger.info(f"Added PUT option data: {put_option_data}")
+                    put_option_ticker = self.ib.reqMktData(put_qualified[0], '100,101,104,106', False, False)
+                    put_option_ticker.updateEvent += self._on_update_putoption
+                    self._active_subscriptions.add(put_qualified[0])
+                    await asyncio.sleep(1)
 
-                        put_option_ticker = self.ib.reqMktData(put_qualified[0], '100,101,104,106', False, False)
-                        put_option_ticker.updateEvent += self._on_update_putoption
-                        self._active_subscriptions.add(put_qualified[0])
-                        await asyncio.sleep(1)
-
-                except Exception as e:
-                    logger.warning(f"Error processing option {symbol} {expiration} {self.option_strike}: {e}")
-                    continue
+            except Exception as e:
+                logger.warning(f"Error processing option {symbol} {expiration} {self.option_strike}: {e}")
 
             logger.info(f"Finished processing all expirations. Total option_data collected: {len(option_data)}")
             if option_data:
@@ -606,44 +606,52 @@ class IBDataCollector:
             if not pos or not pos.contract:
                 return None
                 
+
             pnl_dollar = 0
             pnl_percent = 0
             currency = ''
             current_price = underlying_symbol_price
-            
-            if 'USDCAD' in str(pos.contract):
+
+            is_long = pos.position > 0
+            position_size = abs(pos.position)
+
+            contract_str = str(pos.contract)
+            contract_symbol = getattr(pos.contract, 'symbol', None)
+
+            if 'USDCAD' in contract_str:
                 current_price = self.fx_ratio
-                # Forex
-                pnl_dollar = pos.position * (current_price - pos.avgCost)
-                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
                 currency = 'CAD'
-
-            elif pos.contract.symbol == 'IBKR':
-                # Option
-                if current_price is None:
-                    logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
-                    return None
-                pnl_dollar = pos.position * (current_price - pos.avgCost)
-                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            elif contract_symbol in ('IBKR', 'SPY'):
                 currency = 'USD'
+            else:
+                logger.warning(f"Unknown contract type for {contract_str}, skipping position")
+                return None
 
-            elif pos.contract.symbol == 'SPY':
-                if current_price is None:
-                    logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
-                    return None
-                pnl_dollar = pos.position * (current_price - pos.avgCost)
-                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
-                currency = 'USD'
+            if current_price is None:
+                logger.warning(f"Could not get price for {contract_symbol}, skipping position")
+                return None
+
+            price_diff = current_price - pos.avgCost if is_long else pos.avgCost - current_price
+            try:
+                pnl_percent = (price_diff / pos.avgCost) * 100 if pos.avgCost else 0
+            except ZeroDivisionError:
+                pnl_percent = 0
+
+            pnl_dollar = position_size * price_diff
+
+            symbol = getattr(pos.contract, 'localSymbol', None) or contract_symbol
 
             return {
-                'symbol': pos.contract.localSymbol if hasattr(pos.contract, 'localSymbol') else pos.contract.symbol,
+                'symbol': symbol,
                 'position_size': pos.position,
+                'position_type': 'LONG' if is_long else 'SHORT',
                 'avg_cost': pos.avgCost,
+                'current_price': current_price,
                 'pnl_dollar': round(pnl_dollar, 2),
                 'pnl_percent': round(pnl_percent, 2),
                 'currency': currency
             }
-            
+
         except Exception as e:
             logger.error(f"Error in synchronous PnL calculation: {e}")
             return None
@@ -655,37 +663,55 @@ class IBDataCollector:
         pnl_percent = 0
         currency = ''
         current_price = underlying_symbol_price
+        
+        # Determine if position is long or short
+        is_long = pos.position > 0
+        is_short = pos.position < 0
+        position_size = abs(pos.position)  # Use absolute value for calculations
+        
         if 'USDCAD' in str(pos.contract):
             current_price = self.fx_ratio
-            # Forex
-            pnl_dollar = pos.position * (current_price - pos.avgCost)
-            pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            # Forex - same logic for long/short
+            if is_long:
+                pnl_dollar = position_size * (current_price - pos.avgCost)
+                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            else:  # is_short
+                pnl_dollar = position_size * (pos.avgCost - current_price)
+                pnl_percent = ((pos.avgCost - current_price) / pos.avgCost) * 100
             currency = 'CAD'
 
         elif pos.contract.symbol == 'IBKR':
             # Option
-            # current_price = await self.get_symbol_price(pos.contract.symbol)
             if current_price is None:
                 logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
                 return results
-            pnl_dollar = pos.position * (current_price - pos.avgCost)
-            pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            if is_long:
+                pnl_dollar = position_size * (current_price - pos.avgCost)
+                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            else:  # is_short
+                pnl_dollar = position_size * (pos.avgCost - current_price)
+                pnl_percent = ((pos.avgCost - current_price) / pos.avgCost) * 100
             currency = 'USD'
 
         elif pos.contract.symbol == 'SPY':
-            # Stock (Short)
-            # current_price = await self.get_symbol_price(pos.contract.symbol)
+            # Stock
             if current_price is None:
                 logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
                 return results
-            pnl_dollar = pos.position * (current_price - pos.avgCost)
-            pnl_percent = -((current_price - pos.avgCost) / pos.avgCost) * 100 * (-1 if pos.position < 0 else 1)
+            if is_long:
+                pnl_dollar = position_size * (current_price - pos.avgCost)
+                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+            else:  # is_short
+                pnl_dollar = position_size * (pos.avgCost - current_price)
+                pnl_percent = ((pos.avgCost - current_price) / pos.avgCost) * 100
             currency = 'USD'
 
         results.append({
             'symbol': pos.contract.localSymbol if hasattr(pos.contract, 'localSymbol') else 'USDCAD',
             'position_size': pos.position,
+            'position_type': 'LONG' if is_long else 'SHORT',
             'avg_cost': pos.avgCost,
+            'current_price': current_price,
             'pnl_dollar': round(pnl_dollar, 2),
             'pnl_percent': round(pnl_percent, 2),
             'currency': currency
