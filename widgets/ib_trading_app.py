@@ -5,6 +5,7 @@ from widgets.ai_prompt_form import AIPrompt_Form
 
 from utils.data_collector import DataCollectorWorker
 from utils.ai_engine import AI_Engine
+from utils.hotkey_manager import HotkeyManager
 
 from typing import Dict, Any, Union
 from datetime import datetime
@@ -175,6 +176,20 @@ class IB_Trading_APP(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to initialize AI engine: {e}")
             self.ai_engine = None
+        
+        # Initialize hotkey manager
+        try:
+            logger.info("Initializing hotkey manager...")
+            if self.data_worker and self.data_worker.collector:
+                self.hotkey_manager = HotkeyManager(self.data_worker.collector.trading_manager)
+                self.hotkey_manager.start()
+                logger.info("Hotkey manager initialized and started successfully")
+            else:
+                logger.warning("Data worker not available, skipping hotkey manager initialization")
+                self.hotkey_manager = None
+        except Exception as e:
+            logger.error(f"Failed to initialize hotkey manager: {e}")
+            self.hotkey_manager = None
         
         self.refresh_ui_with_whitespace()
         
@@ -651,9 +666,32 @@ class IB_Trading_APP(QMainWindow):
         if hasattr(self.ui, 'label_time'):
             self.ui.label_time.setText(current_time)
     
+    def keyPressEvent(self, event):
+        """Handle key press events for hotkey detection"""
+        try:
+            # Forward key events to hotkey manager if available
+            if hasattr(self, 'hotkey_manager') and self.hotkey_manager:
+                self.hotkey_manager.keyPressEvent(event)
+                if event.isAccepted():
+                    return
+            
+            # Let other key events pass through
+            event.ignore()
+            
+        except Exception as e:
+            logger.error(f"Error in keyPressEvent: {e}")
+            event.ignore()
+    
     def closeEvent(self, event):
         """Handle application shutdown"""
         try:
+            # Stop hotkey manager
+            if hasattr(self, 'hotkey_manager') and self.hotkey_manager:
+                try:
+                    self.hotkey_manager.stop()
+                except Exception as e:
+                    logger.error(f"Error stopping hotkey manager: {e}")
+            
             # Stop data collection
             if hasattr(self, 'data_worker') and self.data_worker:
                 try:

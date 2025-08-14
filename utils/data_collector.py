@@ -257,6 +257,11 @@ class DataCollectorWorker(QObject):
     def cleanup(self):
         """Clean up resources"""
         try:
+            # Cleanup trading manager if available
+            if hasattr(self.collector, 'trading_manager'):
+                self.collector.trading_manager.cleanup()
+                logger.info("Trading manager cleanup completed")
+            
             # Ensure proper cleanup via collector's disconnect to cancel subscriptions
             self.collector.disconnect()
             logger.info("Disconnected from IB")

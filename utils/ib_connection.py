@@ -8,6 +8,7 @@ from threading import Thread, Event
 import time
 from .smart_logger import get_logger, log_connection_event, log_error_with_context
 from .performance_monitor import monitor_function, monitor_async_function
+from .trading_manager import TradingManager
 
 logger = get_logger("IB_CONNECTION")
 
@@ -44,6 +45,9 @@ class IBDataCollector:
         
         # Option contracts cache for quick resubscription
         self._cached_option_contracts = {}  # {strike: {expiration: {call: contract, put: contract}}}
+
+        # Initialize trading manager
+        self.trading_manager = TradingManager(self.ib, trading_config, account_config)
 
         self._register_ib_callbacks()
 
@@ -333,6 +337,10 @@ class IBDataCollector:
                     'price': self.underlying_symbol_price,
                     'timestamp': datetime.now().isoformat()
                 })
+            
+            # Update trading manager with underlying price
+            if hasattr(self, 'trading_manager'):
+                self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
                 
         except Exception as e:
             logger.error(f"Error in price update callback: {e}")
@@ -542,6 +550,10 @@ class IBDataCollector:
         }
         print(f"Calls option data: \n{tmp_data}")
         self.data_worker.calls_option_updated.emit(tmp_data)
+        
+        # Update trading manager with call option data
+        if hasattr(self, 'trading_manager'):
+            self.trading_manager.update_market_data(call_option=tmp_data)
 
 
     def _on_update_putoption(self, option_ticker):
@@ -561,6 +573,10 @@ class IBDataCollector:
         }
         print(f"Puts option data: \n{tmp_data}")
         self.data_worker.puts_option_updated.emit(tmp_data)
+        
+        # Update trading manager with put option data
+        if hasattr(self, 'trading_manager'):
+            self.trading_manager.update_market_data(put_option=tmp_data)
 
     async def calculate_pnl_detailed(self, pos, underlying_symbol_price):
         results = []
@@ -642,6 +658,10 @@ class IBDataCollector:
             'daily_pnl_price': self.daily_pnl,
             'daily_pnl_percent': daily_pnl_percent
         })
+        
+        # Update trading manager with daily PnL data
+        if hasattr(self, 'trading_manager'):
+            self.trading_manager.update_market_data(daily_pnl_percent=daily_pnl_percent)
 
     def on_account_summary_update(self, account_summary):
         for item in account_summary:
@@ -676,6 +696,10 @@ class IBDataCollector:
         }
         logger.info(f"Updated Account Metrics: {metrics}")
         self.data_worker.account_summary_update.emit(metrics)
+        
+        # Update trading manager with account value
+        if hasattr(self, 'trading_manager'):
+            self.trading_manager.update_market_data(account_value=self.account_liquidation)
 
 
     async def get_account_metrics(self) -> pd.DataFrame:
@@ -878,6 +902,12 @@ class IBDataCollector:
             logger.info("Getting active positions...")
             positions_df = await self.get_active_positions(self.underlying_symbol)
             data['active_contract'] = positions_df
+            
+            # Update trading manager with position data
+            if hasattr(self, 'trading_manager') and not positions_df.empty:
+                for _, position in positions_df.iterrows():
+                    position_data = position.to_dict()
+                    self.trading_manager.update_position(position_data)
 
             # # Get trade statistics
             logger.info("Getting trade statistics...")
