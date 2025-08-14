@@ -34,6 +34,7 @@ class IBDataCollector:
         self.fx_ratio = 0
         self.option_strike = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
+        self.pos = None
         
         # Dynamic strike price and expiration monitoring
         self._previous_strike = 0
@@ -342,6 +343,26 @@ class IBDataCollector:
             if hasattr(self, 'trading_manager'):
                 self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
                 
+            # Recalculate active positions PnL in real-time based on latest underlying price
+            if self.pos and self.underlying_symbol_price > 0:
+                try:
+                    # Get current positions and recalculate PnL
+                    positions = self.ib.positions()
+                    for position in positions:
+                        if position.contract and getattr(position.contract, 'symbol', None) == (symbol or self.underlying_symbol):
+                            # Use synchronous PnL calculation
+                            pnl_result = self._calculate_position_pnl_sync(position, self.underlying_symbol_price)
+                            if pnl_result and hasattr(self, 'data_worker') and hasattr(self.data_worker, 'active_contracts_pnl_refreshed'):
+                                self.data_worker.active_contracts_pnl_refreshed.emit({
+                                    'pnl_percent': pnl_result['pnl_percent'],
+                                    'pnl_dollar': pnl_result['pnl_dollar'],
+                                    'symbol': pnl_result['symbol'],
+                                    'position_size': pnl_result['position_size']
+                                })
+                            break
+                except Exception as pnl_err:
+                    logger.warning(f"Error recalculating PnL: {pnl_err}")
+                
         except Exception as e:
             logger.error(f"Error in price update callback: {e}")
 
@@ -387,9 +408,10 @@ class IBDataCollector:
                 'timestamp': datetime.now().isoformat()
             })
     
-    async def get_option_chain(self, symbol='SPY') -> pd.DataFrame:
+    async def get_option_chain(self) -> pd.DataFrame:
         """Get option chain data with improved error handling and validation"""
         try:
+            symbol = self.underlying_symbol
             # Calculate and update strike price
             logger.info(f"Current underlying_symbol_price: {self.underlying_symbol_price}")
             if self.underlying_symbol_price > 0:
@@ -578,7 +600,56 @@ class IBDataCollector:
         if hasattr(self, 'trading_manager'):
             self.trading_manager.update_market_data(put_option=tmp_data)
 
+    def _calculate_position_pnl_sync(self, pos, underlying_symbol_price):
+        """Synchronous PnL calculation for real-time updates"""
+        try:
+            if not pos or not pos.contract:
+                return None
+                
+            pnl_dollar = 0
+            pnl_percent = 0
+            currency = ''
+            current_price = underlying_symbol_price
+            
+            if 'USDCAD' in str(pos.contract):
+                current_price = self.fx_ratio
+                # Forex
+                pnl_dollar = pos.position * (current_price - pos.avgCost)
+                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+                currency = 'CAD'
+
+            elif pos.contract.symbol == 'IBKR':
+                # Option
+                if current_price is None:
+                    logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
+                    return None
+                pnl_dollar = pos.position * (current_price - pos.avgCost)
+                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+                currency = 'USD'
+
+            elif pos.contract.symbol == 'SPY':
+                if current_price is None:
+                    logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
+                    return None
+                pnl_dollar = pos.position * (current_price - pos.avgCost)
+                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
+                currency = 'USD'
+
+            return {
+                'symbol': pos.contract.localSymbol if hasattr(pos.contract, 'localSymbol') else pos.contract.symbol,
+                'position_size': pos.position,
+                'avg_cost': pos.avgCost,
+                'pnl_dollar': round(pnl_dollar, 2),
+                'pnl_percent': round(pnl_percent, 2),
+                'currency': currency
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in synchronous PnL calculation: {e}")
+            return None
+
     async def calculate_pnl_detailed(self, pos, underlying_symbol_price):
+        self.pos = pos
         results = []
         pnl_dollar = 0
         pnl_percent = 0
@@ -641,6 +712,10 @@ class IBDataCollector:
                 logger.info(f"Position: {position}")
                 if position.contract.symbol == underlying_symbol:
                     try:
+                        # Store the first matching position for real-time updates
+                        if not self.pos:
+                            self.pos = position
+                            
                         # Accumulate results for matching positions using the symbol-specific price
                         pnl_results = await self.calculate_pnl_detailed(position, current_price)
                         pnl_detailed.extend(pnl_results)

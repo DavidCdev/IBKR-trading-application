@@ -69,6 +69,7 @@ class IB_Trading_APP(QMainWindow):
                 self.data_worker.daily_pnl_update.connect(self.update_daily_pnl_updated)
                 self.data_worker.account_summary_update.connect(self.update_account_summary)
                 self.data_worker.trading_config_updated.connect(self.on_trading_config_updated)
+                self.data_worker.active_contracts_pnl_refreshed.connect(self.update_active_contracts_pnl)
                 
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
@@ -717,6 +718,14 @@ class IB_Trading_APP(QMainWindow):
 
         except Exception as e:
             logger.error(f"Error updating Daily Pnl rate: {e}")
+            
+    def update_active_contracts_pnl(self, active_contracts_pnl: Dict[str, Any]):
+        try:
+            logger.info(f"Updating active contracts PNL: {active_contracts_pnl}")
+            self.ui.label_pl_percent_value.setText(f"{active_contracts_pnl['pnl_percent']:.2f}%")
+            self.ui.label_pl_dollar_value.setText(f"{active_contracts_pnl['pnl_dollar']:.2f}$")
+        except Exception as e:
+            logger.error(f"Error updating active contracts PNL: {e}")
 
     def refresh_ui(self):
         """Refresh UI elements that need frequent updates"""

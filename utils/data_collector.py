@@ -22,6 +22,7 @@ class DataCollectorWorker(QObject):
     daily_pnl_update = pyqtSignal(dict)
     account_summary_update = pyqtSignal(dict)
     trading_config_updated = pyqtSignal(dict)  # Signal for trading configuration updates
+    active_contracts_pnl_refreshed = pyqtSignal(dict)
 
     def __init__(self, config: AppConfig):
         super().__init__()
