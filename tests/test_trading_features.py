@@ -9,7 +9,9 @@ import asyncio
 from datetime import datetime
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+print(f"Added {current_dir} to Python path")
 
 from utils.config_manager import AppConfig
 from utils.trading_manager import TradingManager
