@@ -312,13 +312,13 @@ class IBDataCollector:
             
             if ticker.last and ticker.last > 0:
                 self.underlying_symbol_price = float(ticker.last)
-                logger.info(f"Real-time {symbol or self.underlying_symbol} Last Price: ${self.underlying_symbol_price}")
+                # logger.info(f"Real-time {symbol or self.underlying_symbol} Last Price: ${self.underlying_symbol_price}")
             elif ticker.close and ticker.close > 0:
                 self.underlying_symbol_price = float(ticker.close)
-                logger.info(f"Real-time {symbol or self.underlying_symbol} Previous Close: ${self.underlying_symbol_price}")
+                # logger.info(f"Real-time {symbol or self.underlying_symbol} Previous Close: ${self.underlying_symbol_price}")
             elif ticker.bid and ticker.ask:
                 self.underlying_symbol_price = float((ticker.bid + ticker.ask) / 2)
-                logger.info(f"Real-time {symbol or self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${ticker.bid}, Ask: ${ticker.ask})")
+                # logger.info(f"Real-time {symbol or self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${ticker.bid}, Ask: ${ticker.ask})")
             else:
                 logger.debug("No real-time price data available")
                 logger.debug(f"Last: {ticker.last}, Bid: {ticker.bid}, Ask: {ticker.ask}")
@@ -390,14 +390,14 @@ class IBDataCollector:
         """Callback handler for real-time USD/CAD ratio updates"""
         if ticker.last and ticker.last > 0:
             new_ratio = ticker.last
-            logger.info(f"USD/CAD Ratio (last): {new_ratio}")
+            # logger.info(f"USD/CAD Ratio (last): {new_ratio}")
         elif ticker.close and ticker.close > 0:
             new_ratio = ticker.close
-            logger.info(f"USD/CAD Ratio (close): {new_ratio}")
+            # logger.info(f"USD/CAD Ratio (close): {new_ratio}")
 
         elif ticker.bid and ticker.ask:
             new_ratio = (ticker.bid + ticker.ask) / 2
-            logger.info(f"USD/CAD Ratio (mid): {new_ratio}")
+            # logger.info(f"USD/CAD Ratio (mid): {new_ratio}")
             
         else:
             new_ratio = 0
@@ -575,7 +575,7 @@ class IBDataCollector:
             'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
             'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
         }
-        print(f"Calls option data: \n{tmp_data}")
+        # print(f"Calls option data: \n{tmp_data}")
         self.data_worker.calls_option_updated.emit(tmp_data)
         
         # Update trading manager with call option data
@@ -598,7 +598,7 @@ class IBDataCollector:
             'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
             'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
         }
-        print(f"Puts option data: \n{tmp_data}")
+        # print(f"Puts option data: \n{tmp_data}")
         self.data_worker.puts_option_updated.emit(tmp_data)
         
         # Update trading manager with put option data
@@ -1200,7 +1200,6 @@ class IBDataCollector:
             # Get option chain (this will set initial strike and expiration)
             logger.info("Getting option chain...")
             options_df = await self.get_option_chain()
-            print(f"options_df is: {options_df}")
             data['options'] = options_df
 
             # Get active positions

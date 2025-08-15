@@ -728,7 +728,7 @@ class IB_Trading_APP(QMainWindow):
 
     def update_calls_option(self, calls_data: Dict[str, Any]):
         try:
-            print(f"UI Calls Data: {calls_data}")
+            # print(f"UI Calls Data: {calls_data}")
             self.ui.label_call_price_value.setText(f'{calls_data.get("Last")}')
             self.ui.label_call_bid_value.setText(f'{calls_data.get("Bid")}')
             self.ui.label_call_ask_value.setText(f'{calls_data.get("Ask")}')
@@ -745,7 +745,7 @@ class IB_Trading_APP(QMainWindow):
 
     def update_puts_option(self, puts_data: Dict[str, Any]):
         try:
-            print(f"UI Puts Data: {puts_data}")
+            # print(f"UI Puts Data: {puts_data}")
             self.ui.label_put_price_value.setText(f'{puts_data.get("Last")}')
             self.ui.label_put_bid_value.setText(f'{puts_data.get("Bid")}')
             self.ui.label_put_ask_value.setText(f'{puts_data.get("Ask")}')
@@ -940,7 +940,7 @@ class IB_Trading_APP(QMainWindow):
 
     def update_daily_pnl_updated(self, daily_pnl_data: Dict[str, Any]):
         try:
-            logger.info(f"Updating daily PNL update: {daily_pnl_data}")
+            # logger.info(f"Updating daily PNL update: {daily_pnl_data}")
             daily_pnl_price = daily_pnl_data.get('daily_pnl_price', 0)
             daily_pnl_percent = daily_pnl_data.get('daily_pnl_percent', 0)
             self.ui.label_daily_pl_value.setText(f"${daily_pnl_price:.2f}")
