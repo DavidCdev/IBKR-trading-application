@@ -9,8 +9,7 @@ from utils.hotkey_manager import HotkeyManager
 
 from typing import Dict, Any, Union, List
 from datetime import datetime
-from utils.smart_logger import get_logger, log_error_with_context
-from utils.performance_monitor import monitor_function
+from utils.smart_logger import get_logger
 
 logger = get_logger("GUI")
 try:
@@ -917,7 +916,8 @@ class IB_Trading_APP(QMainWindow):
             if current_price < low or current_price > high:
                 logger.info(f"Price ${current_price:.2f} outside AI range [${low:.2f}, ${high:.2f}] - triggering analysis")
                 if self.ai_engine:
-                    self.ai_engine.analyze_market_data()
+                    import asyncio
+                    asyncio.create_task(self.ai_engine.analyze_market_data())
                     
         except Exception as e:
             logger.error(f"Error checking price-triggered analysis: {e}")

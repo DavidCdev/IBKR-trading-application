@@ -1,8 +1,8 @@
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 import pytz
 from threading import Thread, Event
 import time
@@ -278,10 +278,20 @@ class IBDataCollector:
         try:
             underlying_symbol = Stock(symbol, 'SMART', 'USD')
             
-            # Qualify the contract
-            underlying_symbol_qualified = await self.ib.qualifyContractsAsync(underlying_symbol)
-            if not underlying_symbol_qualified or underlying_symbol_qualified[0] is None:
-                logger.error(f"Could not qualify {symbol} contract")
+            # Qualify the contract with timeout
+            try:
+                underlying_symbol_qualified = await asyncio.wait_for(
+                    self.ib.qualifyContractsAsync(underlying_symbol),
+                    timeout=20.0  # 20 second timeout
+                )
+                if not underlying_symbol_qualified or underlying_symbol_qualified[0] is None:
+                    logger.error(f"Could not qualify {symbol} contract")
+                    return None
+            except asyncio.TimeoutError:
+                logger.error(f"Contract qualification timeout for {symbol}")
+                return None
+            except Exception as e:
+                logger.error(f"Error qualifying contract for {symbol}: {e}")
                 return None
             
             # Request market data and set up real-time updates
@@ -610,11 +620,7 @@ class IBDataCollector:
         try:
             if not pos or not pos.contract:
                 return None
-                
 
-            pnl_dollar = 0
-            pnl_percent = 0
-            currency = ''
             current_price = underlying_symbol_price
 
             is_long = pos.position > 0
@@ -671,7 +677,6 @@ class IBDataCollector:
         
         # Determine if position is long or short
         is_long = pos.position > 0
-        is_short = pos.position < 0
         position_size = abs(pos.position)  # Use absolute value for calculations
         
         if 'USDCAD' in str(pos.contract):
@@ -1503,6 +1508,75 @@ class IBDataCollector:
                 
         except Exception as e:
             logger.error(f"Error in manual trigger update: {e}")
+
+    async def get_historical_data(self, symbol: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
+        """Get historical price data for a symbol from IB"""
+        try:
+            if not self.ib.isConnected():
+                logger.warning("Not connected to IB. Attempting to connect...")
+                if not await self.connect():
+                    logger.error("Failed to connect to IB for historical data")
+                    return []
+            logger.info(f"Getting historical data for {symbol} from {start_date} to {end_date}")
+            # Create a Stock contract for the symbol
+
+            # Create stock contract
+            stock = Stock(symbol, 'SMART', 'USD')
+            logger.info(f"Stock: {stock}")
+            # Qualify the contract with timeout
+            qualified_contracts = self.ib.qualifyContractsAsync(stock)
+            contract = qualified_contracts[0]
+            logger.info(f"Contract to get historical data: {contract}")
+            # Format dates for IB API (YYYYMMDD HH:mm:ss)
+            start_str = start_date.strftime('%Y%m%d %H:%M:%S')
+            end_str = end_date.strftime('%Y%m%d %H:%M:%S')
+            
+            # Request historical data with timeout
+            # Using 1 day bars for daily data
+            try:
+                bars = await asyncio.wait_for(
+                    self.ib.reqHistoricalDataAsync(
+                        contract,
+                        end_str,
+                        f"{int((end_date - start_date).days)} D",  # Duration
+                        "1 day",  # Bar size
+                        "TRADES",  # What to show
+                        1,  # Use RTH
+                        1,  # Format date
+                        False,  # Keep up to date after bar
+                        []  # Chart options
+                    ),
+                    timeout=30.0  # 30 second timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Historical data request timeout for {symbol}")
+                return []
+            except Exception as e:
+                logger.error(f"Error requesting historical data for {symbol}: {e}")
+                return []
+            
+            if not bars:
+                logger.warning(f"No historical data returned for {symbol}")
+                return []
+            
+            # Convert bars to list of dictionaries
+            historical_data = []
+            for bar in bars:
+                historical_data.append({
+                    'timestamp': bar.date,
+                    'open': bar.open,
+                    'high': bar.high,
+                    'low': bar.low,
+                    'close': bar.close,
+                    'volume': bar.volume
+                })
+            
+            logger.info(f"Retrieved {len(historical_data)} historical data points for {symbol}")
+            return historical_data
+            
+        except Exception as e:
+            logger.error(f"Error getting historical data for {symbol}: {e}")
+            return []
     
     def __del__(self):
         """Destructor to ensure cleanup"""

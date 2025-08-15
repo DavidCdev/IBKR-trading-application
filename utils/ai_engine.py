@@ -1,6 +1,7 @@
 import json
 import asyncio
 import time
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
@@ -117,10 +118,27 @@ class AI_Engine(QObject):
             return
         
         logger.info("Executing scheduled AI poll")
-        self.analyze_market_data()
+        
+        # Run the analysis in a separate thread to avoid blocking the UI
+        def run_scheduled_analysis():
+            try:
+                # Create a new event loop for this async operation
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(self.analyze_market_data())
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"Error in scheduled poll: {e}")
+                self.analysis_error.emit(f"Scheduled poll failed: {e}")
+        
+        # Start the analysis in a background thread
+        analysis_thread = threading.Thread(target=run_scheduled_analysis, daemon=True)
+        analysis_thread.start()
     
     @monitor_function("AI_ENGINE.collect_historical_data", threshold_ms=5000)
-    def collect_historical_data(self, days: int = None) -> List[PricePoint]:
+    async def collect_historical_data(self, days: int = None) -> List[PricePoint]:
         """Collect historical price data for analysis"""
         try:
             if days is None:
@@ -135,17 +153,36 @@ class AI_Engine(QObject):
             end_date = datetime.now()
             start_date = end_date - timedelta(days=days)
             
-            # This would need to be implemented in the data collector
-            # For now, we'll use a placeholder
+            # Get historical data from IB
             logger.info(f"Collecting {days} days of historical data for {symbol}")
             
-            # Placeholder: In a real implementation, this would fetch from IB
-            # historical_data = await self.data_collector.collector.get_historical_data(
-            #     symbol, start_date, end_date
-            # )
-            
-            # For now, return empty list - this would be populated by real data
-            return []
+            try:
+                # Get historical data from IB
+                historical_data = await self.data_collector.collector.get_historical_data(
+                    symbol, start_date, end_date
+                )
+                
+                if not historical_data:
+                    logger.warning(f"No historical data returned for {symbol}")
+                    return []
+                
+                # Convert to PricePoint objects
+                price_points = []
+                for data_point in historical_data:
+                    # Use close price as the main price
+                    price_point = PricePoint(
+                        timestamp=data_point['timestamp'],
+                        price=data_point['close'],
+                        volume=data_point.get('volume')
+                    )
+                    price_points.append(price_point)
+                
+                logger.info(f"Successfully collected {len(price_points)} price points for {symbol}")
+                return price_points
+                
+            except Exception as e:
+                logger.error(f"Error fetching historical data from IB: {e}")
+                return []
             
         except Exception as e:
             logger.error(f"Error collecting historical data: {e}")
@@ -367,7 +404,7 @@ Please provide your analysis in the specified JSON format.
             raise
     
     @monitor_function("AI_ENGINE.analyze_market_data", threshold_ms=15000)
-    def analyze_market_data(self, force_refresh: bool = False) -> Optional[AIAnalysisResult]:
+    async def analyze_market_data(self, force_refresh: bool = False) -> Optional[AIAnalysisResult]:
         """Main method to analyze market data with AI"""
         try:
             if self.is_polling and not force_refresh:
@@ -393,7 +430,7 @@ Please provide your analysis in the specified JSON format.
                     return self.last_analysis
             
             # Collect historical data
-            historical_prices = self.collect_historical_data()
+            historical_prices = await self.collect_historical_data()
             inflection_points = self._identify_inflection_points(historical_prices)
             
             # Generate price summary
@@ -405,7 +442,7 @@ Please provide your analysis in the specified JSON format.
             # Make API call
             logger.info("Initiating AI analysis...")
             logger.info(f"Final prompt: {final_prompt}")
-            response = asyncio.run(self._call_gemini_api(final_prompt))
+            response = await self._call_gemini_api(final_prompt)
             
             # Parse response
             analysis_result = self._parse_ai_response(response)
@@ -461,7 +498,24 @@ Please provide your analysis in the specified JSON format.
     def force_refresh(self):
         """Force a refresh of AI analysis, bypassing cache"""
         logger.info("Force refresh requested")
-        self.analyze_market_data(force_refresh=True)
+        
+        # Run the analysis in a separate thread to avoid blocking the UI
+        def run_analysis():
+            try:
+                # Create a new event loop for this async operation
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(self.analyze_market_data(force_refresh=True))
+                finally:
+                    loop.close()
+            except Exception as e:
+                logger.error(f"Error in force refresh: {e}")
+                self.analysis_error.emit(f"Force refresh failed: {e}")
+        
+        # Start the analysis in a background thread
+        analysis_thread = threading.Thread(target=run_analysis, daemon=True)
+        analysis_thread.start()
     
     def update_config(self, new_config: AppConfig):
         """Update configuration and restart polling if needed"""
