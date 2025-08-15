@@ -96,7 +96,13 @@ class AppConfig:
         if self.ai_prompt is None:
             self.ai_prompt = {
                 "prompt": "You are a helpful assistant that can answer questions and help with tasks.",
-                "context": "You are a helpful assistant that can answer questions and help with tasks."
+                "context": "You are a helpful assistant that can answer questions and help with tasks.",
+                "gemini_api_key": "",
+                "polling_interval_minutes": 10,
+                "enable_auto_polling": True,
+                "enable_price_triggered_polling": True,
+                "max_historical_days": 30,
+                "cache_duration_minutes": 15
             }
         if self.account is None:
             self.account = {

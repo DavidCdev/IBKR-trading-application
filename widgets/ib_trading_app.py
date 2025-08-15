@@ -172,8 +172,16 @@ class IB_Trading_APP(QMainWindow):
 
         try:
             logger.info("Initializing AI engine...")
-            self.ai_engine = AI_Engine(self.config)
+            self.ai_engine = AI_Engine(self.config, self.data_worker)
             logger.info("AI engine initialized successfully")
+            
+            # Connect AI engine signals
+            if self.ai_engine:
+                self.ai_engine.analysis_ready.connect(self.on_ai_analysis_ready)
+                self.ai_engine.analysis_error.connect(self.on_ai_analysis_error)
+                self.ai_engine.polling_status.connect(self.on_ai_polling_status)
+                self.ai_engine.cache_status.connect(self.on_ai_cache_status)
+                logger.info("AI engine signals connected successfully")
         except Exception as e:
             logger.error(f"Failed to initialize AI engine: {e}")
             self.ai_engine = None
@@ -252,11 +260,51 @@ class IB_Trading_APP(QMainWindow):
         """Refresh the AI engine"""
         if hasattr(self, 'ai_engine') and self.ai_engine:
             try:
-                self.ai_engine.refresh()
+                logger.info("Force refreshing AI analysis...")
+                self.ai_engine.force_refresh()
             except Exception as e:
                 logger.error(f"Failed to refresh AI engine: {e}")
         else:
             logger.warning("AI engine not available")
+    
+    def on_ai_analysis_ready(self, analysis_data: Dict[str, Any]):
+        """Handle AI analysis results"""
+        try:
+            logger.info("AI analysis ready received")
+            
+            # Extract key data
+            price_range = analysis_data.get('valid_price_range', {})
+            analysis_summary = analysis_data.get('analysis_summary', '')
+            confidence_level = analysis_data.get('confidence_level', 0.0)
+            key_insights = analysis_data.get('key_insights', [])
+            risk_assessment = analysis_data.get('risk_assessment', '')
+            
+            # Update UI with analysis results
+            # You can add specific UI elements to display this data
+            logger.info(f"AI Analysis - Price Range: ${price_range.get('low', 0):.2f} - ${price_range.get('high', 0):.2f}")
+            logger.info(f"AI Analysis - Confidence: {confidence_level:.2f}")
+            logger.info(f"AI Analysis - Summary: {analysis_summary[:100]}...")
+            
+            # Store analysis for potential use by trading logic
+            self.last_ai_analysis = analysis_data
+            
+        except Exception as e:
+            logger.error(f"Error handling AI analysis: {e}")
+    
+    def on_ai_analysis_error(self, error_message: str):
+        """Handle AI analysis errors"""
+        logger.error(f"AI analysis error: {error_message}")
+        # You can add UI notification here
+    
+    def on_ai_polling_status(self, status: str):
+        """Handle AI polling status updates"""
+        logger.info(f"AI polling status: {status}")
+        # You can add UI status updates here
+    
+    def on_ai_cache_status(self, status: str):
+        """Handle AI cache status updates"""
+        logger.info(f"AI cache status: {status}")
+        # You can add UI cache status updates here
 
     def show_ai_prompt_ui(self):
         """Show the AI prompt dialog"""
@@ -685,9 +733,33 @@ class IB_Trading_APP(QMainWindow):
             # Update the underlying symbol price in UI
             if hasattr(self, 'config') and self.config and self.config.trading and symbol == self.config.trading.get('underlying_symbol'):
                 self.ui.label_spy_value.setText(f"${price:.2f}")
+                
+                # Check if price-triggered AI analysis should be performed
+                if (hasattr(self, 'ai_engine') and self.ai_engine and 
+                    self.config.ai_prompt.get("enable_price_triggered_polling", True)):
+                    self._check_price_triggered_analysis(price)
                     
         except Exception as e:
             logger.error(f"Error updating real-time price: {e}")
+    
+    def _check_price_triggered_analysis(self, current_price: float):
+        """Check if price movement warrants AI analysis"""
+        try:
+            if not hasattr(self, 'last_ai_analysis') or not self.last_ai_analysis:
+                return
+            
+            price_range = self.last_ai_analysis.get('valid_price_range', {})
+            low = price_range.get('low', 0)
+            high = price_range.get('high', float('inf'))
+            
+            # If price is outside the valid range, trigger analysis
+            if current_price < low or current_price > high:
+                logger.info(f"Price ${current_price:.2f} outside AI range [${low:.2f}, ${high:.2f}] - triggering analysis")
+                if self.ai_engine:
+                    self.ai_engine.analyze_market_data()
+                    
+        except Exception as e:
+            logger.error(f"Error checking price-triggered analysis: {e}")
     
     def update_fx_rate(self, fx_rate_data: Dict[str, Any]):
         """Handle real-time FX rate updates from IB"""
@@ -771,6 +843,13 @@ class IB_Trading_APP(QMainWindow):
     def closeEvent(self, event):
         """Handle application shutdown"""
         try:
+            # Stop AI engine
+            if hasattr(self, 'ai_engine') and self.ai_engine:
+                try:
+                    self.ai_engine.cleanup()
+                except Exception as e:
+                    logger.error(f"Error stopping AI engine: {e}")
+            
             # Stop hotkey manager
             if hasattr(self, 'hotkey_manager') and self.hotkey_manager:
                 try:

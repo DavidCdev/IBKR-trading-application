@@ -61,10 +61,16 @@
         }
     },
     "ai_prompt": {
-        "prompt": "who are you?",
-        "context": "You are a helpful assistant that can answer questions and help with tasks."
+        "prompt": "Analyze the current market conditions and provide trading insights for options trading. Focus on support/resistance levels, volatility patterns, and potential price movements.",
+        "context": "You are a helpful assistant that can answer questions and help with tasks.",
+        "gemini_api_key": "AIzaSyBLI5GqPnK0oCfNFEa5S_TZSpl_Uwkec1c",
+        "polling_interval_minutes": 10,
+        "enable_auto_polling": false,
+        "enable_price_triggered_polling": false,
+        "max_historical_days": 30,
+        "cache_duration_minutes": 15
     },
     "account": {
-        "high_water_mark": 997362.35
+        "high_water_mark": 997531.27
     }
 }

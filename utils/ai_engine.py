@@ -1,33 +1,529 @@
+import json
+import asyncio
+import time
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List, Tuple
+from dataclasses import dataclass
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+import pandas as pd
+import google.generativeai as genai
 from utils.config_manager import AppConfig
-from .smart_logger import get_logger
+from utils.smart_logger import get_logger
+from utils.performance_monitor import monitor_function
 
 logger = get_logger("AI_ENGINE")
 
-class AI_Engine:
-    def __init__(self, config: AppConfig):
-        self.config = config
-    
-    def refresh(self):
-        """Refresh the AI engine"""
-        self.config = AppConfig.load_from_file()
+@dataclass
+class PricePoint:
+    """Represents a price point with timestamp"""
+    timestamp: datetime
+    price: float
+    volume: Optional[float] = None
 
+@dataclass
+class InflectionPoint:
+    """Represents a key inflection point in price action"""
+    timestamp: datetime
+    price: float
+    type: str  # 'high', 'low', 'breakout', 'breakdown'
+    significance: float  # 0.0 to 1.0
+
+@dataclass
+class AIAnalysisResult:
+    """Structured result from AI analysis"""
+    valid_price_range: Dict[str, float]  # {'low': float, 'high': float}
+    analysis_summary: str
+    confidence_level: float
+    key_insights: List[str]
+    risk_assessment: str
+    timestamp: datetime
+    raw_response: Dict[str, Any]
+
+class AI_Engine(QObject):
+    """AI Prompt Manager with Gemini API integration"""
+    
+    # Signals for GUI updates
+    analysis_ready = pyqtSignal(dict)  # Emits AIAnalysisResult as dict
+    analysis_error = pyqtSignal(str)   # Emits error message
+    polling_status = pyqtSignal(str)   # Emits polling status updates
+    cache_status = pyqtSignal(str)     # Emits cache status updates
+    
+    def __init__(self, config: AppConfig, data_collector=None):
+        super().__init__()
+        self.config = config
+        self.data_collector = data_collector
+        
+        # Initialize Gemini API
+        self._setup_gemini_api()
+        
+        # Historical price data storage
+        self.historical_prices: List[PricePoint] = []
+        self.inflection_points: List[InflectionPoint] = []
+        
+        # Caching and polling state
+        self.last_analysis: Optional[AIAnalysisResult] = None
+        self.last_prompt_hash: Optional[str] = None
+        self.last_poll_time: Optional[datetime] = None
+        self.is_polling = False
+        
+        # Timers for intelligent polling
+        self.polling_timer = QTimer()
+        self.polling_timer.timeout.connect(self._scheduled_poll)
+        
+        # Start polling if enabled
+        if self.config.ai_prompt.get("enable_auto_polling", True):
+            self._start_polling()
+    
+    def _setup_gemini_api(self):
+        """Initialize Gemini API client"""
+        try:
+            api_key = self.config.ai_prompt.get("gemini_api_key", "")
+            if not api_key:
+                logger.warning("No Gemini API key configured. AI analysis will be disabled.")
+                self.gemini_client = None
+                return
+            
+            genai.configure(api_key=api_key)
+            self.gemini_client = genai.GenerativeModel('gemini-1.5-flash')
+            logger.info("Gemini API client initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini API: {e}")
+            self.gemini_client = None
+    
+    def _start_polling(self):
+        """Start the intelligent polling timer"""
+        if not self.config.ai_prompt.get("enable_auto_polling", True):
+            return
+        
+        interval_minutes = self.config.ai_prompt.get("polling_interval_minutes", 10)
+        interval_ms = interval_minutes * 60 * 1000
+        
+        self.polling_timer.start(interval_ms)
+        logger.info(f"AI polling started with {interval_minutes}-minute interval")
+        self.polling_status.emit(f"Polling started - {interval_minutes} minute intervals")
+    
+    def _stop_polling(self):
+        """Stop the intelligent polling timer"""
+        self.polling_timer.stop()
+        self.is_polling = False
+        logger.info("AI polling stopped")
+        self.polling_status.emit("Polling stopped")
+    
+    def _scheduled_poll(self):
+        """Handle scheduled polling events"""
+        if self.is_polling:
+            logger.debug("Skipping scheduled poll - another poll in progress")
+            return
+        
+        logger.info("Executing scheduled AI poll")
+        self.analyze_market_data()
+    
+    @monitor_function("AI_ENGINE.collect_historical_data", threshold_ms=5000)
+    def collect_historical_data(self, days: int = None) -> List[PricePoint]:
+        """Collect historical price data for analysis"""
+        try:
+            if days is None:
+                days = self.config.ai_prompt.get("max_historical_days", 30)
+            
+            if not self.data_collector or not self.data_collector.collector:
+                logger.warning("Data collector not available for historical data")
+                return []
+            
+            # Get historical data from IB
+            symbol = self.config.trading.get("underlying_symbol", "SPY")
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days)
+            
+            # This would need to be implemented in the data collector
+            # For now, we'll use a placeholder
+            logger.info(f"Collecting {days} days of historical data for {symbol}")
+            
+            # Placeholder: In a real implementation, this would fetch from IB
+            # historical_data = await self.data_collector.collector.get_historical_data(
+            #     symbol, start_date, end_date
+            # )
+            
+            # For now, return empty list - this would be populated by real data
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error collecting historical data: {e}")
+            return []
+    
+    def _identify_inflection_points(self, prices: List[PricePoint]) -> List[InflectionPoint]:
+        """Identify key inflection points in price action"""
+        if len(prices) < 3:
+            return []
+        
+        inflection_points = []
+        
+        # Simple inflection point detection
+        for i in range(1, len(prices) - 1):
+            prev_price = prices[i-1].price
+            curr_price = prices[i].price
+            next_price = prices[i+1].price
+            
+            # Local high
+            if curr_price > prev_price and curr_price > next_price:
+                significance = (curr_price - min(prev_price, next_price)) / curr_price
+                inflection_points.append(InflectionPoint(
+                    timestamp=prices[i].timestamp,
+                    price=curr_price,
+                    type='high',
+                    significance=min(significance, 1.0)
+                ))
+            
+            # Local low
+            elif curr_price < prev_price and curr_price < next_price:
+                significance = (max(prev_price, next_price) - curr_price) / curr_price
+                inflection_points.append(InflectionPoint(
+                    timestamp=prices[i].timestamp,
+                    price=curr_price,
+                    type='low',
+                    significance=min(significance, 1.0)
+                ))
+        
+        # Sort by significance and return top points
+        inflection_points.sort(key=lambda x: x.significance, reverse=True)
+        return inflection_points[:10]  # Return top 10 most significant points
+    
+    def _generate_price_summary(self, prices: List[PricePoint], inflection_points: List[InflectionPoint]) -> str:
+        """Generate a token-efficient summary of historical price action"""
+        if not prices:
+            return "No historical price data available."
+        
+        # Calculate basic statistics
+        price_values = [p.price for p in prices]
+        current_price = price_values[-1]
+        min_price = min(price_values)
+        max_price = max(price_values)
+        avg_price = sum(price_values) / len(price_values)
+        
+        # Calculate price change
+        if len(price_values) > 1:
+            price_change = current_price - price_values[0]
+            price_change_pct = (price_change / price_values[0]) * 100
+        else:
+            price_change = 0
+            price_change_pct = 0
+        
+        # Generate summary
+        summary = f"""
+Historical Price Summary ({len(prices)} data points):
+- Current Price: ${current_price:.2f}
+- Range: ${min_price:.2f} - ${max_price:.2f}
+- Average: ${avg_price:.2f}
+- Total Change: ${price_change:.2f} ({price_change_pct:+.2f}%)
+"""
+        
+        # Add inflection points
+        if inflection_points:
+            summary += "\nKey Inflection Points:\n"
+            for i, point in enumerate(inflection_points[:5], 1):  # Top 5 points
+                summary += f"{i}. {point.type.upper()}: ${point.price:.2f} at {point.timestamp.strftime('%Y-%m-%d %H:%M')} (significance: {point.significance:.2f})\n"
+        
+        return summary.strip()
+    
+    def _construct_final_prompt(self, price_summary: str, current_price: float, user_prompt: str) -> str:
+        """Construct the final prompt for Gemini API"""
+        system_prompt = """You are an expert financial analyst specializing in options trading and market analysis. 
+Analyze the provided market data and respond with a structured JSON format containing:
+
+{
+    "valid_price_range": {
+        "low": float,
+        "high": float
+    },
+    "analysis_summary": "string",
+    "confidence_level": float (0.0-1.0),
+    "key_insights": ["string"],
+    "risk_assessment": "string"
+}
+
+Focus on identifying key support/resistance levels and potential price movements for options trading decisions."""
+
+        final_prompt = f"""
+{system_prompt}
+
+MARKET DATA:
+{price_summary}
+
+CURRENT PRICE: ${current_price:.2f}
+
+USER ANALYSIS REQUEST:
+{user_prompt}
+
+Please provide your analysis in the specified JSON format.
+"""
+        
+        return final_prompt.strip()
+    
+    def _should_skip_cache(self, user_prompt: str, current_price: float) -> bool:
+        """Determine if we should skip cache and make a new API call"""
+        # Check if prompt has changed
+        prompt_hash = hash(user_prompt)
+        if prompt_hash != self.last_prompt_hash:
+            logger.info("User prompt changed - bypassing cache")
+            return True
+        
+        # Check if price is outside valid range
+        if self.last_analysis and self.last_analysis.valid_price_range:
+            low = self.last_analysis.valid_price_range.get('low', 0)
+            high = self.last_analysis.valid_price_range.get('high', float('inf'))
+            
+            if current_price < low or current_price > high:
+                logger.info(f"Price ${current_price:.2f} outside valid range [${low:.2f}, ${high:.2f}] - bypassing cache")
+                return True
+        
+        # Check cache duration
+        cache_duration = self.config.ai_prompt.get("cache_duration_minutes", 15)
+        if self.last_poll_time:
+            time_since_last = datetime.now() - self.last_poll_time
+            if time_since_last.total_seconds() > (cache_duration * 60):
+                logger.info(f"Cache expired ({cache_duration} minutes) - bypassing cache")
+                return True
+        
+        logger.info("Using cached analysis")
+        self.cache_status.emit("Using cached analysis")
+        return False
+    
+    @monitor_function("AI_ENGINE.call_gemini_api", threshold_ms=10000)
+    async def _call_gemini_api(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Make API call to Gemini"""
+        if not self.gemini_client:
+            raise Exception("Gemini API client not initialized")
+        
+        try:
+            logger.info("Making Gemini API call...")
+            response = await asyncio.to_thread(
+                self.gemini_client.generate_content,
+                prompt
+            )
+            
+            if not response.text:
+                raise Exception("Empty response from Gemini API")
+            
+            # Clean the response text to handle markdown-wrapped JSON
+            cleaned_text = self._extract_json_from_response(response.text)
+            
+            # Parse JSON response
+            try:
+                result = json.loads(cleaned_text)
+                logger.info("Successfully parsed Gemini API response")
+                return result
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {e}")
+                logger.error(f"Raw response: {response.text}")
+                logger.error(f"Cleaned text: {cleaned_text}")
+                raise Exception(f"Invalid JSON response from Gemini API: {e}")
+                
+        except Exception as e:
+            logger.error(f"Gemini API call failed: {e}")
+            raise
+    
+    def _extract_json_from_response(self, response_text: str) -> str:
+        """Extract JSON from response, handling markdown code blocks"""
+        text = response_text.strip()
+        
+        # Remove markdown code block markers
+        if text.startswith('```json'):
+            text = text[7:]  # Remove ```json
+        elif text.startswith('```'):
+            text = text[3:]  # Remove ```
+        
+        if text.endswith('```'):
+            text = text[:-3]  # Remove trailing ```
+        
+        return text.strip()
+    
+    def _parse_ai_response(self, response: Dict[str, Any]) -> AIAnalysisResult:
+        """Parse and validate AI response"""
+        try:
+            # Validate required fields
+            if 'valid_price_range' not in response:
+                raise ValueError("Missing 'valid_price_range' in AI response")
+            
+            price_range = response['valid_price_range']
+            if 'low' not in price_range or 'high' not in price_range:
+                raise ValueError("Invalid 'valid_price_range' format")
+            
+            # Create analysis result
+            result = AIAnalysisResult(
+                valid_price_range=price_range,
+                analysis_summary=response.get('analysis_summary', ''),
+                confidence_level=float(response.get('confidence_level', 0.5)),
+                key_insights=response.get('key_insights', []),
+                risk_assessment=response.get('risk_assessment', ''),
+                timestamp=datetime.now(),
+                raw_response=response
+            )
+            
+            logger.info(f"Parsed AI analysis: price range [${price_range['low']:.2f}, ${price_range['high']:.2f}]")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to parse AI response: {e}")
+            raise
+    
+    @monitor_function("AI_ENGINE.analyze_market_data", threshold_ms=15000)
+    def analyze_market_data(self, force_refresh: bool = False) -> Optional[AIAnalysisResult]:
+        """Main method to analyze market data with AI"""
+        try:
+            if self.is_polling and not force_refresh:
+                logger.debug("Analysis already in progress, skipping")
+                return None
+            
+            self.is_polling = True
+            self.polling_status.emit("Analysis in progress...")
+            
+            # Get current data
+            current_price = self._get_current_price()
+            if current_price <= 0:
+                raise Exception("No valid current price available")
+            
+            user_prompt = self.config.ai_prompt.get("prompt", "")
+            if not user_prompt.strip():
+                raise Exception("No user prompt configured")
+            
+            # Check cache
+            if not force_refresh and not self._should_skip_cache(user_prompt, current_price):
+                if self.last_analysis:
+                    self.analysis_ready.emit(self._analysis_result_to_dict(self.last_analysis))
+                    return self.last_analysis
+            
+            # Collect historical data
+            historical_prices = self.collect_historical_data()
+            inflection_points = self._identify_inflection_points(historical_prices)
+            
+            # Generate price summary
+            price_summary = self._generate_price_summary(historical_prices, inflection_points)
+            
+            # Construct final prompt
+            final_prompt = self._construct_final_prompt(price_summary, current_price, user_prompt)
+            
+            # Make API call
+            logger.info("Initiating AI analysis...")
+            logger.info(f"Final prompt: {final_prompt}")
+            response = asyncio.run(self._call_gemini_api(final_prompt))
+            
+            # Parse response
+            analysis_result = self._parse_ai_response(response)
+            
+            # Update cache
+            self.last_analysis = analysis_result
+            self.last_prompt_hash = hash(user_prompt)
+            self.last_poll_time = datetime.now()
+            
+            # Emit result
+            result_dict = self._analysis_result_to_dict(analysis_result)
+            logger.info(f"Result dict: {result_dict}")
+            self.analysis_ready.emit(result_dict)
+            
+            logger.info("AI analysis completed successfully")
+            self.polling_status.emit("Analysis completed")
+            self.cache_status.emit("Analysis cached")
+            
+            return analysis_result
+            
+        except Exception as e:
+            error_msg = f"AI analysis failed: {e}"
+            logger.error(error_msg)
+            self.analysis_error.emit(error_msg)
+            self.polling_status.emit("Analysis failed")
+            return None
+        
+        finally:
+            self.is_polling = False
+    
+    def _get_current_price(self) -> float:
+        """Get current price from data collector"""
+        try:
+            if self.data_collector and self.data_collector.collector:
+                return self.data_collector.collector.underlying_symbol_price or 0
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting current price: {e}")
+            return 0
+    
+    def _analysis_result_to_dict(self, result: AIAnalysisResult) -> Dict[str, Any]:
+        """Convert AIAnalysisResult to dictionary for signal emission"""
+        return {
+            'valid_price_range': result.valid_price_range,
+            'analysis_summary': result.analysis_summary,
+            'confidence_level': result.confidence_level,
+            'key_insights': result.key_insights,
+            'risk_assessment': result.risk_assessment,
+            'timestamp': result.timestamp.isoformat(),
+            'raw_response': result.raw_response
+        }
+    
+    def force_refresh(self):
+        """Force a refresh of AI analysis, bypassing cache"""
+        logger.info("Force refresh requested")
+        self.analyze_market_data(force_refresh=True)
+    
+    def update_config(self, new_config: AppConfig):
+        """Update configuration and restart polling if needed"""
+        old_polling_enabled = self.config.ai_prompt.get("enable_auto_polling", True)
+        new_polling_enabled = new_config.ai_prompt.get("enable_auto_polling", True)
+        
+        self.config = new_config
+        
+        # Restart polling if settings changed
+        if old_polling_enabled != new_polling_enabled:
+            if new_polling_enabled:
+                self._start_polling()
+            else:
+                self._stop_polling()
+        
+        # Reinitialize Gemini API if API key changed
+        old_api_key = self.config.ai_prompt.get("gemini_api_key", "")
+        new_api_key = new_config.ai_prompt.get("gemini_api_key", "")
+        if old_api_key != new_api_key:
+            self._setup_gemini_api()
+    
+    def get_last_analysis(self) -> Optional[Dict[str, Any]]:
+        """Get the last analysis result as a dictionary"""
+        if self.last_analysis:
+            return self._analysis_result_to_dict(self.last_analysis)
+        return None
+    
+    def get_cache_status(self) -> Dict[str, Any]:
+        """Get current cache status"""
+        return {
+            'has_cached_analysis': self.last_analysis is not None,
+            'last_poll_time': self.last_poll_time.isoformat() if self.last_poll_time else None,
+            'is_polling': self.is_polling,
+            'polling_enabled': self.config.ai_prompt.get("enable_auto_polling", True),
+            'cache_duration_minutes': self.config.ai_prompt.get("cache_duration_minutes", 15)
+        }
+    
+    def cleanup(self):
+        """Cleanup resources"""
+        self._stop_polling()
+        logger.info("AI Engine cleanup completed")
+    
+    # Backward compatibility methods
+    def refresh(self):
+        """Refresh the AI engine (backward compatibility)"""
+        self.config = AppConfig.load_from_file()
+        self._setup_gemini_api()
+    
     def get_ai_prompt(self):
-        return self.config.ai_prompt["prompt"]
+        """Get the current AI prompt (backward compatibility)"""
+        return self.config.ai_prompt.get("prompt", "")
     
     def get_ai_context(self):
-        return self.config.ai_prompt["context"]
+        """Get the current AI context (backward compatibility)"""
+        return self.config.ai_prompt.get("context", "")
     
     def set_ai_prompt(self, prompt: str):
+        """Set the AI prompt (backward compatibility)"""
         self.config.ai_prompt["prompt"] = prompt
+        self.config.save_to_file()
     
     def set_ai_context(self, context: str):
+        """Set the AI context (backward compatibility)"""
         self.config.ai_prompt["context"] = context
-    
-    def get_ai_response(self, prompt: str):
-        return self.get_ai_prompt() + prompt
-    
-    def get_ai_response_with_context(self, prompt: str):
-        return self.get_ai_prompt() + self.get_ai_context() + prompt
-    
-    def get_ai_response_with_context_and_prompt(self, prompt: str):
-        return self.config.ai_prompt["prompt"] + self.config.ai_prompt["context"] + prompt
+        self.config.save_to_file()

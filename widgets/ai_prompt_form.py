@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QGroupBox, QTextEdit, QPushButton, QMessageBox
 from PyQt5 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.ai_prompt_gui import Ui_AiPromptPanel
@@ -19,24 +19,165 @@ class AIPrompt_Form(QDialog):
             from utils.config_manager import AppConfig
             self.config = AppConfig()
             self.config.save_to_file()
-            
+        
+        # Create additional UI elements for new configuration options
+        self._create_advanced_ui()
+        
         self.ui.outputArea.textChanged.connect(self.on_prompt_input_changed)
         self.ui.submitBtn.clicked.connect(self.save_config_values)
+    
+    def _create_advanced_ui(self):
+        """Create additional UI elements for advanced AI configuration"""
+        try:
+            # Create a scroll area or additional widgets for advanced settings
+            # For now, we'll add them to the existing layout
+            main_layout = self.ui.verticalLayout
+            
+            # API Configuration Group
+            api_group = QGroupBox("Gemini API Configuration")
+            api_layout = QVBoxLayout()
+            
+            # API Key input
+            api_key_layout = QHBoxLayout()
+            api_key_label = QLabel("API Key:")
+            self.api_key_input = QLineEdit()
+            self.api_key_input.setEchoMode(QLineEdit.Password)
+            api_key_layout.addWidget(api_key_label)
+            api_key_layout.addWidget(self.api_key_input)
+            api_layout.addLayout(api_key_layout)
+            
+            api_group.setLayout(api_layout)
+            main_layout.addWidget(api_group)
+            
+            # Polling Configuration Group
+            polling_group = QGroupBox("Polling Configuration")
+            polling_layout = QVBoxLayout()
+            
+            # Enable auto polling
+            self.enable_polling_checkbox = QCheckBox("Enable Auto Polling")
+            polling_layout.addWidget(self.enable_polling_checkbox)
+            
+            # Polling interval
+            interval_layout = QHBoxLayout()
+            interval_label = QLabel("Polling Interval (minutes):")
+            self.interval_spinbox = QSpinBox()
+            self.interval_spinbox.setRange(1, 60)
+            self.interval_spinbox.setValue(10)
+            interval_layout.addWidget(interval_label)
+            interval_layout.addWidget(self.interval_spinbox)
+            polling_layout.addLayout(interval_layout)
+            
+            # Enable price-triggered polling
+            self.enable_price_trigger_checkbox = QCheckBox("Enable Price-Triggered Polling")
+            polling_layout.addWidget(self.enable_price_trigger_checkbox)
+            
+            # Cache duration
+            cache_layout = QHBoxLayout()
+            cache_label = QLabel("Cache Duration (minutes):")
+            self.cache_spinbox = QSpinBox()
+            self.cache_spinbox.setRange(1, 120)
+            self.cache_spinbox.setValue(15)
+            cache_layout.addWidget(cache_label)
+            cache_layout.addWidget(self.cache_spinbox)
+            polling_layout.addLayout(cache_layout)
+            
+            # Historical data days
+            history_layout = QHBoxLayout()
+            history_label = QLabel("Historical Data Days:")
+            self.history_spinbox = QSpinBox()
+            self.history_spinbox.setRange(1, 90)
+            self.history_spinbox.setValue(30)
+            history_layout.addWidget(history_label)
+            history_layout.addWidget(self.history_spinbox)
+            polling_layout.addLayout(history_layout)
+            
+            polling_group.setLayout(polling_layout)
+            main_layout.addWidget(polling_group)
+            
+            # Test AI Connection Button
+            test_button = QPushButton("Test AI Connection")
+            test_button.clicked.connect(self.test_ai_connection)
+            main_layout.addWidget(test_button)
+            
+        except Exception as e:
+            logger.error(f"Error creating advanced UI: {e}")
+    
+    def test_ai_connection(self):
+        """Test the AI connection with current settings"""
+        try:
+            from utils.ai_engine import AI_Engine
+            
+            # Create a temporary AI engine to test connection
+            temp_engine = AI_Engine(self.config)
+            
+            if temp_engine.gemini_client:
+                QMessageBox.information(self, "Connection Test", "Gemini API connection successful!")
+            else:
+                QMessageBox.warning(self, "Connection Test", "Gemini API not configured. Please enter a valid API key.")
+                
+        except Exception as e:
+            logger.error(f"Error testing AI connection: {e}")
+            QMessageBox.critical(self, "Connection Test", f"Connection test failed: {str(e)}")
     
     def load_config_values(self):
         """Load configuration values into the UI"""
         try:
+            # Load basic prompt
             self.ui.outputArea.setPlainText(self.config.ai_prompt.get("prompt", "You are a helpful assistant that can answer questions and help with tasks."))
+            
+            # Load advanced settings
+            if hasattr(self, 'api_key_input'):
+                self.api_key_input.setText(self.config.ai_prompt.get("gemini_api_key", ""))
+            
+            if hasattr(self, 'enable_polling_checkbox'):
+                self.enable_polling_checkbox.setChecked(self.config.ai_prompt.get("enable_auto_polling", True))
+            
+            if hasattr(self, 'interval_spinbox'):
+                self.interval_spinbox.setValue(self.config.ai_prompt.get("polling_interval_minutes", 10))
+            
+            if hasattr(self, 'enable_price_trigger_checkbox'):
+                self.enable_price_trigger_checkbox.setChecked(self.config.ai_prompt.get("enable_price_triggered_polling", True))
+            
+            if hasattr(self, 'cache_spinbox'):
+                self.cache_spinbox.setValue(self.config.ai_prompt.get("cache_duration_minutes", 15))
+            
+            if hasattr(self, 'history_spinbox'):
+                self.history_spinbox.setValue(self.config.ai_prompt.get("max_historical_days", 30))
+                
         except Exception as e:
             logger.error(f"Error loading configuration values: {e}")
     
     def save_config_values(self):
         """Save configuration values from the UI"""
         try:
+            # Save basic prompt
             self.config.ai_prompt["prompt"] = self.ui.outputArea.toPlainText()
+            
+            # Save advanced settings
+            if hasattr(self, 'api_key_input'):
+                self.config.ai_prompt["gemini_api_key"] = self.api_key_input.text()
+            
+            if hasattr(self, 'enable_polling_checkbox'):
+                self.config.ai_prompt["enable_auto_polling"] = self.enable_polling_checkbox.isChecked()
+            
+            if hasattr(self, 'interval_spinbox'):
+                self.config.ai_prompt["polling_interval_minutes"] = self.interval_spinbox.value()
+            
+            if hasattr(self, 'enable_price_trigger_checkbox'):
+                self.config.ai_prompt["enable_price_triggered_polling"] = self.enable_price_trigger_checkbox.isChecked()
+            
+            if hasattr(self, 'cache_spinbox'):
+                self.config.ai_prompt["cache_duration_minutes"] = self.cache_spinbox.value()
+            
+            if hasattr(self, 'history_spinbox'):
+                self.config.ai_prompt["max_historical_days"] = self.history_spinbox.value()
+            
             self.config.save_to_file()
+            logger.info("AI prompt configuration saved successfully")
+            
         except Exception as e:
             logger.error(f"Error saving configuration values: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to save configuration: {str(e)}")
         
         self.close()
     
