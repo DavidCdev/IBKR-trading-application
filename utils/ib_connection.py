@@ -2,7 +2,7 @@ import asyncio
 from typing import Optional, Dict, Any, List
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pytz
 from threading import Thread, Event
 import time
@@ -20,6 +20,7 @@ class IBDataCollector:
     """
     
     def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30, trading_config=None, account_config=None):
+        self.underlying_symbol_qualified = None
         self.ib = IB()
         self.trading_config = trading_config
         self.account_config = account_config
@@ -279,21 +280,10 @@ class IBDataCollector:
             underlying_symbol = Stock(symbol, 'SMART', 'USD')
             
             # Qualify the contract with timeout
-            try:
-                underlying_symbol_qualified = await asyncio.wait_for(
-                    self.ib.qualifyContractsAsync(underlying_symbol),
-                    timeout=20.0  # 20 second timeout
-                )
-                if not underlying_symbol_qualified or underlying_symbol_qualified[0] is None:
-                    logger.error(f"Could not qualify {symbol} contract")
-                    return None
-            except asyncio.TimeoutError:
-                logger.error(f"Contract qualification timeout for {symbol}")
-                return None
-            except Exception as e:
-                logger.error(f"Error qualifying contract for {symbol}: {e}")
-                return None
-            
+            underlying_symbol_qualified = await self.ib.qualifyContractsAsync(underlying_symbol)
+
+            self.underlying_symbol_qualified = underlying_symbol_qualified
+
             # Request market data and set up real-time updates
             underlying_symbol_ticker = self.ib.reqMktData(underlying_symbol_qualified[0])
             self._active_subscriptions.add(underlying_symbol_qualified[0])
@@ -1519,46 +1509,37 @@ class IBDataCollector:
                     return []
             logger.info(f"Getting historical data for {symbol} from {start_date} to {end_date}")
             # Create a Stock contract for the symbol
-
-            # Create stock contract
-            stock = Stock(symbol, 'SMART', 'USD')
-            logger.info(f"Stock: {stock}")
-            # Qualify the contract with timeout
-            qualified_contracts = self.ib.qualifyContractsAsync(stock)
+            print(f"Getting historical data for {symbol} from {start_date} to {end_date}")
+            # Create a Stock contract for the symbol
+            print(f"Qualified contracts: {self.underlying_symbol_qualified}")
+            qualified_contracts = self.underlying_symbol_qualified
             contract = qualified_contracts[0]
-            logger.info(f"Contract to get historical data: {contract}")
+            print(f"Contract: {contract}")
+            start_date = datetime.now() - timedelta(days=30)
+            end_date = datetime.now()
+
             # Format dates for IB API (YYYYMMDD HH:mm:ss)
             start_str = start_date.strftime('%Y%m%d %H:%M:%S')
             end_str = end_date.strftime('%Y%m%d %H:%M:%S')
-            
-            # Request historical data with timeout
+            print(f"Start date: {start_str}, End date: {end_str}")
+            # Request historical data
             # Using 1 day bars for daily data
-            try:
-                bars = await asyncio.wait_for(
-                    self.ib.reqHistoricalDataAsync(
-                        contract,
-                        end_str,
-                        f"{int((end_date - start_date).days)} D",  # Duration
-                        "1 day",  # Bar size
-                        "TRADES",  # What to show
-                        1,  # Use RTH
-                        1,  # Format date
-                        False,  # Keep up to date after bar
-                        []  # Chart options
-                    ),
-                    timeout=30.0  # 30 second timeout
-                )
-            except asyncio.TimeoutError:
-                logger.error(f"Historical data request timeout for {symbol}")
-                return []
-            except Exception as e:
-                logger.error(f"Error requesting historical data for {symbol}: {e}")
-                return []
-            
+            bars = await self.ib.reqHistoricalDataAsync(
+                contract,
+                end_str,
+                f"{int((end_date - start_date).days)} D",  # Duration
+                "1 day",  # Bar size
+                "TRADES",  # What to show
+                1,  # Use RTH
+                1,  # Format date
+                False,  # Keep up to date after bar
+                []  # Chart options
+            )
+            print(f"Bars: {bars}")
             if not bars:
-                logger.warning(f"No historical data returned for {symbol}")
-                return []
-            
+                print(f"No historical data returned for {contract.symbol}")
+                exit()
+
             # Convert bars to list of dictionaries
             historical_data = []
             for bar in bars:
@@ -1570,10 +1551,11 @@ class IBDataCollector:
                     'close': bar.close,
                     'volume': bar.volume
                 })
-            
-            logger.info(f"Retrieved {len(historical_data)} historical data points for {symbol}")
+
+            print(f"Retrieved {len(historical_data)} historical data points for {contract.symbol}")
+
             return historical_data
-            
+
         except Exception as e:
             logger.error(f"Error getting historical data for {symbol}: {e}")
             return []
