@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>731</width>
-    <height>529</height>
+    <height>534</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -832,7 +832,7 @@ QGroupBox::title {
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_ai">
          <property name="spacing">
-          <number>12</number>
+          <number>3</number>
          </property>
          <property name="topMargin">
           <number>20</number>
@@ -841,6 +841,12 @@ QGroupBox::title {
           <layout class="QHBoxLayout" name="horizontalLayout_ai_bias">
            <item>
             <widget class="QLabel" name="label_ai_bias_name">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
              <property name="text">
               <string>Bias:</string>
              </property>
@@ -849,21 +855,51 @@ QGroupBox::title {
            <item>
             <widget class="QLabel" name="label_ai_bias_value">
              <property name="text">
-              <string>Bullish</string>
+              <string>None</string>
              </property>
             </widget>
            </item>
           </layout>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_ai_strategy">
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_keylevel">
            <item>
-            <widget class="QLabel" name="label_ai_strategy_name">
+            <widget class="QLabel" name="label_ai_keylevel_name">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
              <property name="text">
-              <string>Strategy:</string>
+              <string>Key Level:</string>
              </property>
             </widget>
            </item>
+           <item>
+            <widget class="QLabel" name="label_ai_keylevel_value">
+             <property name="text">
+              <string>None</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_ai_strategy_name">
+           <property name="font">
+            <font>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="text">
+            <string>Strategy:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_strategy">
            <item>
             <widget class="QTextBrowser" name="textbrowser_ai_strategy_value">
              <property name="frameShape">
@@ -877,32 +913,20 @@ QGroupBox::title {
           </layout>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_ai_keylevel">
-           <item>
-            <widget class="QLabel" name="label_ai_keylevel_name">
-             <property name="text">
-              <string>Key Level:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="label_ai_keylevel_value">
-             <property name="text">
-              <string>$502.00</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
+          <widget class="QLabel" name="label_ai_alert_name">
+           <property name="font">
+            <font>
+             <weight>75</weight>
+             <bold>true</bold>
+            </font>
+           </property>
+           <property name="text">
+            <string>Alert:</string>
+           </property>
+          </widget>
          </item>
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_ai_alert">
-           <item>
-            <widget class="QLabel" name="label_ai_alert_name">
-             <property name="text">
-              <string>Alert:</string>
-             </property>
-            </widget>
-           </item>
            <item>
             <widget class="QTextBrowser" name="textbrowser_ai_alert_value">
              <property name="frameShape">
@@ -913,7 +937,7 @@ QGroupBox::title {
 &lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
 &lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p align=&quot;center&quot; style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;12&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+&lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
              </property>
              <property name="text" stdset="0">
               <string>⚠️ Unusual options volume detected in SPY 500C. Watch for sharp price swings at market open. Consider reducing position size if implied volatility rises above 25%.</string>
