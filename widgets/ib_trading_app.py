@@ -7,7 +7,7 @@ from utils.data_collector import DataCollectorWorker
 from utils.ai_engine import AI_Engine
 from utils.hotkey_manager import HotkeyManager
 
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, List
 from datetime import datetime
 from utils.smart_logger import get_logger, log_error_with_context
 from utils.performance_monitor import monitor_function
@@ -280,16 +280,177 @@ class IB_Trading_APP(QMainWindow):
             risk_assessment = analysis_data.get('risk_assessment', '')
             
             # Update UI with analysis results
-            # You can add specific UI elements to display this data
             logger.info(f"AI Analysis - Price Range: ${price_range.get('low', 0):.2f} - ${price_range.get('high', 0):.2f}")
             logger.info(f"AI Analysis - Confidence: {confidence_level:.2f}")
             logger.info(f"AI Analysis - Summary: {analysis_summary[:100]}...")
+            
+            # Update AI Insights UI elements
+            self._update_ai_insights_ui(analysis_data)
             
             # Store analysis for potential use by trading logic
             self.last_ai_analysis = analysis_data
             
         except Exception as e:
             logger.error(f"Error handling AI analysis: {e}")
+    
+    def _update_ai_insights_ui(self, analysis_data: Dict[str, Any]):
+        """Update the AI insights UI with analysis results"""
+        try:
+            # Extract data
+            price_range = analysis_data.get('valid_price_range', {})
+            analysis_summary = analysis_data.get('analysis_summary', '')
+            confidence_level = analysis_data.get('confidence_level', 0.0)
+            key_insights = analysis_data.get('key_insights', [])
+            risk_assessment = analysis_data.get('risk_assessment', '')
+            
+            # Determine AI bias based on analysis
+            ai_bias = self._determine_ai_bias(price_range, analysis_summary, key_insights)
+            
+            # Format key levels
+            key_levels = self._format_key_levels(price_range)
+            
+            # Format strategy text
+            strategy_text = self._format_strategy_text(analysis_summary, key_insights, confidence_level)
+            
+            # Format alert text
+            alert_text = self._format_alert_text(risk_assessment, key_insights)
+            
+            # Update UI elements
+            if hasattr(self.ui, 'label_ai_bias_value'):
+                self.ui.label_ai_bias_value.setText(ai_bias)
+            
+            if hasattr(self.ui, 'label_ai_keylevel_value'):
+                self.ui.label_ai_keylevel_value.setText(key_levels)
+            
+            if hasattr(self.ui, 'textbrowser_ai_strategy_value'):
+                self.ui.textbrowser_ai_strategy_value.setPlainText(strategy_text)
+            
+            if hasattr(self.ui, 'textbrowser_ai_alert_value'):
+                self.ui.textbrowser_ai_alert_value.setPlainText(alert_text)
+            
+            logger.info("AI insights UI updated successfully")
+            
+        except Exception as e:
+            logger.error(f"Error updating AI insights UI: {e}")
+    
+    def _determine_ai_bias(self, price_range: Dict[str, float], analysis_summary: str, key_insights: List[str]) -> str:
+        """Determine AI bias (Bullish/Bearish/Neutral) based on analysis"""
+        try:
+            # Get current price
+            current_price = 0
+            if hasattr(self, 'data_worker') and self.data_worker and self.data_worker.collector:
+                current_price = self.data_worker.collector.underlying_symbol_price or 0
+            
+            if current_price <= 0:
+                return "Neutral"
+            
+            low_price = price_range.get('low', 0)
+            high_price = price_range.get('high', 0)
+            
+            if low_price <= 0 or high_price <= 0:
+                return "Neutral"
+            
+            # Calculate price position relative to range
+            range_mid = (low_price + high_price) / 2
+            range_size = high_price - low_price
+            
+            if range_size <= 0:
+                return "Neutral"
+            
+            # Determine bias based on current price position and analysis content
+            price_position = (current_price - low_price) / range_size
+            
+            # Check analysis content for bias indicators
+            summary_lower = analysis_summary.lower()
+            insights_text = ' '.join(key_insights).lower()
+            
+            bullish_indicators = ['bullish', 'bull', 'upward', 'higher', 'support', 'buy', 'long']
+            bearish_indicators = ['bearish', 'bear', 'downward', 'lower', 'resistance', 'sell', 'short']
+            
+            bullish_count = sum(1 for indicator in bullish_indicators if indicator in summary_lower or indicator in insights_text)
+            bearish_count = sum(1 for indicator in bearish_indicators if indicator in summary_lower or indicator in insights_text)
+            
+            # Combine price position and text analysis
+            if price_position > 0.6 and bullish_count > bearish_count:
+                return "Bullish"
+            elif price_position < 0.4 and bearish_count > bullish_count:
+                return "Bearish"
+            else:
+                return "Neutral"
+                
+        except Exception as e:
+            logger.error(f"Error determining AI bias: {e}")
+            return "Neutral"
+    
+    def _format_key_levels(self, price_range: Dict[str, float]) -> str:
+        """Format key price levels for display"""
+        try:
+            low_price = price_range.get('low', 0)
+            high_price = price_range.get('high', 0)
+            
+            if low_price <= 0 or high_price <= 0:
+                return "N/A"
+            
+            return f"${low_price:.2f} - ${high_price:.2f}"
+            
+        except Exception as e:
+            logger.error(f"Error formatting key levels: {e}")
+            return "N/A"
+    
+    def _format_strategy_text(self, analysis_summary: str, key_insights: List[str], confidence_level: float) -> str:
+        """Format strategy text for display"""
+        try:
+            strategy_parts = []
+            
+            # Add confidence level
+            confidence_text = f"Confidence: {confidence_level:.1%}"
+            strategy_parts.append(confidence_text)
+            
+            # Add analysis summary (truncated if too long)
+            if analysis_summary:
+                summary_text = analysis_summary[:200] + "..." if len(analysis_summary) > 200 else analysis_summary
+                strategy_parts.append(f"Analysis: {summary_text}")
+            
+            # Add key insights
+            if key_insights:
+                insights_text = "\n".join([f"• {insight}" for insight in key_insights[:3]])  # Limit to 3 insights
+                strategy_parts.append(f"Key Insights:\n{insights_text}")
+            
+            return "\n\n".join(strategy_parts)
+            
+        except Exception as e:
+            logger.error(f"Error formatting strategy text: {e}")
+            return "Strategy analysis unavailable"
+    
+    def _format_alert_text(self, risk_assessment: str, key_insights: List[str]) -> str:
+        """Format alert text for display"""
+        try:
+            alert_parts = []
+            
+            # Add risk assessment
+            if risk_assessment:
+                alert_parts.append(f"Risk Assessment:\n{risk_assessment}")
+            
+            # Add any high-priority insights as alerts
+            high_priority_keywords = ['warning', 'caution', 'risk', 'danger', 'alert', 'critical']
+            high_priority_insights = []
+            
+            for insight in key_insights:
+                insight_lower = insight.lower()
+                if any(keyword in insight_lower for keyword in high_priority_keywords):
+                    high_priority_insights.append(f"⚠️ {insight}")
+            
+            if high_priority_insights:
+                alert_parts.append("Alerts:\n" + "\n".join(high_priority_insights[:2]))  # Limit to 2 alerts
+            
+            if not alert_parts:
+                alert_parts.append("No immediate alerts")
+            
+            return "\n\n".join(alert_parts)
+            
+        except Exception as e:
+            logger.error(f"Error formatting alert text: {e}")
+            return "Alert information unavailable"
     
     def on_ai_analysis_error(self, error_message: str):
         """Handle AI analysis errors"""
