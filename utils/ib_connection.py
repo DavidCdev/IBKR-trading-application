@@ -334,37 +334,37 @@ class IBDataCollector:
                     asyncio.create_task(self._switch_option_subscriptions(new_strike=new_strike))
             
             # Emit signal for UI update if we have a data worker
-            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'price_updated'):
-                self.data_worker.price_updated.emit({
-                    'symbol': symbol or self.underlying_symbol,
-                    'price': self.underlying_symbol_price,
-                    'timestamp': datetime.now().isoformat()
-                })
+                if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'price_updated'):
+                    self.data_worker.price_updated.emit({
+                        'symbol': symbol or self.underlying_symbol,
+                        'price': self.underlying_symbol_price,
+                        'timestamp': datetime.now().isoformat()
+                    })
             
-            # Update trading manager with underlying price
-            if hasattr(self, 'trading_manager'):
-                self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
-                
-            # Recalculate active positions PnL in real-time based on latest underlying price
-            if self.pos and self.underlying_symbol_price > 0:
-                try:
-                    # Get current positions and recalculate PnL
-                    positions = self.ib.positions()
-                    for position in positions:
-                        if position.contract and getattr(position.contract, 'symbol', None) == (symbol or self.underlying_symbol):
-                            # Use synchronous PnL calculation
-                            pnl_result = self._calculate_position_pnl_sync(position, self.underlying_symbol_price)
-                            if pnl_result and hasattr(self, 'data_worker') and hasattr(self.data_worker, 'active_contracts_pnl_refreshed'):
-                                self.data_worker.active_contracts_pnl_refreshed.emit({
-                                    'pnl_percent': pnl_result['pnl_percent'],
-                                    'pnl_dollar': pnl_result['pnl_dollar'],
-                                    'symbol': pnl_result['symbol'],
-                                    'position_size': pnl_result['position_size']
-                                })
-                            break
-                except Exception as pnl_err:
-                    logger.warning(f"Error recalculating PnL: {pnl_err}")
-                
+                # Update trading manager with underlying price
+                if hasattr(self, 'trading_manager'):
+                    self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
+                    
+                # Recalculate active positions PnL in real-time based on latest underlying price
+                if self.pos and self.underlying_symbol_price > 0:
+                    try:
+                        # Get current positions and recalculate PnL
+                        positions = self.ib.positions()
+                        for position in positions:
+                            if position.contract and getattr(position.contract, 'symbol', None) == (symbol or self.underlying_symbol):
+                                # Use synchronous PnL calculation
+                                pnl_result = self._calculate_position_pnl_sync(position, self.underlying_symbol_price)
+                                if pnl_result and hasattr(self, 'data_worker') and hasattr(self.data_worker, 'active_contracts_pnl_refreshed'):
+                                    self.data_worker.active_contracts_pnl_refreshed.emit({
+                                        'pnl_percent': pnl_result['pnl_percent'],
+                                        'pnl_dollar': pnl_result['pnl_dollar'],
+                                        'symbol': pnl_result['symbol'],
+                                        'position_size': pnl_result['position_size']
+                                    })
+                                break
+                    except Exception as pnl_err:
+                        logger.warning(f"Error recalculating PnL: {pnl_err}")
+                    
         except Exception as e:
             logger.error(f"Error in price update callback: {e}")
 
@@ -389,26 +389,29 @@ class IBDataCollector:
     def _on_fx_ratio_update(self, ticker):
         """Callback handler for real-time USD/CAD ratio updates"""
         if ticker.last and ticker.last > 0:
-            self.fx_ratio = ticker.last
-            logger.info(f"USD/CAD Ratio (last): {self.fx_ratio}")
+            new_ratio = ticker.last
+            logger.info(f"USD/CAD Ratio (last): {new_ratio}")
         elif ticker.close and ticker.close > 0:
-            self.fx_ratio = ticker.close
-            logger.info(f"USD/CAD Ratio (close): {self.fx_ratio}")
+            new_ratio = ticker.close
+            logger.info(f"USD/CAD Ratio (close): {new_ratio}")
 
         elif ticker.bid and ticker.ask:
-            self.fx_ratio = (ticker.bid + ticker.ask) / 2
-            logger.info(f"USD/CAD Ratio (mid): {self.fx_ratio}")
+            new_ratio = (ticker.bid + ticker.ask) / 2
+            logger.info(f"USD/CAD Ratio (mid): {new_ratio}")
             
         else:
-            self.fx_ratio = 0
-            logger.info(f"USD/CAD Ratio (no data): {self.fx_ratio}")
+            new_ratio = 0
+            logger.info(f"USD/CAD Ratio (no data): {new_ratio}")
             
-        if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'fx_rate_updated'):
-            self.data_worker.fx_rate_updated.emit({
-                'symbol': 'USDCAD',
-                'rate': self.fx_ratio,
-                'timestamp': datetime.now().isoformat()
-            })
+        # Emit only when the ratio actually changes
+        if new_ratio != self.fx_ratio:
+            self.fx_ratio = new_ratio
+            if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'fx_rate_updated'):
+                self.data_worker.fx_rate_updated.emit({
+                    'symbol': 'USDCAD',
+                    'rate': self.fx_ratio,
+                    'timestamp': datetime.now().isoformat()
+                })
     
     async def get_option_chain(self) -> pd.DataFrame:
         """Get option chain data with improved error handling and validation"""
@@ -762,54 +765,59 @@ class IBDataCollector:
     # Define an event handler for P&L updates
     def on_pnl_update(self, pnl_obj):
         print(f"P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
-        self.daily_pnl = pnl_obj.dailyPnL
-        daily_pnl_percent = 100 * self.daily_pnl / (self.account_liquidation - self.daily_pnl)
-        self.data_worker.daily_pnl_update.emit({
-            'daily_pnl_price': self.daily_pnl,
-            'daily_pnl_percent': daily_pnl_percent
-        })
-        
-        # Update trading manager with daily PnL data
-        if hasattr(self, 'trading_manager'):
-            self.trading_manager.update_market_data(daily_pnl_percent=daily_pnl_percent)
+        new_daily_pnl = pnl_obj.dailyPnL
+        if new_daily_pnl != self.daily_pnl:
+            self.daily_pnl = new_daily_pnl
+            daily_pnl_percent = 100 * self.daily_pnl / (self.account_liquidation - self.daily_pnl)
+            self.data_worker.daily_pnl_update.emit({
+                'daily_pnl_price': self.daily_pnl,
+                'daily_pnl_percent': daily_pnl_percent
+            })
+            # Update trading manager with daily PnL data
+            if hasattr(self, 'trading_manager'):
+                self.trading_manager.update_market_data(daily_pnl_percent=daily_pnl_percent)
 
     def on_account_summary_update(self, account_summary):
+        new_account_liquidation = 0
         for item in account_summary:
             if item.tag == 'NetLiquidation':
-                self.account_liquidation = float(item.value)
+                new_account_liquidation = float(item.value)
                 break
-        starting_value = self.account_liquidation - self.daily_pnl
-        # Treat high_water_mark as a value in currency units consistently
-        high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
-        logger.info(f"High water mark: {high_water_mark}")
+            
+        if new_account_liquidation != self.account_liquidation:
+            self.account_liquidation = new_account_liquidation
+            starting_value = self.account_liquidation - self.daily_pnl
+            # Treat high_water_mark as a value in currency units consistently
+            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
+            logger.info(f"High water mark: {high_water_mark}")
 
-        if high_water_mark is None:
-            high_water_mark = self.account_liquidation
-        else:
-            try:
-                high_water_mark = float(high_water_mark)
-            except Exception:
-                # If persisted as string previously, coerce to float
+            if high_water_mark is None:
                 high_water_mark = self.account_liquidation
+            else:
+                try:
+                    high_water_mark = float(high_water_mark)
+                except Exception:
+                    # If persisted as string previously, coerce to float
+                    high_water_mark = self.account_liquidation
 
-        if self.account_liquidation > high_water_mark:
-            high_water_mark = self.account_liquidation
-            if self.account_config is not None:
-                self.account_config['high_water_mark'] = high_water_mark
-            logger.info(f"High water mark updated to {high_water_mark}")
+            if self.account_liquidation > high_water_mark:
+                high_water_mark = self.account_liquidation
+                if self.account_config is not None:
+                    self.account_config['high_water_mark'] = high_water_mark
+                logger.info(f"High water mark updated to {high_water_mark}")
 
-        # Create DataFrame with common metrics
-        metrics = {
-            'NetLiquidation': self.account_liquidation,
-            'StartingValue': starting_value,
-            'HighWaterMark': high_water_mark,
-        }
-        logger.info(f"Updated Account Metrics: {metrics}")
-        self.data_worker.account_summary_update.emit(metrics)
-        
-        # Update trading manager with account value
-        if hasattr(self, 'trading_manager'):
-            self.trading_manager.update_market_data(account_value=self.account_liquidation)
+            # Create DataFrame with common metrics
+            metrics = {
+                'NetLiquidation': self.account_liquidation,
+                'StartingValue': starting_value,
+                'HighWaterMark': high_water_mark,
+            }
+            logger.info(f"Updated Account Metrics: {metrics}")
+            self.data_worker.account_summary_update.emit(metrics)
+            
+            # Update trading manager with account value
+            if hasattr(self, 'trading_manager'):
+                self.trading_manager.update_market_data(account_value=self.account_liquidation)
 
 
     async def get_account_metrics(self) -> pd.DataFrame:
