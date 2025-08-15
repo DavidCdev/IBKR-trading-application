@@ -817,15 +817,40 @@ class IBDataCollector:
         High water mark is tracked consistently as a realized PnL value (currency units).
         """
         try:
+            # Check connection first
+            if not self.ib.isConnected():
+                logger.error("Not connected to IB when getting account metrics")
+                return pd.DataFrame()
+            
             # Get account summary
-            account = (self.ib.managedAccounts())[0]  # Get first managed account
-
+            try:
+                managed_accounts = self.ib.managedAccounts()
+                if not managed_accounts:
+                    logger.error("No managed accounts found")
+                    return pd.DataFrame()
+                account = managed_accounts[0]  # Get first managed account
+                logger.info(f"Account: {account}")
+            except Exception as e:
+                logger.error(f"Error getting managed accounts: {e}")
+                return pd.DataFrame()
+            
             # Subscribe to P&L updates for the account
-            pnl = self.ib.reqPnL(account)
-            self.ib.pnlEvent += self.on_pnl_update
-            self.ib.accountSummaryEvent += self.on_account_summary_update
+            try:
+                pnl = self.ib.reqPnL(account)
+                logger.info(f"P&L request submitted: {pnl}")
+                self.ib.pnlEvent += self.on_pnl_update
+                self.ib.accountSummaryEvent += self.on_account_summary_update
+            except Exception as e:
+                logger.warning(f"Error requesting P&L updates: {e}")
+                # Continue without P&L updates
 
-            account_values = await self.ib.accountSummaryAsync()
+            # Get account summary values
+            try:
+                account_values = await self.ib.accountSummaryAsync()
+                logger.info(f"Received {len(account_values) if account_values else 0} account values")
+            except Exception as e:
+                logger.error(f"Error getting account summary: {e}")
+                return pd.DataFrame()
 
             if not account_values:
                 logger.warning("No account values received")
@@ -839,8 +864,16 @@ class IBDataCollector:
                 except Exception as e:
                     logger.warning(f"Error processing account value {value.tag}: {e}")
                     continue
-            self.account_liquidation = float(account_data.get('NetLiquidation', 0) or 0)
-            starting_value = self.account_liquidation - self.daily_pnl
+            
+            # Extract key values with better error handling
+            try:
+                self.account_liquidation = float(account_data.get('NetLiquidation', 0) or 0)
+                starting_value = self.account_liquidation - self.daily_pnl
+                logger.info(f"Account liquidation: {self.account_liquidation}, Starting value: {starting_value}")
+            except Exception as e:
+                logger.error(f"Error processing account liquidation value: {e}")
+                self.account_liquidation = 0
+                starting_value = 0
 
             # Treat high_water_mark as a value in currency units consistently
             high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
@@ -874,6 +907,8 @@ class IBDataCollector:
 
         except Exception as e:
             logger.error(f"Error getting account metrics: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return pd.DataFrame()
 
     async def get_today_option_executions(self, symbol='SPY'):
