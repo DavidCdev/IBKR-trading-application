@@ -309,15 +309,18 @@ class IBDataCollector:
         """Callback handler for real-time underlying symbol price updates"""
         try:
             old_price = self.underlying_symbol_price
-            
+            ticker_type = ""
             if ticker.last and ticker.last > 0:
                 self.underlying_symbol_price = float(ticker.last)
+                ticker_type = "last"
                 # logger.info(f"Real-time {symbol or self.underlying_symbol} Last Price: ${self.underlying_symbol_price}")
             elif ticker.close and ticker.close > 0:
                 self.underlying_symbol_price = float(ticker.close)
+                ticker_type = "close"
                 # logger.info(f"Real-time {symbol or self.underlying_symbol} Previous Close: ${self.underlying_symbol_price}")
             elif ticker.bid and ticker.ask:
                 self.underlying_symbol_price = float((ticker.bid + ticker.ask) / 2)
+                ticker_type = "mid"
                 # logger.info(f"Real-time {symbol or self.underlying_symbol} Mid Price: ${self.underlying_symbol_price:.2f} (Bid: ${ticker.bid}, Ask: ${ticker.ask})")
             else:
                 logger.debug("No real-time price data available")
@@ -329,7 +332,7 @@ class IBDataCollector:
             if old_price != self.underlying_symbol_price and self.underlying_symbol_price > 0:
                 new_strike = self._calculate_nearest_strike(self.underlying_symbol_price)
                 if self._should_update_strike(new_strike):
-                    logger.info(f"Underlying price changed from ${old_price:.2f} to ${self.underlying_symbol_price:.2f}, new strike: {new_strike}")
+                    logger.info(f"Underlying price changed from ${old_price:.2f} to type: {ticker_type}  ${self.underlying_symbol_price:.2f}, new strike: {new_strike}")
                     # Schedule strike update
                     asyncio.create_task(self._switch_option_subscriptions(new_strike=new_strike))
             
@@ -1509,9 +1512,6 @@ class IBDataCollector:
                     return []
             logger.info(f"Getting historical data for {symbol} from {start_date} to {end_date}")
             # Create a Stock contract for the symbol
-            print(f"Getting historical data for {symbol} from {start_date} to {end_date}")
-            # Create a Stock contract for the symbol
-            print(f"Qualified contracts: {self.underlying_symbol_qualified}")
             qualified_contracts = self.underlying_symbol_qualified
             contract = qualified_contracts[0]
             print(f"Contract: {contract}")
