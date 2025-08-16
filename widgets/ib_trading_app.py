@@ -108,7 +108,7 @@ class IB_Trading_APP(QMainWindow):
                 logger.error(f"AI Prompt UI file not found: {ai_ui_file_path}")
                 raise FileNotFoundError(f"AI Prompt UI file not found: {ai_ui_file_path}")
             
-            self.ai_prompt_ui = AIPrompt_Form(self.config)
+            self.ai_prompt_ui = AIPrompt_Form(self.config, self.refresh_ai)
             logger.info("AIPrompt_Form initialized successfully")
             
             # Connect form signals
@@ -471,7 +471,7 @@ class IB_Trading_APP(QMainWindow):
         if not hasattr(self, 'ai_prompt_ui') or self.ai_prompt_ui is None:
             logger.error("AI Prompt UI not available - attempting to reinitialize...")
             try:
-                self.ai_prompt_ui = AIPrompt_Form(self.config)
+                self.ai_prompt_ui = AIPrompt_Form(self.config, self.refresh_ai)
                 logger.info("AIPrompt_Form reinitialized successfully")
             except Exception as e:
                 logger.error(f"Failed to reinitialize AIPrompt_Form: {e}")

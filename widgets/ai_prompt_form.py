@@ -8,11 +8,12 @@ from utils.smart_logger import get_logger
 logger = get_logger("AI_PROMPT")
 
 class AIPrompt_Form(QDialog):
-    def __init__(self, config: AppConfig = None):
+    def __init__(self, config: AppConfig = None, refresh_callback=None):
         super().__init__()
         self.ui = Ui_AiPromptPanel()
         self.ui.setupUi(self)
         self.config = config
+        self.refresh_callback = refresh_callback  # Store the refresh callback
         if self.config:
             self.load_config_values()
         else:
@@ -94,22 +95,12 @@ class AIPrompt_Form(QDialog):
         try:
             logger.info("Executing auto polling...")
             
-            # Get the current prompt from the UI
-            current_prompt = self.ui.outputArea.toPlainText()
-            if not current_prompt.strip():
-                logger.warning("No prompt configured for auto polling")
-                return
-            
-            # Create AI engine and execute the prompt
-            from utils.ai_engine import AI_Engine
-            ai_engine = AI_Engine(self.config)
-            
-            # Execute the prompt (you may need to adjust this based on your AI engine implementation)
-            if hasattr(ai_engine, 'execute_prompt'):
-                result = ai_engine.execute_prompt(current_prompt)
-                logger.info(f"Auto polling executed successfully: {result}")
+            # Check if we have a refresh callback
+            if self.refresh_callback:
+                logger.info("Calling refresh callback for auto polling...")
+                self.refresh_callback()
             else:
-                logger.warning("AI engine does not have execute_prompt method")
+                logger.warning("No refresh callback available for auto polling")
                 
         except Exception as e:
             logger.error(f"Error executing auto polling: {e}")
