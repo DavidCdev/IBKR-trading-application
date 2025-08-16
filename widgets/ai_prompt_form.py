@@ -1,4 +1,5 @@
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QGroupBox, QTextEdit, QPushButton, QMessageBox
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QGroupBox, QTextEdit, QPushButton, QMessageBox, QSpacerItem, QSizePolicy
+from PyQt6.QtCore import Qt
 from PyQt6 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.ai_prompt_gui import Ui_AiPromptPanel
@@ -29,9 +30,16 @@ class AIPrompt_Form(QDialog):
     def _create_advanced_ui(self):
         """Create additional UI elements for advanced AI configuration"""
         try:
+            logger.info("Creating advanced UI...")
             # Create a scroll area or additional widgets for advanced settings
             # For now, we'll add them to the existing layout
             main_layout = self.ui.verticalLayout
+            logger.info(f"Main layout: {main_layout}")
+            
+            # Add some spacing before advanced UI
+            spacer = QSpacerItem(20, 10, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+            main_layout.addItem(spacer)
+            logger.info("Added spacer")
             
             # API Configuration Group
             api_group = QGroupBox("Gemini API Configuration")
@@ -41,13 +49,14 @@ class AIPrompt_Form(QDialog):
             api_key_layout = QHBoxLayout()
             api_key_label = QLabel("API Key:")
             self.api_key_input = QLineEdit()
-            self.api_key_input.setEchoMode(QLineEdit.Password)
+            self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
             api_key_layout.addWidget(api_key_label)
             api_key_layout.addWidget(self.api_key_input)
             api_layout.addLayout(api_key_layout)
             
             api_group.setLayout(api_layout)
             main_layout.addWidget(api_group)
+            logger.info("Added API configuration group")
             
             # Polling Configuration Group
             polling_group = QGroupBox("Polling Configuration")
@@ -93,14 +102,47 @@ class AIPrompt_Form(QDialog):
             
             polling_group.setLayout(polling_layout)
             main_layout.addWidget(polling_group)
+            logger.info("Added polling configuration group")
             
             # Test AI Connection Button
             test_button = QPushButton("Test AI Connection")
             test_button.clicked.connect(self.test_ai_connection)
             main_layout.addWidget(test_button)
+            logger.info("Added test button")
+            
+            # Resize the dialog to accommodate all widgets
+            self.resize(500, 600)
+            logger.info("Advanced UI creation completed successfully")
+            
+            # Verify widgets were created
+            self._verify_advanced_ui()
             
         except Exception as e:
             logger.error(f"Error creating advanced UI: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+    
+    def _verify_advanced_ui(self):
+        """Verify that advanced UI widgets were created and are visible"""
+        try:
+            widgets_to_check = [
+                ('api_key_input', 'API Key Input'),
+                ('enable_polling_checkbox', 'Enable Polling Checkbox'),
+                ('interval_spinbox', 'Interval Spinbox'),
+                ('enable_price_trigger_checkbox', 'Price Trigger Checkbox'),
+                ('cache_spinbox', 'Cache Spinbox'),
+                ('history_spinbox', 'History Spinbox')
+            ]
+            
+            for attr_name, display_name in widgets_to_check:
+                if hasattr(self, attr_name):
+                    widget = getattr(self, attr_name)
+                    logger.info(f"{display_name}: {widget} - Visible: {widget.isVisible()}")
+                else:
+                    logger.warning(f"{display_name}: Not found")
+                    
+        except Exception as e:
+            logger.error(f"Error verifying advanced UI: {e}")
     
     def test_ai_connection(self):
         """Test the AI connection with current settings"""

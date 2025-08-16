@@ -476,7 +476,7 @@ class IB_Trading_APP(QMainWindow):
             except Exception as e:
                 logger.error(f"Failed to reinitialize AIPrompt_Form: {e}")
                 return
-        self.ai_prompt_ui.exec_()
+        self.ai_prompt_ui.exec()
 
     def _close_setting_form(self):
         if hasattr(self, 'setting_ui') and self.setting_ui:
