@@ -253,7 +253,7 @@ class IB_Trading_APP(QMainWindow):
         # Reload config values into UI before showing
         if hasattr(self.setting_ui, 'load_config_values'):
             self.setting_ui.load_config_values()
-        self.setting_ui.exec_()
+        self.setting_ui.exec()
 
     def refresh_ai(self):
         """Refresh the AI engine"""

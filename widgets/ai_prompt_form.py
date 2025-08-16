@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QGroupBox, QTextEdit, QPushButton, QMessageBox, QSpacerItem, QSizePolicy
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.ai_prompt_gui import Ui_AiPromptPanel
@@ -21,11 +21,107 @@ class AIPrompt_Form(QDialog):
             self.config = AppConfig()
             self.config.save_to_file()
         
+        # Initialize polling timer
+        self.polling_timer = QTimer()
+        self.polling_timer.timeout.connect(self.execute_auto_polling)
+        
         # Create additional UI elements for new configuration options
         self._create_advanced_ui()
         
         self.ui.outputArea.textChanged.connect(self.on_prompt_input_changed)
         self.ui.submitBtn.clicked.connect(self.save_config_values)
+        
+        # Connect polling checkbox to start/stop polling
+        if hasattr(self, 'enable_polling_checkbox'):
+            self.enable_polling_checkbox.toggled.connect(self.on_polling_toggled)
+            self.interval_spinbox.valueChanged.connect(self.on_interval_changed)
+        
+        # Start polling if it was enabled in config
+        self.start_polling_if_enabled()
+    
+    def start_polling_if_enabled(self):
+        """Start polling if it was enabled in the configuration"""
+        try:
+            if hasattr(self, 'enable_polling_checkbox') and self.enable_polling_checkbox.isChecked():
+                self.start_polling()
+        except Exception as e:
+            logger.error(f"Error starting polling: {e}")
+    
+    def on_polling_toggled(self, checked):
+        """Handle polling checkbox toggle"""
+        try:
+            if checked:
+                self.start_polling()
+                logger.info("Auto polling started")
+            else:
+                self.stop_polling()
+                logger.info("Auto polling stopped")
+        except Exception as e:
+            logger.error(f"Error toggling polling: {e}")
+    
+    def on_interval_changed(self, value):
+        """Handle polling interval change"""
+        try:
+            if self.polling_timer.isActive():
+                self.start_polling()  # Restart with new interval
+                logger.info(f"Polling interval updated to {value} minutes")
+        except Exception as e:
+            logger.error(f"Error updating polling interval: {e}")
+    
+    def start_polling(self):
+        """Start the polling timer"""
+        try:
+            if hasattr(self, 'interval_spinbox'):
+                interval_minutes = self.interval_spinbox.value()
+                interval_ms = interval_minutes * 60 * 1000  # Convert to milliseconds
+                
+                self.polling_timer.stop()
+                self.polling_timer.start(interval_ms)
+                logger.info(f"Polling timer started with {interval_minutes} minute interval")
+        except Exception as e:
+            logger.error(f"Error starting polling timer: {e}")
+    
+    def stop_polling(self):
+        """Stop the polling timer"""
+        try:
+            self.polling_timer.stop()
+            logger.info("Polling timer stopped")
+        except Exception as e:
+            logger.error(f"Error stopping polling timer: {e}")
+    
+    def execute_auto_polling(self):
+        """Execute the automatic polling when timer triggers"""
+        try:
+            logger.info("Executing auto polling...")
+            
+            # Get the current prompt from the UI
+            current_prompt = self.ui.outputArea.toPlainText()
+            if not current_prompt.strip():
+                logger.warning("No prompt configured for auto polling")
+                return
+            
+            # Create AI engine and execute the prompt
+            from utils.ai_engine import AI_Engine
+            ai_engine = AI_Engine(self.config)
+            
+            # Execute the prompt (you may need to adjust this based on your AI engine implementation)
+            if hasattr(ai_engine, 'execute_prompt'):
+                result = ai_engine.execute_prompt(current_prompt)
+                logger.info(f"Auto polling executed successfully: {result}")
+            else:
+                logger.warning("AI engine does not have execute_prompt method")
+                
+        except Exception as e:
+            logger.error(f"Error executing auto polling: {e}")
+    
+    def closeEvent(self, event):
+        """Handle dialog close event to stop polling"""
+        try:
+            self.stop_polling()
+            event.accept()
+        except Exception as e:
+            logger.error(f"Error in closeEvent: {e}")
+            event.accept()
     
     def _create_advanced_ui(self):
         """Create additional UI elements for advanced AI configuration"""
@@ -216,6 +312,13 @@ class AIPrompt_Form(QDialog):
             
             self.config.save_to_file()
             logger.info("AI prompt configuration saved successfully")
+            
+            # Update polling based on saved configuration
+            if hasattr(self, 'enable_polling_checkbox'):
+                if self.enable_polling_checkbox.isChecked():
+                    self.start_polling()
+                else:
+                    self.stop_polling()
             
         except Exception as e:
             logger.error(f"Error saving configuration values: {e}")

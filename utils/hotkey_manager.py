@@ -1,7 +1,7 @@
 import sys
 import platform
 from typing import Callable, Dict, Any
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, Qt
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QKeySequence
 from .smart_logger import get_logger
@@ -235,22 +235,22 @@ class HotkeyManager(QObject):
             parts = hotkey_string.split("+")
             
             # Check modifiers
-            if "Ctrl" in parts and not (modifiers & 0x04000000):  # Qt.ControlModifier
+            if "Ctrl" in parts and not (modifiers & Qt.KeyboardModifier.ControlModifier):
                 return False
-            if "Alt" in parts and not (modifiers & 0x08000000):  # Qt.AltModifier
+            if "Alt" in parts and not (modifiers & Qt.KeyboardModifier.AltModifier):
                 return False
-            if "Cmd" in parts and not (modifiers & 0x10000000):  # Qt.MetaModifier
+            if "Cmd" in parts and not (modifiers & Qt.KeyboardModifier.MetaModifier):
                 return False
             
             # Check the key
             key_char = parts[-1].upper()
-            if key_char == "P" and key == 0x50:  # Qt.Key_P
+            if key_char == "P" and key == Qt.Key.Key_P:
                 return True
-            elif key_char == "C" and key == 0x43:  # Qt.Key_C
+            elif key_char == "C" and key == Qt.Key.Key_C:
                 return True
-            elif key_char == "X" and key == 0x58:  # Qt.Key_X
+            elif key_char == "X" and key == Qt.Key.Key_X:
                 return True
-            elif key_char == "F" and key == 0x46:  # Qt.Key_F
+            elif key_char == "F" and key == Qt.Key.Key_F:
                 return True
             
             return False

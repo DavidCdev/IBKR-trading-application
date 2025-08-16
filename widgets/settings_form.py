@@ -167,7 +167,7 @@ class Settings_Form(QDialog):
                 
                 # Auto-scroll to the bottom
                 cursor = self.ui.connectionLogText.textCursor()
-                cursor.movePosition(cursor.End)
+                cursor.movePosition(cursor.MoveOperation.End)
                 self.ui.connectionLogText.setTextCursor(cursor)
                 
                 logger.info(f"Connection log: {message}")

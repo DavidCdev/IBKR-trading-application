@@ -40,4 +40,4 @@ if __name__ == "__main__":
     ui = Ui_AiPromptPanel()
     ui.setupUi(AiPromptPanel)
     AiPromptPanel.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
