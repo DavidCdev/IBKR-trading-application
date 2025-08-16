@@ -1,6 +1,6 @@
 # IBKR Trading Application
 
-A comprehensive Python-based trading application for Interactive Brokers (IBKR) that provides real-time market data monitoring, dynamic option trading, and automated risk management with a modern PyQt5 GUI interface.
+A comprehensive Python-based trading application for Interactive Brokers (IBKR) that provides real-time market data monitoring, dynamic option trading, and automated risk management with a modern PyQt6 GUI interface.
 
 ## 🚀 Features
 
@@ -19,7 +19,7 @@ A comprehensive Python-based trading application for Interactive Brokers (IBKR) 
 - **Thread-Safe Architecture**: Non-blocking UI with separate data collection threads
 
 ### User Interface
-- **Modern PyQt5 GUI**: Clean, responsive interface with real-time updates
+- **Modern PyQt6 GUI**: Clean, responsive interface with real-time updates
 - **Settings Panel**: Easy configuration management
 - **AI Prompt Interface**: Interactive AI assistance
 - **Connection Status**: Real-time connection monitoring
@@ -142,7 +142,7 @@ IBKR/
 ├── main.py                 # Application entry point
 ├── config.json            # Main configuration file
 ├── requirements.txt       # Python dependencies
-├── widgets/               # PyQt5 GUI components
+├── widgets/               # PyQt6 GUI components
 │   ├── ib_trading_app.py  # Main application window
 │   ├── settings_form.py   # Settings interface
 │   └── ai_prompt_form.py  # AI assistant interface

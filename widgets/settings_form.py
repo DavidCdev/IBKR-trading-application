@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QDialog
-from PyQt5 import QtWidgets
+from PyQt6.QtWidgets import QDialog
+from PyQt6 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.settings_gui import Ui_PreferencesDialog
 from utils.smart_logger import get_logger, log_error_with_context
@@ -192,7 +192,7 @@ class Settings_Form(QDialog):
                     self.ui.connectButton.setEnabled(False)
                     
                     # Set up a timer to check if disconnect completed and update button state
-                    from PyQt5.QtCore import QTimer
+                    from PyQt6.QtCore import QTimer
                     def check_disconnect_status():
                         if not self.data_worker.collector.ib.isConnected():
                             logger.info("Disconnect completed, updating button state")

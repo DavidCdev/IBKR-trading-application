@@ -1,6 +1,6 @@
 import sys
 import asyncio
-from PyQt5.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication
 
 from widgets.ib_trading_app import IB_Trading_APP
 from utils.smart_logger import get_logger, log_connection_event
@@ -28,7 +28,7 @@ def main():
         logger.info("IB Trading Application GUI initialized successfully")
         
         # Run the application
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
         
     except KeyboardInterrupt:
         logger.info("Application interrupted by user")

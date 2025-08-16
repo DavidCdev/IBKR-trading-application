@@ -5,7 +5,7 @@ import threading
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
-from PyQt5.QtCore import QObject, pyqtSignal, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 import pandas as pd
 import google.generativeai as genai
 from utils.config_manager import AppConfig

@@ -196,7 +196,7 @@ logging.basicConfig(level=logging.DEBUG)
 ## Dependencies
 
 The improved version uses the same dependencies as the original, with additional focus on:
-- `PyQt5` for GUI
+- `PyQt6` for GUI
 - `asyncio` for asynchronous operations
 - `logging` for comprehensive logging
 - `json` for configuration management

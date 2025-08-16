@@ -1,9 +1,9 @@
 import sys
 import platform
 from typing import Callable, Dict, Any
-from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtGui import QKeySequence
+from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QKeySequence
 from .smart_logger import get_logger
 
 logger = get_logger("HOTKEY_MANAGER")

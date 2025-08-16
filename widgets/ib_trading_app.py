@@ -13,11 +13,11 @@ from utils.smart_logger import get_logger
 
 logger = get_logger("GUI")
 try:
-    from PyQt5.QtWidgets import QMainWindow, QMessageBox
-    from PyQt5.QtCore import QThread, QTimer
-    logger.info("PyQt5 imports successful")
+    from PyQt6.QtWidgets import QMainWindow, QMessageBox
+    from PyQt6.QtCore import QThread, QTimer
+    logger.info("PyQt6 imports successful")
 except ImportError as e:
-    logger.error(f"PyQt5 import failed: {e}")
+    logger.error(f"PyQt6 import failed: {e}")
     raise
 
 
