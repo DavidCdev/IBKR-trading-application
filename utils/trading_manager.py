@@ -2,7 +2,7 @@ import asyncio
 from typing import Dict, Any, Optional, List
 from ib_async import IB, Option, Order, Trade
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pytz
 from threading import Thread, Event, Lock
 import time
@@ -149,12 +149,145 @@ class TradingManager:
             return self.max_trade_value
     
     def _get_contract_expiration(self) -> str:
-        """Programmatically determine the correct contract expiration date"""
+        """Programmatically determine the correct contract expiration date with smart fallback to available expirations"""
         try:
             est_now = datetime.now(self._est_timezone)
             
-            # If before 12:00 PM EST, use 0DTE (same day)
-            # If after 12:00 PM EST, use 1DTE (next day)
+            # First, try to get available expirations from the data collector if available
+            available_expirations = self._get_available_expirations()
+            
+            if available_expirations:
+                # Smart expiration selection based on available expirations
+                return self._select_smart_expiration(est_now, available_expirations)
+            else:
+                # Fallback to original logic if no available expirations
+                return self._get_fallback_expiration(est_now)
+                
+        except Exception as e:
+            logger.error(f"Error calculating contract expiration: {e}")
+            # Final fallback to next day
+            tomorrow = datetime.now(self._est_timezone).date() + timedelta(days=1)
+            return tomorrow.strftime("%Y%m%d")
+    
+    def update_available_expirations(self, expirations: List[str]):
+        """Update available expirations in the trading manager"""
+        try:
+            if expirations:
+                logger.info(f"Trading manager updated with {len(expirations)} available expirations")
+                # Store locally for quick access
+                self._local_available_expirations = expirations
+            else:
+                logger.warning("Trading manager: Received empty expirations list")
+                
+        except Exception as e:
+            logger.error(f"Trading manager error updating available expirations: {e}")
+    
+    def _get_available_expirations(self) -> List[str]:
+        """Get available expirations from the data collector if available"""
+        try:
+            # First try local cache
+            if hasattr(self, '_local_available_expirations') and self._local_available_expirations:
+                return self._local_available_expirations
+            
+            # Try to access available expirations from the data collector
+            if hasattr(self, 'data_collector') and self.data_collector:
+                if hasattr(self.data_collector, 'collector') and self.data_collector.collector:
+                    if hasattr(self.data_collector.collector, '_available_expirations'):
+                        expirations = self.data_collector.collector._available_expirations
+                        if expirations:
+                            logger.info(f"Found {len(expirations)} available expirations")
+                            return expirations
+            
+            # Try alternative path through connection
+            if hasattr(self, 'data_collector') and self.data_collector:
+                if hasattr(self.data_collector, 'collector') and self.data_collector.collector:
+                    if hasattr(self.data_collector.collector, 'ib_connection'):
+                        if hasattr(self.data_collector.collector.ib_connection, '_available_expirations'):
+                            expirations = self.data_collector.collector.ib_connection._available_expirations
+                            if expirations:
+                                logger.info(f"Found {len(expirations)} available expirations via IB connection")
+                                return expirations
+            
+            logger.warning("No available expirations found, using fallback logic")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error getting available expirations: {e}")
+            return []
+    
+    def _select_smart_expiration(self, est_now: datetime, available_expirations: List[str]) -> str:
+        """Select the best available expiration based on time and availability"""
+        try:
+            current_date = est_now.date()
+            current_time = est_now.time()
+            
+            # Convert available expirations to dates for comparison
+            exp_dates = []
+            for exp_str in available_expirations:
+                try:
+                    # Handle different expiration formats
+                    if ' ' in exp_str:  # Format: "20241220 16:00:00"
+                        exp_str = exp_str.split()[0]
+                    exp_date = datetime.strptime(exp_str, "%Y%m%d").date()
+                    exp_dates.append((exp_str, exp_date))
+                except Exception as e:
+                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    continue
+            
+            if not exp_dates:
+                logger.warning("No valid expiration dates found")
+                return self._get_fallback_expiration(est_now)
+            
+            # Sort by date
+            exp_dates.sort(key=lambda x: x[1])
+            
+            # Determine target expiration type based on time
+            if current_time.hour < 12:
+                # Before 12:00 PM EST - prefer 0DTE (same day)
+                target_type = "0DTE"
+                target_date = current_date
+            else:
+                # After 12:00 PM EST - prefer 1DTE (next business day)
+                target_type = "1DTE"
+                target_date = current_date + timedelta(days=1)
+                # Skip weekends
+                while target_date.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                    target_date += timedelta(days=1)
+            
+            logger.info(f"Target expiration type: {target_type}, target date: {target_date}")
+            
+            # Strategy 1: Try to find exact target date
+            for exp_str, exp_date in exp_dates:
+                if exp_date == target_date:
+                    logger.info(f"Found exact {target_type} expiration: {exp_str}")
+                    return exp_str
+            
+            # Strategy 2: Find nearest available expiration to target date
+            nearest_exp = None
+            min_days_diff = float('inf')
+            
+            for exp_str, exp_date in exp_dates:
+                days_diff = abs((exp_date - target_date).days)
+                if days_diff < min_days_diff:
+                    min_days_diff = days_diff
+                    nearest_exp = exp_str
+            
+            if nearest_exp:
+                logger.info(f"Selected nearest available expiration: {nearest_exp} (days diff: {min_days_diff})")
+                return nearest_exp
+            
+            # Strategy 3: Fallback to first available expiration
+            logger.warning("No suitable expiration found, using first available")
+            return exp_dates[0][0]
+            
+        except Exception as e:
+            logger.error(f"Error in smart expiration selection: {e}")
+            return self._get_fallback_expiration(est_now)
+    
+    def _get_fallback_expiration(self, est_now: datetime) -> str:
+        """Fallback expiration logic when no available expirations are known"""
+        try:
+            # Original logic as fallback
             if est_now.hour < 12:
                 # Use same day expiration
                 expiration_date = est_now.date()
@@ -167,13 +300,13 @@ class TradingManager:
             
             # Format as YYYYMMDD
             expiration_str = expiration_date.strftime("%Y%m%d")
-            logger.info(f"Contract expiration calculated: {expiration_str}")
+            logger.info(f"Fallback expiration calculated: {expiration_str}")
             return expiration_str
             
         except Exception as e:
-            logger.error(f"Error calculating contract expiration: {e}")
-            # Fallback to next day
-            tomorrow = datetime.now(self._est_timezone).date() + timedelta(days=1)
+            logger.error(f"Error calculating fallback expiration: {e}")
+            # Final fallback to next day
+            tomorrow = est_now.date() + timedelta(days=1)
             return tomorrow.strftime("%Y%m%d")
     
     def _create_option_contract(self, option_type: str, strike: float) -> Option:
@@ -545,3 +678,51 @@ class TradingManager:
             logger.info("Trading Manager cleanup completed")
         except Exception as e:
             logger.error(f"Error during trading manager cleanup: {e}")
+
+    def manual_expiration_switch(self, target_expiration: str = None) -> bool:
+        """Manually trigger expiration switching to a specific expiration or best available"""
+        try:
+            if hasattr(self, 'data_collector') and self.data_collector:
+                if hasattr(self.data_collector, 'collector') and self.data_collector.collector:
+                    if hasattr(self.data_collector.collector, 'ib_connection'):
+                        ib_connection = self.data_collector.collector.ib_connection
+                        if hasattr(ib_connection, 'manual_expiration_switch'):
+                            return ib_connection.manual_expiration_switch(target_expiration)
+                        else:
+                            logger.error("IB connection doesn't have manual_expiration_switch method")
+                    else:
+                        logger.error("No IB connection available")
+                else:
+                    logger.error("No collector available")
+            else:
+                logger.error("No data collector available")
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error in trading manager manual expiration switch: {e}")
+            return False
+    
+    def get_expiration_status(self) -> Dict[str, Any]:
+        """Get detailed expiration status for monitoring"""
+        try:
+            if hasattr(self, 'data_collector') and self.data_collector:
+                if hasattr(self.data_collector, 'collector') and self.data_collector.collector:
+                    if hasattr(self.data_collector.collector, 'ib_connection'):
+                        ib_connection = self.data_collector.collector.ib_connection
+                        if hasattr(ib_connection, 'get_expiration_status'):
+                            return ib_connection.get_expiration_status()
+                        else:
+                            logger.error("IB connection doesn't have get_expiration_status method")
+                    else:
+                        logger.error("No IB connection available")
+                else:
+                    logger.error("No collector available")
+            else:
+                logger.error("No data collector available")
+            
+            return {'error': 'No IB connection available'}
+            
+        except Exception as e:
+            logger.error(f"Error in trading manager get_expiration_status: {e}")
+            return {'error': str(e)}

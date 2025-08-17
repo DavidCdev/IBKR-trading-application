@@ -3,7 +3,7 @@ import asyncio
 from PyQt6.QtWidgets import QApplication
 
 from widgets.ib_trading_app import IB_Trading_APP
-from utils.smart_logger import get_logger, log_connection_event
+from utils.smart_logger import get_logger
 
 # Initialize smart logging system
 logger = get_logger("MAIN")

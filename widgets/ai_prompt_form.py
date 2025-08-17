@@ -1,6 +1,5 @@
-from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QGroupBox, QTextEdit, QPushButton, QMessageBox, QSpacerItem, QSizePolicy
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6 import QtWidgets
+from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox, QCheckBox, QGroupBox, QPushButton, QMessageBox, QSpacerItem, QSizePolicy
+from PyQt6.QtCore import QTimer
 from utils.config_manager import AppConfig
 from ui.ai_prompt_gui import Ui_AiPromptPanel
 from utils.smart_logger import get_logger

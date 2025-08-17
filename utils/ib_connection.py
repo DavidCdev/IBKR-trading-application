@@ -1,8 +1,8 @@
 import asyncio
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 import pytz
 from threading import Thread, Event
 import time
@@ -72,21 +72,207 @@ class IBDataCollector:
             logger.warning(f"Error checking expiration switch time: {e}")
             return False
 
+    def _should_switch_expiration_smart(self) -> bool:
+        """Smart expiration switching that checks if current expiration is still valid and if switching is beneficial"""
+        try:
+            if not hasattr(self, '_available_expirations') or not self._available_expirations:
+                # No available expirations, use time-based switching
+                return self._should_switch_to_next_expiration()
+            
+            if not self._current_expiration:
+                return False
+            
+            est_now = datetime.now(self._est_timezone)
+            current_date = est_now.date()
+            current_time = est_now.time()
+            
+            # Parse current expiration
+            try:
+                if ' ' in self._current_expiration:
+                    current_exp_str = self._current_expiration.split()[0]
+                else:
+                    current_exp_str = self._current_expiration
+                current_exp_date = datetime.strptime(current_exp_str, "%Y%m%d").date()
+            except Exception as e:
+                logger.warning(f"Could not parse current expiration {self._current_expiration}: {e}")
+                return self._should_switch_to_next_expiration()
+            
+            # Check if current expiration is today and it's after 12:00 PM
+            if current_exp_date == current_date and current_time.hour >= 12:
+                # Current expiration is today and it's after noon - should switch
+                logger.info(f"Current expiration {self._current_expiration} is today and it's after 12:00 PM - switching recommended")
+                return True
+            
+            # Check if current expiration is in the past
+            if current_exp_date < current_date:
+                logger.warning(f"Current expiration {self._current_expiration} is in the past - switching required")
+                return True
+            
+            # Check if there's a better expiration available
+            if self._is_better_expiration_available(current_exp_date, current_date, current_time):
+                logger.info(f"Better expiration available - switching recommended")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error in smart expiration switching check: {e}")
+            return self._should_switch_to_next_expiration()
+    
+    def _is_better_expiration_available(self, current_exp_date: date, current_date: date, current_time: time) -> bool:
+        """Check if there's a better expiration available than the current one"""
+        try:
+            if not hasattr(self, '_available_expirations') or not self._available_expirations:
+                return False
+            
+            # Calculate current expiration's difference from ideal target
+            current_diff = abs((current_exp_date - current_date).days)
+            
+            # Determine ideal target date based on time
+            if current_time.hour < 12:
+                # Before noon - prefer today (0DTE)
+                target_date = current_date
+            else:
+                # After noon - prefer next business day (1DTE)
+                target_date = current_date + timedelta(days=1)
+                # Skip weekends
+                while target_date.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                    target_date += timedelta(days=1)
+            
+            # Check if target date is available and better than current
+            for exp_str in self._available_expirations:
+                try:
+                    if ' ' in exp_str:
+                        exp_str_clean = exp_str.split()[0]
+                    else:
+                        exp_str_clean = exp_str
+                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
+                    
+                    # Skip if this is the current expiration
+                    if exp_str == self._current_expiration:
+                        continue
+                    
+                    # Calculate this expiration's difference from ideal target
+                    exp_diff = abs((exp_date - target_date).days)
+                    
+                    if exp_diff < current_diff:
+                        logger.info(f"Found better expiration {exp_str} (diff: {exp_diff}) vs current {self._current_expiration} (diff: {current_diff})")
+                        return True
+                        
+                except Exception as e:
+                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    continue
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking for better expiration: {e}")
+            return False
+
     def _get_next_expiration(self, current_expiration: str) -> Optional[str]:
-        """Get the next available expiration after the current one"""
+        """Get the next available expiration after the current one with smart selection"""
         try:
             if not hasattr(self, '_available_expirations') or not self._available_expirations:
                 return None
             
-            # Find current expiration index and get next one
+            if not current_expiration:
+                # No current expiration, return first available
+                return self._available_expirations[0] if self._available_expirations else None
+            
+            est_now = datetime.now(self._est_timezone)
+            current_date = est_now.date()
+            current_time = est_now.time()
+            
+            # Parse current expiration
+            try:
+                if ' ' in current_expiration:
+                    current_exp_str = current_expiration.split()[0]
+                else:
+                    current_exp_str = current_expiration
+                current_exp_date = datetime.strptime(current_exp_str, "%Y%m%d").date()
+            except Exception as e:
+                logger.warning(f"Could not parse current expiration {current_expiration}: {e}")
+                # Fallback to simple next in list
+                expirations = sorted(self._available_expirations)
+                try:
+                    current_index = expirations.index(current_expiration)
+                    if current_index + 1 < len(expirations):
+                        return expirations[current_index + 1]
+                except ValueError:
+                    pass
+                return expirations[0] if expirations else None
+            
+            # Determine target date based on current time
+            if current_time.hour < 12:
+                # Before noon - prefer today (0DTE)
+                target_date = current_date
+            else:
+                # After noon - prefer next business day (1DTE)
+                target_date = current_date + timedelta(days=1)
+                # Skip weekends
+                while target_date.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                    target_date += timedelta(days=1)
+            
+            logger.info(f"Looking for next expiration. Current: {current_expiration}, Target date: {target_date}")
+            
+            # Strategy 1: Find exact target date if available
+            for exp_str in self._available_expirations:
+                try:
+                    if ' ' in exp_str:
+                        exp_str_clean = exp_str.split()[0]
+                    else:
+                        exp_str_clean = exp_str
+                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
+                    
+                    if exp_date == target_date:
+                        logger.info(f"Found exact target expiration: {exp_str}")
+                        return exp_str
+                        
+                except Exception as e:
+                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    continue
+            
+            # Strategy 2: Find nearest available expiration to target date
+            best_exp = None
+            min_days_diff = float('inf')
+            
+            for exp_str in self._available_expirations:
+                try:
+                    if ' ' in exp_str:
+                        exp_str_clean = exp_str.split()[0]
+                    else:
+                        exp_str_clean = exp_str
+                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
+                    
+                    # Only consider future expirations
+                    if exp_date > current_exp_date:
+                        days_diff = abs((exp_date - target_date).days)
+                        if days_diff < min_days_diff:
+                            min_days_diff = days_diff
+                            best_exp = exp_str
+                            
+                except Exception as e:
+                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    continue
+            
+            if best_exp:
+                logger.info(f"Selected best available expiration: {best_exp} (days diff from target: {min_days_diff})")
+                return best_exp
+            
+            # Strategy 3: Find next chronological expiration
             expirations = sorted(self._available_expirations)
             try:
                 current_index = expirations.index(current_expiration)
                 if current_index + 1 < len(expirations):
-                    return expirations[current_index + 1]
+                    next_exp = expirations[current_index + 1]
+                    logger.info(f"Using next chronological expiration: {next_exp}")
+                    return next_exp
             except ValueError:
-                # Current expiration not found, return first available
-                return expirations[0] if expirations else None
+                pass
+            
+            # Strategy 4: Fallback to first available expiration
+            logger.warning("No suitable next expiration found, using first available")
+            return self._available_expirations[0] if self._available_expirations else None
                 
         except Exception as e:
             logger.warning(f"Error getting next expiration: {e}")
@@ -467,6 +653,9 @@ class IBDataCollector:
             # Store available expirations for dynamic switching
             self._available_expirations = sorted(chain.expirations)
             logger.info(f"Available expirations: {self._available_expirations[:5]}...")  # Show first 5
+            
+            # Notify trading manager about available expirations
+            self._notify_trading_manager_expirations(self._available_expirations)
             
             # Set initial expiration if not set
             if not self._current_expiration:
@@ -987,7 +1176,7 @@ class IBDataCollector:
                     if buy_trade['qty'] == 0:
                         open_positions[key].popleft()
             # You can repeat the same if you short first and buy-to-cover later.
-            # For simplicity, we’re only handling BOT then SLD
+            # For simplicity, we're only handling BOT then SLD
         return closed_trades
 
     def on_exec_details(self, trade, fill):
@@ -998,7 +1187,7 @@ class IBDataCollector:
         contract = trade.contract
         exec = fill.execution
 
-        # Filter only options trades (calls/puts) and only today’s trades
+        # Filter only options trades (calls/puts) and only today's trades
         if (
                 contract.secType != 'OPT' or
                 contract.right not in ['C', 'P'] or
@@ -1365,18 +1554,28 @@ class IBDataCollector:
                         )
                 
                 # Check if it's time to switch expiration (12:00 PM EST)
-                if self._should_switch_to_next_expiration():
+                if self._should_switch_expiration_smart():
                     current_exp_type = self._get_expiration_type(self._current_expiration)
-                    if current_exp_type == "0DTE":
-                        next_expiration = self._get_next_expiration(self._current_expiration)
-                        if next_expiration:
-                            next_exp_type = self._get_expiration_type(next_expiration)
-                            logger.info(f"Switching from {current_exp_type} ({self._current_expiration}) to {next_exp_type} ({next_expiration}) at 12:00 PM EST")
+                    logger.info(f"Smart expiration switching triggered. Current: {self._current_expiration} ({current_exp_type})")
+                    
+                    # Get the best available expiration for switching
+                    best_expiration = self._get_best_available_expiration()
+                    
+                    if best_expiration and best_expiration != self._current_expiration:
+                        # Validate that the new expiration is available
+                        if self._validate_expiration_availability(best_expiration):
+                            next_exp_type = self._get_expiration_type(best_expiration)
+                            logger.info(f"Switching from {current_exp_type} ({self._current_expiration}) to {next_exp_type} ({best_expiration})")
+                            
                             # Schedule expiration update in main thread
                             asyncio.run_coroutine_threadsafe(
-                                self._switch_option_subscriptions(new_expiration=next_expiration),
+                                self._switch_option_subscriptions(new_expiration=best_expiration),
                                 asyncio.get_event_loop()
                             )
+                        else:
+                            logger.warning(f"Selected expiration {best_expiration} is not available, skipping switch")
+                    else:
+                        logger.info(f"No better expiration found for switching. Keeping current: {self._current_expiration}")
                 
                 # Sleep for 1 second before next check
                 time.sleep(1)
@@ -1458,49 +1657,6 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error logging monitoring status: {e}")
 
-    async def manual_trigger_update(self, update_type: str, value: Any = None):
-        """Manually trigger a dynamic update for testing purposes"""
-        try:
-            if update_type.lower() == 'strike':
-                if value is None:
-                    # Use current underlying price to calculate new strike
-                    if self.underlying_symbol_price > 0:
-                        new_strike = self._calculate_nearest_strike(self.underlying_symbol_price)
-                        logger.info(f"Manually triggering strike update to {new_strike}")
-                        await self._switch_option_subscriptions(new_strike=new_strike)
-                    else:
-                        logger.warning("Cannot calculate strike: no underlying price available")
-                else:
-                    # Use provided strike value
-                    new_strike = int(value)
-                    logger.info(f"Manually triggering strike update to {new_strike}")
-                    await self._switch_option_subscriptions(new_strike=new_strike)
-                    
-            elif update_type.lower() == 'expiration':
-                if value is None:
-                    # Switch to next available expiration
-                    next_expiration = self._get_next_expiration(self._current_expiration)
-                    if next_expiration:
-                        logger.info(f"Manually triggering expiration update to {next_expiration}")
-                        await self._switch_option_subscriptions(new_expiration=next_expiration)
-                    else:
-                        logger.warning("No next expiration available")
-                else:
-                    # Use provided expiration value
-                    if value in getattr(self, '_available_expirations', []):
-                        logger.info(f"Manually triggering expiration update to {value}")
-                        await self._switch_option_subscriptions(new_expiration=value)
-                    else:
-                        logger.warning(f"Expiration {value} not in available expirations")
-                        
-            elif update_type.lower() == 'status':
-                self.log_dynamic_monitoring_status()
-                
-            else:
-                logger.warning(f"Unknown update type: {update_type}. Use 'strike', 'expiration', or 'status'")
-                
-        except Exception as e:
-            logger.error(f"Error in manual trigger update: {e}")
 
     async def get_historical_data(self, symbol: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
         """Get historical price data for a symbol from IB"""
@@ -1559,10 +1715,205 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting historical data for {symbol}: {e}")
             return []
-    
-    def __del__(self):
-        """Destructor to ensure cleanup"""
+
+
+    def _validate_expiration_availability(self, expiration: str) -> bool:
+        """Validate if an expiration is available in the option chain"""
         try:
-            self.disconnect()
-        except:
-            pass
+            if not hasattr(self, '_available_expirations') or not self._available_expirations:
+                return False
+            
+            # Clean expiration string
+            if ' ' in expiration:
+                exp_str = expiration.split()[0]
+            else:
+                exp_str = expiration
+            
+            # Check if expiration exists in available list
+            is_available = exp_str in self._available_expirations
+            
+            if is_available:
+                logger.debug(f"Expiration {expiration} is available")
+            else:
+                logger.warning(f"Expiration {expiration} is NOT available in chain")
+            
+            return is_available
+            
+        except Exception as e:
+            logger.error(f"Error validating expiration availability: {e}")
+            return False
+    
+    def _get_best_available_expiration(self, target_date: date = None) -> Optional[str]:
+        """Get the best available expiration based on target date or current time"""
+        try:
+            if not hasattr(self, '_available_expirations') or not self._available_expirations:
+                return None
+            
+            if not target_date:
+                # Determine target date based on current time
+                est_now = datetime.now(self._est_timezone)
+                current_date = est_now.date()
+                current_time = est_now.time()
+                
+                if current_time.hour < 12:
+                    # Before noon - prefer today (0DTE)
+                    target_date = current_date
+                else:
+                    # After noon - prefer next business day (1DTE)
+                    target_date = current_date + timedelta(days=1)
+                    # Skip weekends
+                    while target_date.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                        target_date += timedelta(days=1)
+            
+            logger.info(f"Looking for best available expiration for target date: {target_date}")
+            
+            # Strategy 1: Find exact target date
+            for exp_str in self._available_expirations:
+                try:
+                    if ' ' in exp_str:
+                        exp_str_clean = exp_str.split()[0]
+                    else:
+                        exp_str_clean = exp_str
+                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
+                    
+                    if exp_date == target_date:
+                        logger.info(f"Found exact target expiration: {exp_str}")
+                        return exp_str
+                        
+                except Exception as e:
+                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    continue
+            
+            # Strategy 2: Find nearest available expiration to target date
+            best_exp = None
+            min_days_diff = float('inf')
+            
+            for exp_str in self._available_expirations:
+                try:
+                    if ' ' in exp_str:
+                        exp_str_clean = exp_str.split()[0]
+                    else:
+                        exp_str_clean = exp_str
+                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
+                    
+                    # Only consider future expirations
+                    if exp_date >= target_date:
+                        days_diff = abs((exp_date - target_date).days)
+                        if days_diff < min_days_diff:
+                            min_days_diff = days_diff
+                            best_exp = exp_str
+                            
+                except Exception as e:
+                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    continue
+            
+            if best_exp:
+                logger.info(f"Selected best available expiration: {best_exp} (days diff from target: {min_days_diff})")
+                return best_exp
+            
+            # Strategy 3: Fallback to first available expiration
+            logger.warning("No suitable expiration found, using first available")
+            return self._available_expirations[0] if self._available_expirations else None
+            
+        except Exception as e:
+            logger.error(f"Error getting best available expiration: {e}")
+            return None
+
+    def _notify_trading_manager_expirations(self, expirations: List[str]):
+        """Notify trading manager about available expirations"""
+        try:
+            if hasattr(self, 'trading_manager') and self.trading_manager:
+                if hasattr(self.trading_manager, 'update_available_expirations'):
+                    self.trading_manager.update_available_expirations(expirations)
+                    logger.info(f"Notified trading manager about {len(expirations)} available expirations")
+                else:
+                    logger.debug("Trading manager doesn't have update_available_expirations method")
+            else:
+                logger.debug("No trading manager available for expiration notification")
+                
+        except Exception as e:
+            logger.error(f"Error notifying trading manager about expirations: {e}")
+    
+    def manual_expiration_switch(self, target_expiration: str = None) -> bool:
+        """Manually trigger expiration switching to a specific expiration or best available"""
+        try:
+            if not target_expiration:
+                # Get best available expiration
+                target_expiration = self._get_best_available_expiration()
+            
+            if not target_expiration:
+                logger.error("No target expiration available for manual switch")
+                return False
+            
+            # Validate expiration availability
+            if not self._validate_expiration_availability(target_expiration):
+                logger.error(f"Target expiration {target_expiration} is not available")
+                return False
+            
+            if target_expiration == self._current_expiration:
+                logger.info(f"Already using target expiration {target_expiration}")
+                return True
+            
+            logger.info(f"Manual expiration switch from {self._current_expiration} to {target_expiration}")
+            
+            # Schedule expiration update in main thread
+            asyncio.run_coroutine_threadsafe(
+                self._switch_option_subscriptions(new_expiration=target_expiration),
+                asyncio.get_event_loop()
+            )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error in manual expiration switch: {e}")
+            return False
+    
+    def get_expiration_status(self) -> Dict[str, Any]:
+        """Get detailed expiration status for monitoring"""
+        try:
+            status = {
+                'current_expiration': self._current_expiration,
+                'current_expiration_type': self._get_expiration_type(self._current_expiration) if self._current_expiration else "Unknown",
+                'available_expirations': getattr(self, '_available_expirations', []),
+                'available_expirations_count': len(getattr(self, '_available_expirations', [])),
+                'next_recommended_expiration': self._get_best_available_expiration(),
+                'should_switch': self._should_switch_expiration_smart(),
+                'current_time_est': datetime.now(self._est_timezone).strftime("%Y-%m-%d %H:%M:%S EST"),
+                'expiration_switch_enabled': True
+            }
+            
+            # Add detailed analysis of available expirations
+            if hasattr(self, '_available_expirations') and self._available_expirations:
+                exp_analysis = []
+                for exp_str in self._available_expirations[:5]:  # Show first 5
+                    try:
+                        if ' ' in exp_str:
+                            exp_str_clean = exp_str.split()[0]
+                        else:
+                            exp_str_clean = exp_str
+                        exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
+                        current_date = datetime.now(self._est_timezone).date()
+                        days_diff = (exp_date - current_date).days
+                        exp_type = self._get_expiration_type(exp_str)
+                        exp_analysis.append({
+                            'expiration': exp_str,
+                            'days_diff': days_diff,
+                            'type': exp_type,
+                            'is_current': exp_str == self._current_expiration
+                        })
+                    except Exception as e:
+                        exp_analysis.append({
+                            'expiration': exp_str,
+                            'days_diff': 'Unknown',
+                            'type': 'Unknown',
+                            'is_current': exp_str == self._current_expiration,
+                            'error': str(e)
+                        })
+                
+                status['expiration_analysis'] = exp_analysis
+            
+            return status
+            
+        except Exception as e:
+            logger.error(f"Error getting expiration status: {e}")
+            return {'error': str(e)}

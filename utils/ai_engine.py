@@ -79,8 +79,17 @@ class AI_Engine(QObject):
         """Initialize Gemini API client"""
         try:
             api_key = self.config.ai_prompt.get("gemini_api_key", "")
+            logger.info(f"Setting up Gemini API with key: {api_key[:10]}..." if api_key else "No API key found")
+            
             if not api_key:
                 logger.warning("No Gemini API key configured. AI analysis will be disabled.")
+                logger.info("To enable AI analysis, please add your Gemini API key to the configuration.")
+                self.gemini_client = None
+                return
+            
+            if not api_key.strip():
+                logger.warning("Gemini API key is empty. AI analysis will be disabled.")
+                logger.info("To enable AI analysis, please add your Gemini API key to the configuration.")
                 self.gemini_client = None
                 return
             
@@ -90,6 +99,7 @@ class AI_Engine(QObject):
             
         except Exception as e:
             logger.error(f"Failed to initialize Gemini API: {e}")
+            logger.info("AI analysis will be disabled until a valid API key is configured.")
             self.gemini_client = None
     
     def _start_polling(self):
@@ -329,7 +339,7 @@ Please provide your analysis in the specified JSON format.
     async def _call_gemini_api(self, prompt: str) -> Optional[Dict[str, Any]]:
         """Make API call to Gemini"""
         if not self.gemini_client:
-            raise Exception("Gemini API client not initialized")
+            raise Exception("Gemini API client not initialized. Please configure a valid Gemini API key in the settings.")
         
         try:
             logger.info("Making Gemini API call...")
@@ -414,6 +424,14 @@ Please provide your analysis in the specified JSON format.
             self.is_polling = True
             self.polling_status.emit("Analysis in progress...")
             
+            # Check if AI is available
+            if not self.is_ai_available():
+                error_msg = "AI analysis is not available. Please configure a valid Gemini API key in the settings."
+                logger.warning(error_msg)
+                self.analysis_error.emit(error_msg)
+                self.polling_status.emit("AI not configured")
+                return None
+            
             # Get current data
             current_price = self._get_current_price()
             if current_price <= 0:
@@ -495,6 +513,21 @@ Please provide your analysis in the specified JSON format.
             'raw_response': result.raw_response
         }
     
+    def is_ai_available(self) -> bool:
+        """Check if AI analysis is available (API key configured)"""
+        return self.gemini_client is not None
+    
+    def get_ai_status(self) -> Dict[str, Any]:
+        """Get AI engine status information"""
+        return {
+            'ai_available': self.is_ai_available(),
+            'api_key_configured': bool(self.config.ai_prompt.get("gemini_api_key", "").strip()),
+            'polling_enabled': self.config.ai_prompt.get("enable_auto_polling", True),
+            'polling_interval': self.config.ai_prompt.get("polling_interval_minutes", 10),
+            'last_analysis_time': self.last_poll_time.isoformat() if self.last_poll_time else None,
+            'cache_duration': self.config.ai_prompt.get("cache_duration_minutes", 15)
+        }
+    
     def force_refresh(self):
         """Force a refresh of AI analysis, bypassing cache"""
         logger.info("Force refresh requested")
@@ -535,7 +568,29 @@ Please provide your analysis in the specified JSON format.
         old_api_key = self.config.ai_prompt.get("gemini_api_key", "")
         new_api_key = new_config.ai_prompt.get("gemini_api_key", "")
         if old_api_key != new_api_key:
+            logger.info(f"API key changed, reinitializing Gemini API...")
             self._setup_gemini_api()
+    
+    def reinitialize_api(self):
+        """Manually reinitialize the Gemini API client"""
+        logger.info("Manually reinitializing Gemini API client...")
+        self._setup_gemini_api()
+        if self.is_ai_available():
+            logger.info("Gemini API client reinitialized successfully")
+        else:
+            logger.warning("Failed to reinitialize Gemini API client")
+    
+    def get_config_status(self) -> Dict[str, Any]:
+        """Get detailed configuration status for debugging"""
+        return {
+            'api_key_configured': bool(self.config.ai_prompt.get("gemini_api_key", "").strip()),
+            'api_key_length': len(self.config.ai_prompt.get("gemini_api_key", "")),
+            'api_key_preview': self.config.ai_prompt.get("gemini_api_key", "")[:10] + "..." if self.config.ai_prompt.get("gemini_api_key", "") else "None",
+            'ai_available': self.is_ai_available(),
+            'gemini_client_initialized': self.gemini_client is not None,
+            'polling_enabled': self.config.ai_prompt.get("enable_auto_polling", True),
+            'polling_interval': self.config.ai_prompt.get("polling_interval_minutes", 10)
+        }
     
     def get_last_analysis(self) -> Optional[Dict[str, Any]]:
         """Get the last analysis result as a dictionary"""
@@ -561,8 +616,13 @@ Please provide your analysis in the specified JSON format.
     # Backward compatibility methods
     def refresh(self):
         """Refresh the AI engine (backward compatibility)"""
+        logger.info("Refreshing AI engine configuration...")
         self.config = AppConfig.load_from_file()
         self._setup_gemini_api()
+        if self.is_ai_available():
+            logger.info("AI engine refreshed successfully")
+        else:
+            logger.warning("AI engine refresh completed but API is not available")
     
     def get_ai_prompt(self):
         """Get the current AI prompt (backward compatibility)"""

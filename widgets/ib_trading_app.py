@@ -8,7 +8,7 @@ from utils.ai_engine import AI_Engine
 from utils.hotkey_manager import HotkeyManager
 
 from typing import Dict, Any, Union, List
-from datetime import datetime
+from datetime import datetime, date
 from utils.smart_logger import get_logger
 
 logger = get_logger("GUI")
@@ -259,12 +259,28 @@ class IB_Trading_APP(QMainWindow):
         """Refresh the AI engine"""
         if hasattr(self, 'ai_engine') and self.ai_engine:
             try:
-                logger.info("Force refreshing AI analysis...")
+                logger.info("Refreshing AI engine configuration and analysis...")
+                # First refresh the configuration
+                self.ai_engine.refresh()
+                # Then force refresh the analysis
                 self.ai_engine.force_refresh()
             except Exception as e:
                 logger.error(f"Failed to refresh AI engine: {e}")
         else:
             logger.warning("AI engine not available")
+    
+    def check_ai_status(self):
+        """Check and log AI engine status for debugging"""
+        if hasattr(self, 'ai_engine') and self.ai_engine:
+            try:
+                status = self.ai_engine.get_config_status()
+                logger.info("AI Engine Status:")
+                for key, value in status.items():
+                    logger.info(f"  {key}: {value}")
+            except Exception as e:
+                logger.error(f"Failed to get AI engine status: {e}")
+        else:
+            logger.warning("AI engine not available for status check")
     
     def on_ai_analysis_ready(self, analysis_data: Dict[str, Any]):
         """Handle AI analysis results"""
@@ -1046,4 +1062,164 @@ class IB_Trading_APP(QMainWindow):
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
             event.accept()
+
+    def show_expiration_status(self):
+        """Show the current expiration status and available expirations"""
+        try:
+            if hasattr(self, 'data_worker') and self.data_worker:
+                if hasattr(self.data_worker, 'collector') and self.data_worker.collector:
+                    if hasattr(self.data_worker.collector, 'trading_manager'):
+                        trading_manager = self.data_worker.collector.trading_manager
+                        if hasattr(trading_manager, 'get_expiration_status'):
+                            status = trading_manager.get_expiration_status()
+                            
+                            if 'error' in status:
+                                QMessageBox.warning(
+                                    self,
+                                    "Expiration Status Error",
+                                    f"Could not retrieve expiration status: {status['error']}"
+                                )
+                                return
+                            
+                            # Format status message
+                            message = f"""Expiration Status:
+                            
+Current Expiration: {status.get('current_expiration', 'N/A')}
+Type: {status.get('current_expiration_type', 'N/A')}
+Available Expirations: {status.get('available_expirations_count', 0)}
+Next Recommended: {status.get('next_recommended_expiration', 'N/A')}
+Should Switch: {status.get('should_switch', False)}
+Current Time (EST): {status.get('current_time_est', 'N/A')}"""
+                            
+                            # Add expiration analysis if available
+                            if 'expiration_analysis' in status:
+                                message += "\n\nExpiration Analysis:"
+                                for exp in status['expiration_analysis'][:5]:  # Show first 5
+                                    current_marker = " (CURRENT)" if exp.get('is_current', False) else ""
+                                    message += f"\n• {exp.get('expiration', 'N/A')} - {exp.get('type', 'N/A')} - {exp.get('days_diff', 'N/A')} days{current_marker}"
+                            
+                            QMessageBox.information(
+                                self,
+                                "Expiration Status",
+                                message
+                            )
+                        else:
+                            QMessageBox.warning(
+                                self,
+                                "Expiration Status",
+                                "Trading manager doesn't support expiration status retrieval"
+                            )
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            "Expiration Status",
+                            "No trading manager available"
+                        )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Expiration Status",
+                        "No collector available"
+                    )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Expiration Status",
+                    "No data worker available"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error showing expiration status: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to show expiration status: {str(e)}"
+            )
+    
+    def manual_expiration_switch(self):
+        """Manually trigger expiration switching"""
+        try:
+            if hasattr(self, 'data_worker') and self.data_worker:
+                if hasattr(self.data_worker, 'collector') and self.data_worker.collector:
+                    if hasattr(self.data_worker.collector, 'trading_manager'):
+                        trading_manager = self.data_worker.collector.trading_manager
+                        if hasattr(trading_manager, 'manual_expiration_switch'):
+                            # Get current status first
+                            status = trading_manager.get_expiration_status()
+                            if 'error' in status:
+                                QMessageBox.warning(
+                                    self,
+                                    "Manual Switch Error",
+                                    f"Could not get current status: {status['error']}"
+                                )
+                                return
+                            
+                            # Show current status and ask for confirmation
+                            current_exp = status.get('current_expiration', 'N/A')
+                            next_exp = status.get('next_recommended_expiration', 'N/A')
+                            
+                            if next_exp and next_exp != current_exp:
+                                reply = QMessageBox.question(
+                                    self,
+                                    "Manual Expiration Switch",
+                                    f"Current expiration: {current_exp}\n"
+                                    f"Recommended next: {next_exp}\n\n"
+                                    f"Switch to recommended expiration?",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                                )
+                                
+                                if reply == QMessageBox.StandardButton.Yes:
+                                    success = trading_manager.manual_expiration_switch(next_exp)
+                                    if success:
+                                        QMessageBox.information(
+                                            self,
+                                            "Switch Successful",
+                                            f"Successfully switched to {next_exp}"
+                                        )
+                                        # Refresh the display
+                                        self.refresh_ui()
+                                    else:
+                                        QMessageBox.warning(
+                                            self,
+                                            "Switch Failed",
+                                            "Failed to switch expiration. Check logs for details."
+                                        )
+                            else:
+                                QMessageBox.information(
+                                    self,
+                                    "No Switch Needed",
+                                    f"Current expiration {current_exp} is already optimal or no better expiration available."
+                                )
+                        else:
+                            QMessageBox.warning(
+                                self,
+                                "Manual Switch",
+                                "Trading manager doesn't support manual expiration switching"
+                            )
+                    else:
+                        QMessageBox.warning(
+                            self,
+                            "Manual Switch",
+                            "No trading manager available"
+                        )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Manual Switch",
+                        "No collector available"
+                    )
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Manual Switch",
+                    "No data worker available"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in manual expiration switch: {e}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to perform manual expiration switch: {str(e)}"
+            )
 
