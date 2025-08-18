@@ -52,7 +52,7 @@ class Ui_MainWindow(object):
         self.groupBox_trading_info.setFont(font)
         self.groupBox_trading_info.setStyleSheet("QGroupBox {\n"
 "        border: 2px solid #5dade2;\n"
-"        border-radius: 12px;\n"
+"        border-radius: 6px;\n"
 "        margin-top: 1ex;\n"
 "        font-weight: bold;\n"
 "        color: #2c3e50;\n"
@@ -126,7 +126,7 @@ class Ui_MainWindow(object):
         self.groupBox_active_contract.setFont(font)
         self.groupBox_active_contract.setStyleSheet("QGroupBox {\n"
 "        border: 2px solid #f39c12;\n"
-"        border-radius: 12px;\n"
+"        border-radius: 6px;\n"
 "        margin-top: 1ex;\n"
 "        font-weight: bold;\n"
 "        color: #2c3e50;\n"
@@ -195,7 +195,7 @@ class Ui_MainWindow(object):
         self.groupBox_option_info.setMinimumSize(QtCore.QSize(270, 240))
         self.groupBox_option_info.setStyleSheet("QGroupBox {\n"
 "    border: 2px solid #5dade2;\n"
-"    border-radius: 12px;\n"
+"    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
@@ -441,7 +441,7 @@ class Ui_MainWindow(object):
         self.groupBox_ai_insights.setMinimumSize(QtCore.QSize(200, 120))
         self.groupBox_ai_insights.setStyleSheet("QGroupBox {\n"
 "    border: 2px solid #4a90e2;\n"
-"    border-radius: 12px;\n"
+"    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
@@ -485,6 +485,62 @@ class Ui_MainWindow(object):
         self.horizontalLayout_ai_strategy = QtWidgets.QHBoxLayout()
         self.horizontalLayout_ai_strategy.setObjectName("horizontalLayout_ai_strategy")
         self.textbrowser_ai_strategy_value = QtWidgets.QTextBrowser(parent=self.groupBox_ai_insights)
+        font = QtGui.QFont()
+        font.setKerning(True)
+        self.textbrowser_ai_strategy_value.setFont(font)
+        self.textbrowser_ai_strategy_value.setStyleSheet("QTextBrowser {\n"
+"    color: #D8DEE9;\n"
+"    border: 1px solid #A9B4C9;\n"
+"    border-radius: 6px;\n"
+"    padding: 1px;\n"
+"}\n"
+"\n"
+"/* Scrollbar Customization */\n"
+"QScrollBar:vertical {\n"
+"    background: transparent;\n"
+"    width: 1px;\n"
+"    margin: 1px 0 1px 0;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:vertical {\n"
+"    background: #4C566A;\n"
+"    border-radius: 5px;\n"
+"    min-height: 20px;\n"
+"}\n"
+"\n"
+"QScrollBar::add-line:vertical,\n"
+"QScrollBar::sub-line:vertical {\n"
+"    height: 0;\n"
+"    background: none;\n"
+"}\n"
+"\n"
+"QScrollBar::add-page:vertical,\n"
+"QScrollBar::sub-page:vertical {\n"
+"    background: none;\n"
+"}\n"
+"\n"
+"QScrollBar:horizontal {\n"
+"    background: transparent;\n"
+"    height: 10px;\n"
+"    margin: 0 10px 0 10px;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:horizontal {\n"
+"    background: #4C566A;\n"
+"    border-radius: 5px;\n"
+"    min-width: 20px;\n"
+"}\n"
+"\n"
+"QScrollBar::add-line:horizontal,\n"
+"QScrollBar::sub-line:horizontal {\n"
+"    width: 0;\n"
+"    background: none;\n"
+"}\n"
+"\n"
+"QScrollBar::add-page:horizontal,\n"
+"QScrollBar::sub-page:horizontal {\n"
+"    background: none;\n"
+"}")
         self.textbrowser_ai_strategy_value.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         self.textbrowser_ai_strategy_value.setObjectName("textbrowser_ai_strategy_value")
         self.horizontalLayout_ai_strategy.addWidget(self.textbrowser_ai_strategy_value)
@@ -495,6 +551,59 @@ class Ui_MainWindow(object):
         self.horizontalLayout_ai_alert = QtWidgets.QHBoxLayout()
         self.horizontalLayout_ai_alert.setObjectName("horizontalLayout_ai_alert")
         self.textbrowser_ai_alert_value = QtWidgets.QTextBrowser(parent=self.groupBox_ai_insights)
+        self.textbrowser_ai_alert_value.setStyleSheet("QTextBrowser {\n"
+"    color: #D8DEE9;\n"
+"    border: 1px solid #A9B4C9;\n"
+"    border-radius: 6px;\n"
+"    padding: 1px;\n"
+"}\n"
+"\n"
+"/* Scrollbar Customization */\n"
+"QScrollBar:vertical {\n"
+"    background: transparent;\n"
+"    width: 1px;\n"
+"    margin: 1px 0 1px 0;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:vertical {\n"
+"    background: #4C566A;\n"
+"    border-radius: 5px;\n"
+"    min-height: 20px;\n"
+"}\n"
+"\n"
+"QScrollBar::add-line:vertical,\n"
+"QScrollBar::sub-line:vertical {\n"
+"    height: 0;\n"
+"    background: none;\n"
+"}\n"
+"\n"
+"QScrollBar::add-page:vertical,\n"
+"QScrollBar::sub-page:vertical {\n"
+"    background: none;\n"
+"}\n"
+"\n"
+"QScrollBar:horizontal {\n"
+"    background: transparent;\n"
+"    height: 10px;\n"
+"    margin: 0 10px 0 10px;\n"
+"}\n"
+"\n"
+"QScrollBar::handle:horizontal {\n"
+"    background: #4C566A;\n"
+"    border-radius: 5px;\n"
+"    min-width: 20px;\n"
+"}\n"
+"\n"
+"QScrollBar::add-line:horizontal,\n"
+"QScrollBar::sub-line:horizontal {\n"
+"    width: 0;\n"
+"    background: none;\n"
+"}\n"
+"\n"
+"QScrollBar::add-page:horizontal,\n"
+"QScrollBar::sub-page:horizontal {\n"
+"    background: none;\n"
+"}")
         self.textbrowser_ai_alert_value.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
         self.textbrowser_ai_alert_value.setObjectName("textbrowser_ai_alert_value")
         self.horizontalLayout_ai_alert.addWidget(self.textbrowser_ai_alert_value)
@@ -507,7 +616,7 @@ class Ui_MainWindow(object):
         self.groupBox_account_metrics = QtWidgets.QGroupBox(parent=self.centralwidget)
         self.groupBox_account_metrics.setStyleSheet("QGroupBox {\n"
 "    border: 2px solid #27ae60;\n"
-"    border-radius: 12px;\n"
+"    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
@@ -576,7 +685,7 @@ class Ui_MainWindow(object):
         self.groupBox_trade_statistics = QtWidgets.QGroupBox(parent=self.centralwidget)
         self.groupBox_trade_statistics.setStyleSheet("QGroupBox {\n"
 "    border: 2px solid #e67e22;\n"
-"    border-radius: 12px;\n"
+"    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
 "    color: #2c3e50;\n"
@@ -819,10 +928,18 @@ class Ui_MainWindow(object):
         self.groupBox_ai_insights.setToolTip(_translate("MainWindow", "AI-generated insights, strategies, and alerts for your trading session."))
         self.groupBox_ai_insights.setTitle(_translate("MainWindow", "🤖 AI Insights"))
         self.label_ai_bias_name.setText(_translate("MainWindow", "Bias:"))
-        self.label_ai_bias_value.setText(_translate("MainWindow", "Bullish"))
+        self.label_ai_bias_value.setText(_translate("MainWindow", "--"))
         self.label_ai_keylevel_name.setText(_translate("MainWindow", "Key Level:"))
-        self.label_ai_keylevel_value.setText(_translate("MainWindow", "$502.00"))
+        self.label_ai_keylevel_value.setText(_translate("MainWindow", "--"))
         self.label_ai_strategy_name.setText(_translate("MainWindow", "Strategy:"))
+        self.textbrowser_ai_strategy_value.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
+"<html><head><meta name=\"qrichtext\" content=\"1\" /><meta charset=\"utf-8\" /><style type=\"text/css\">\n"
+"p, li { white-space: pre-wrap; }\n"
+"hr { height: 1px; border-width: 0; }\n"
+"li.unchecked::marker { content: \"\\2610\"; }\n"
+"li.checked::marker { content: \"\\2612\"; }\n"
+"</style></head><body style=\" font-family:\'Segoe UI\'; font-size:9pt; font-weight:400; font-style:normal;\">\n"
+"<p style=\"-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"><br /></p></body></html>"))
         self.textbrowser_ai_strategy_value.setProperty("text", _translate("MainWindow", "Consider a bull call spread: Buy SPY 500C, sell SPY 510C. Target profit $400, max risk $200. Monitor for breakout above $502. Adjust stop to $497 if volatility increases."))
         self.label_ai_alert_name.setText(_translate("MainWindow", "Alert:"))
         self.textbrowser_ai_alert_value.setHtml(_translate("MainWindow", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"

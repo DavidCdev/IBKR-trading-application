@@ -97,7 +97,7 @@
           <property name="styleSheet">
            <string notr="true">QGroupBox {
         border: 2px solid #5dade2;
-        border-radius: 12px;
+        border-radius: 6px;
         margin-top: 1ex;
         font-weight: bold;
         color: #2c3e50;
@@ -227,7 +227,7 @@
           <property name="styleSheet">
            <string notr="true">QGroupBox {
         border: 2px solid #f39c12;
-        border-radius: 12px;
+        border-radius: 6px;
         margin-top: 1ex;
         font-weight: bold;
         color: #2c3e50;
@@ -352,7 +352,7 @@
         <property name="styleSheet">
          <string notr="true">QGroupBox {
     border: 2px solid #5dade2;
-    border-radius: 12px;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -813,7 +813,7 @@ QGroupBox::title {
         <property name="styleSheet">
          <string notr="true">QGroupBox {
     border: 2px solid #4a90e2;
-    border-radius: 12px;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -851,7 +851,7 @@ QGroupBox::title {
            <item>
             <widget class="QLabel" name="label_ai_bias_value">
              <property name="text">
-              <string>Bullish</string>
+              <string>--</string>
              </property>
             </widget>
            </item>
@@ -869,7 +869,7 @@ QGroupBox::title {
            <item>
             <widget class="QLabel" name="label_ai_keylevel_value">
              <property name="text">
-              <string>$502.00</string>
+              <string>--</string>
              </property>
             </widget>
            </item>
@@ -886,8 +886,78 @@ QGroupBox::title {
           <layout class="QHBoxLayout" name="horizontalLayout_ai_strategy">
            <item>
             <widget class="QTextBrowser" name="textbrowser_ai_strategy_value">
+             <property name="font">
+              <font>
+               <kerning>true</kerning>
+              </font>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">QTextBrowser {
+    color: #D8DEE9;
+    border: 1px solid #A9B4C9;
+    border-radius: 6px;
+    padding: 1px;
+}
+
+/* Scrollbar Customization */
+QScrollBar:vertical {
+    background: transparent;
+    width: 1px;
+    margin: 1px 0 1px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #4C566A;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0 10px 0 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #4C566A;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+    background: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}</string>
+             </property>
              <property name="frameShape">
               <enum>QFrame::Shape::NoFrame</enum>
+             </property>
+             <property name="html">
+              <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+p, li { white-space: pre-wrap; }
+hr { height: 1px; border-width: 0; }
+li.unchecked::marker { content: &quot;\2610&quot;; }
+li.checked::marker { content: &quot;\2612&quot;; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Segoe UI'; font-size:9pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
              </property>
              <property name="text" stdset="0">
               <string>Consider a bull call spread: Buy SPY 500C, sell SPY 510C. Target profit $400, max risk $200. Monitor for breakout above $502. Adjust stop to $497 if volatility increases.</string>
@@ -907,6 +977,61 @@ QGroupBox::title {
           <layout class="QHBoxLayout" name="horizontalLayout_ai_alert">
            <item>
             <widget class="QTextBrowser" name="textbrowser_ai_alert_value">
+             <property name="styleSheet">
+              <string notr="true">QTextBrowser {
+    color: #D8DEE9;
+    border: 1px solid #A9B4C9;
+    border-radius: 6px;
+    padding: 1px;
+}
+
+/* Scrollbar Customization */
+QScrollBar:vertical {
+    background: transparent;
+    width: 1px;
+    margin: 1px 0 1px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #4C566A;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0 10px 0 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #4C566A;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+    background: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}</string>
+             </property>
              <property name="frameShape">
               <enum>QFrame::Shape::NoFrame</enum>
              </property>
@@ -945,7 +1070,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
         <property name="styleSheet">
          <string notr="true">QGroupBox {
     border: 2px solid #27ae60;
-    border-radius: 12px;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -1068,7 +1193,7 @@ QGroupBox::title {
         <property name="styleSheet">
          <string notr="true">QGroupBox {
     border: 2px solid #e67e22;
-    border-radius: 12px;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;

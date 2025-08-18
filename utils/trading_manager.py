@@ -328,6 +328,17 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error creating option contract: {e}")
             raise
+
+    def _create_stock_contract(self, symbol: str):
+        """Create a stock contract for the given symbol"""
+        try:
+            from ib_async import Stock
+            contract = Stock(symbol, 'SMART', 'USD')
+            logger.info(f"Created stock contract for {symbol}")
+            return contract
+        except Exception as e:
+            logger.error(f"Error creating stock contract for {symbol}: {e}")
+            return None
     
     def _create_adaptive_order(self, action: str, quantity: int, price: float = None) -> Order:
         """Create an order using Interactive Brokers' Adaptive Algo (IBALGO)"""
@@ -336,11 +347,7 @@ class TradingManager:
                 order = Order(
                     action="BUY",
                     totalQuantity=quantity,
-                    orderType="MKT",  # Market order for immediate execution
-                    algoStrategy="Adaptive",
-                    algoParams=[
-                        ("adaptivePriority", "Normal")
-                    ]
+                    orderType="MKT"  # Market order for immediate execution
                 )
             elif action.upper() == "SELL":
                 if price:
@@ -349,22 +356,14 @@ class TradingManager:
                         action="SELL",
                         totalQuantity=quantity,
                         orderType="LMT",
-                        lmtPrice=price,
-                        algoStrategy="Adaptive",
-                        algoParams=[
-                            ("adaptivePriority", "Normal")
-                        ]
+                        lmtPrice=price
                     )
                 else:
                     # Market order for sell
                     order = Order(
                         action="SELL",
                         totalQuantity=quantity,
-                        orderType="MKT",
-                        algoStrategy="Adaptive",
-                        algoParams=[
-                            ("adaptivePriority", "Normal")
-                        ]
+                        orderType="MKT"
                     )
             else:
                 raise ValueError(f"Invalid action: {action}")
@@ -453,7 +452,14 @@ class TradingManager:
             # For now, sell the first position (should be the only one due to one active position rule)
             position = positions[0]
             symbol = position['symbol']
-            quantity = position['quantity']
+            quantity = position.get('position_size', 0)  # Use position_size instead of quantity
+            
+            # Validate quantity
+            if quantity <= 0:
+                logger.error(f"Invalid position quantity: {quantity}")
+                return False
+            
+            logger.info(f"Processing sell order for position: {symbol}, quantity: {quantity}, type: {position.get('position_type', 'UNKNOWN')}")
             
             # Apply runner logic if profitable
             if position.get('pnl_percent', 0) > 0 and self.runner > 0:
@@ -462,20 +468,23 @@ class TradingManager:
             else:
                 sell_quantity = quantity
             
-            # Get current option data for pricing
-            option_data = None
+            # Get current pricing data for the position
+            pricing_data = None
             if "CALL" in symbol.upper():
-                option_data = self._current_call_option
+                pricing_data = self._current_call_option
             elif "PUT" in symbol.upper():
-                option_data = self._current_put_option
+                pricing_data = self._current_put_option
+            else:
+                # For stock positions, use underlying price as reference
+                pricing_data = {"Bid": self._underlying_price * 0.999, "Ask": self._underlying_price * 1.001}
             
-            if not option_data:
-                logger.error("No option data available for pricing")
+            if not pricing_data:
+                logger.error("No pricing data available for position")
                 return False
             
             # Calculate sell price
-            bid_price = option_data.get("Bid", 0)
-            ask_price = option_data.get("Ask", 0)
+            bid_price = pricing_data.get("Bid", 0)
+            ask_price = pricing_data.get("Ask", 0)
             mid_price = (bid_price + ask_price) / 2
             
             if use_chase_logic:
@@ -485,13 +494,25 @@ class TradingManager:
                 
                 # Create contract (reuse from position if available)
                 contract = position.get('contract')
-                if not contract:
-                    # Recreate contract from symbol
-                    strike = option_data.get("Strike", self._underlying_price)
-                    option_type = "CALL" if "CALL" in symbol.upper() else "PUT"
-                    contract = self._create_option_contract(option_type, strike)
+                logger.info(f"Position contract: {contract}, type: {type(contract)}")
+                
+                # Validate contract object
+                if not contract or not hasattr(contract, 'symbol'):
+                    logger.warning("Invalid contract object from position, attempting to recreate")
+                    if "CALL" in symbol.upper() or "PUT" in symbol.upper():
+                        # Option contract
+                        strike = pricing_data.get("Strike", self._underlying_price)
+                        option_type = "CALL" if "CALL" in symbol.upper() else "PUT"
+                        contract = self._create_option_contract(option_type, strike)
+                    else:
+                        # Stock contract - create stock contract
+                        contract = self._create_stock_contract(symbol)
+                        if not contract:
+                            logger.error(f"Failed to create stock contract for {symbol}")
+                            return False
                 
                 # Submit limit order
+                logger.info(f"Submitting limit order: {sell_quantity} contracts at ${limit_price:.2f}")
                 trade = self.ib.placeOrder(contract, order)
                 
                 # Track for chase logic
@@ -516,12 +537,25 @@ class TradingManager:
                 
                 # Create contract
                 contract = position.get('contract')
-                if not contract:
-                    strike = option_data.get("Strike", self._underlying_price)
-                    option_type = "CALL" if "CALL" in symbol.upper() else "PUT"
-                    contract = self._create_option_contract(option_type, strike)
+                logger.info(f"Position contract: {contract}, type: {type(contract)}")
+                
+                # Validate contract object
+                if not contract or not hasattr(contract, 'symbol'):
+                    logger.warning("Invalid contract object from position, attempting to recreate")
+                    if "CALL" in symbol.upper() or "PUT" in symbol.upper():
+                        # Option contract
+                        strike = pricing_data.get("Strike", self._underlying_price)
+                        option_type = "CALL" if "CALL" in symbol.upper() else "PUT"
+                        contract = self._create_option_contract(option_type, strike)
+                    else:
+                        # Stock contract - create stock contract
+                        contract = self._create_stock_contract(symbol)
+                        if not contract:
+                            logger.error(f"Failed to create stock contract for {symbol}")
+                            return False
                 
                 # Submit market order
+                logger.info(f"Submitting market order: {sell_quantity} contracts")
                 trade = self.ib.placeOrder(contract, order)
                 
                 logger.info(f"SELL order submitted: {sell_quantity} contracts at market")

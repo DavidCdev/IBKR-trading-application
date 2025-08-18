@@ -906,7 +906,8 @@ class IBDataCollector:
             'current_price': current_price,
             'pnl_dollar': round(pnl_dollar, 2),
             'pnl_percent': round(pnl_percent, 2),
-            'currency': currency
+            'currency': currency,
+            'contract': pos.contract  # Include the contract object for trading
         })
 
         return results
