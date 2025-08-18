@@ -30,6 +30,7 @@ class TradingManager:
         self._open_orders = {}  # {order_id: order_data}
         self._position_lock = Lock()
         self._order_lock = Lock()
+        self._config_lock = Lock()
         
         # Chase logic tracking
         self._chase_orders = {}  # {order_id: chase_data}
@@ -57,6 +58,31 @@ class TradingManager:
         
         logger.info("Trading Manager initialized")
     
+    def update_trading_config(self, trading_config: Dict[str, Any]):
+        """Update trading configuration at runtime so calculations reflect GUI changes immediately"""
+        try:
+            if not trading_config:
+                return
+            with self._config_lock:
+                # Merge dict and refresh derived attributes
+                if isinstance(self.trading_config, dict):
+                    self.trading_config.update(trading_config)
+                else:
+                    self.trading_config = dict(trading_config)
+
+                self.underlying_symbol = self.trading_config.get('underlying_symbol', self.underlying_symbol)
+                self.trade_delta = self.trading_config.get('trade_delta', self.trade_delta)
+                self.max_trade_value = self.trading_config.get('max_trade_value', self.max_trade_value)
+                self.runner = self.trading_config.get('runner', self.runner)
+                self.risk_levels = self.trading_config.get('risk_levels', self.risk_levels) or []
+
+            logger.info(
+                f"Trading config updated: symbol={self.underlying_symbol}, trade_delta={self.trade_delta}, "
+                f"max_trade_value={self.max_trade_value}, runner={self.runner}, tiers={len(self.risk_levels)}"
+            )
+        except Exception as e:
+            logger.error(f"Error updating trading config: {e}")
+
     def update_market_data(self, call_option: Dict[str, Any] = None, 
                           put_option: Dict[str, Any] = None,
                           underlying_price: float = None,
@@ -83,7 +109,8 @@ class TradingManager:
         """
         try:
             # Step 1: GUI Max Trade Value
-            gui_max_value = self.max_trade_value
+            with self._config_lock:
+                gui_max_value = self.max_trade_value
             
             # Step 2: Tiered Risk Limit
             tiered_max_value = self._calculate_tiered_risk_limit()
@@ -111,8 +138,10 @@ class TradingManager:
         """Calculate maximum trade value based on current daily P&L and risk levels"""
         try:
             current_pnl_percent = abs(self._daily_pnl_percent)
-            
-            for risk_level in self.risk_levels:
+            with self._config_lock:
+                risk_levels_snapshot = list(self.risk_levels) if self.risk_levels else []
+
+            for risk_level in risk_levels_snapshot:
                 loss_threshold = float(risk_level.get('loss_threshold', 0))
                 account_trade_limit = float(risk_level.get('account_trade_limit', 100))
                 
@@ -123,7 +152,8 @@ class TradingManager:
                     return max_trade_value
             
             # Default to GUI max trade value if no risk level matches
-            return self.max_trade_value
+            with self._config_lock:
+                return self.max_trade_value
             
         except Exception as e:
             logger.error(f"Error calculating tiered risk limit: {e}")
@@ -752,8 +782,10 @@ class TradingManager:
         """Get the current risk level based on daily P&L"""
         try:
             current_pnl_percent = abs(self._daily_pnl_percent)
-            
-            for risk_level in self.risk_levels:
+            with self._config_lock:
+                risk_levels_snapshot = list(self.risk_levels) if self.risk_levels else []
+
+            for risk_level in risk_levels_snapshot:
                 loss_threshold = float(risk_level.get('loss_threshold', 0))
                 
                 if current_pnl_percent >= loss_threshold:
@@ -761,9 +793,9 @@ class TradingManager:
                     return risk_level
             
             # Return first risk level as default
-            if self.risk_levels:
+            if risk_levels_snapshot:
                 logger.info("Using default risk level")
-                return self.risk_levels[0]
+                return risk_levels_snapshot[0]
             
             return None
             

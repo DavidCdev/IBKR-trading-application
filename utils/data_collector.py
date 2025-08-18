@@ -112,6 +112,15 @@ class DataCollectorWorker(QObject):
             # Update the collector's trading configuration
             self.collector.trading_config = trading_config
             self.collector.underlying_symbol = trading_config.get('underlying_symbol', self.collector.underlying_symbol)
+
+            # Propagate to trading manager so live calculations use new tiers/settings
+            try:
+                if hasattr(self.collector, 'trading_manager') and self.collector.trading_manager:
+                    if hasattr(self.collector.trading_manager, 'update_trading_config'):
+                        self.collector.trading_manager.update_trading_config(trading_config)
+                        logger.info("Trading manager configuration updated at runtime")
+            except Exception as tm_err:
+                logger.warning(f"Could not update trading manager config: {tm_err}")
             
             # Update the config object as well
             if self.config and self.config.trading:
