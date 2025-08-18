@@ -54,6 +54,60 @@ class IBDataCollector:
         self.trading_manager = TradingManager(self.ib, trading_config, account_config)
 
         self._register_ib_callbacks()
+        # Event loop used for scheduling coroutines from background threads
+        self._loop = None
+
+    def _cancel_all_market_data_subscriptions(self):
+        """Cancel all active market data subscriptions (stock/options/forex)."""
+        try:
+            contracts_to_remove = set()
+            for contract in list(self._active_subscriptions):
+                try:
+                    self.ib.cancelMktData(contract)
+                    contracts_to_remove.add(contract)
+                except Exception as e:
+                    logger.warning(f"Error canceling market data for {contract}: {e}")
+            if contracts_to_remove:
+                self._active_subscriptions.difference_update(contracts_to_remove)
+                logger.info(f"Cancelled {len(contracts_to_remove)} market data subscriptions")
+        except Exception as e:
+            logger.error(f"Error cancelling market data subscriptions: {e}")
+
+    async def refresh_for_new_symbol(self, symbol: str):
+        """Handle underlying symbol change by resetting state and resubscribing."""
+        try:
+            if not symbol:
+                return
+            logger.info(f"Refreshing data subscriptions for new underlying symbol: {symbol}")
+
+            # Cancel current subscriptions to avoid mixing symbols
+            self._cancel_all_market_data_subscriptions()
+
+            # Reset cached state related to previous symbol
+            self.underlying_symbol = symbol
+            self.underlying_symbol_price = 0
+            self.option_strike = 0
+            self._previous_strike = 0
+            self._current_expiration = None
+            self._cached_option_contracts = {}
+            self._available_expirations = []
+
+            # Notify trading manager to clear its expirations cache
+            try:
+                if hasattr(self, 'trading_manager') and self.trading_manager:
+                    if hasattr(self.trading_manager, 'update_available_expirations'):
+                        self.trading_manager.update_available_expirations([])
+            except Exception as tm_err:
+                logger.debug(f"Could not notify trading manager about expiration reset: {tm_err}")
+
+            # Obtain new price stream and resubscribe to options for the new symbol
+            await self.get_underlying_symbol_price(symbol)
+            # Ensure we have an initial option chain/subscriptions for the symbol
+            await self._get_and_subscribe_to_options()
+
+            logger.info(f"Symbol refresh completed for {symbol}")
+        except Exception as e:
+            logger.error(f"Error refreshing for new symbol {symbol}: {e}")
 
     def _calculate_nearest_strike(self, price: float) -> int:
         """Calculate the nearest strike price by rounding to the nearest whole number"""
@@ -399,6 +453,11 @@ class IBDataCollector:
             
             log_connection_event("CONNECT_SUCCESS", self.host, self.port, "Connected")
             logger.info("Successfully connected to Interactive Brokers")
+            # Capture the running event loop for cross-thread coroutine scheduling
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self._loop = None
             
             # Start dynamic monitoring after successful connection
             self.start_dynamic_monitoring()
@@ -450,6 +509,8 @@ class IBDataCollector:
                 self.ib.disconnect()
                 log_connection_event("DISCONNECT_SUCCESS", self.host, self.port, "Disconnected")
                 logger.info("Disconnected from Interactive Brokers")
+            # Clear stored loop reference
+            self._loop = None
                 
         except Exception as e:
             log_connection_event("DISCONNECT_FAILED", self.host, self.port, "Failed")
@@ -1549,10 +1610,13 @@ class IBDataCollector:
                     if self._should_update_strike(new_strike):
                         logger.info(f"Strike price changed from {self._previous_strike} to {new_strike}")
                         # Schedule strike update in main thread
-                        asyncio.run_coroutine_threadsafe(
-                            self._switch_option_subscriptions(new_strike=new_strike),
-                            asyncio.get_event_loop()
-                        )
+                        if self._loop and self._loop.is_running():
+                            asyncio.run_coroutine_threadsafe(
+                                self._switch_option_subscriptions(new_strike=new_strike),
+                                self._loop
+                            )
+                        else:
+                            logger.error("Cannot schedule strike update: event loop is not available or not running")
                 
                 # Check if it's time to switch expiration (12:00 PM EST)
                 if self._should_switch_expiration_smart():
@@ -1569,10 +1633,13 @@ class IBDataCollector:
                             logger.info(f"Switching from {current_exp_type} ({self._current_expiration}) to {next_exp_type} ({best_expiration})")
                             
                             # Schedule expiration update in main thread
-                            asyncio.run_coroutine_threadsafe(
-                                self._switch_option_subscriptions(new_expiration=best_expiration),
-                                asyncio.get_event_loop()
-                            )
+                            if self._loop and self._loop.is_running():
+                                asyncio.run_coroutine_threadsafe(
+                                    self._switch_option_subscriptions(new_expiration=best_expiration),
+                                    self._loop
+                                )
+                            else:
+                                logger.error("Cannot schedule expiration update: event loop is not available or not running")
                         else:
                             logger.warning(f"Selected expiration {best_expiration} is not available, skipping switch")
                     else:
@@ -1858,10 +1925,13 @@ class IBDataCollector:
             logger.info(f"Manual expiration switch from {self._current_expiration} to {target_expiration}")
             
             # Schedule expiration update in main thread
-            asyncio.run_coroutine_threadsafe(
-                self._switch_option_subscriptions(new_expiration=target_expiration),
-                asyncio.get_event_loop()
-            )
+            if self._loop and self._loop.is_running():
+                asyncio.run_coroutine_threadsafe(
+                    self._switch_option_subscriptions(new_expiration=target_expiration),
+                    self._loop
+                )
+            else:
+                logger.error("Cannot schedule manual expiration update: event loop is not available or not running")
             
             return True
             

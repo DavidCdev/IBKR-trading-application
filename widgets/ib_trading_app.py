@@ -34,12 +34,22 @@ class IB_Trading_APP(QMainWindow):
             logger.info("Loading configuration...")
             self.config = AppConfig.load_from_file()
             logger.info("Configuration loaded successfully")
+            # Snapshot last-known trading config for change detection (e.g., underlying symbol-only changes)
+            try:
+                self._last_trading_config_snapshot = dict(self.config.trading) if getattr(self.config, 'trading', None) else {}
+            except Exception:
+                self._last_trading_config_snapshot = {}
         except Exception as e1:
             logger.error(f"Failed to load configuration: {e1}")
             logger.info("Creating default configuration...")
             self.config = AppConfig()
             self.config.save_to_file()
             logger.info("Default configuration created and saved")
+            # Initialize snapshot from default config
+            try:
+                self._last_trading_config_snapshot = dict(self.config.trading) if getattr(self.config, 'trading', None) else {}
+            except Exception:
+                self._last_trading_config_snapshot = {}
         
         self.connection_status = 'disconnected'
         # Initialize data collector worker
@@ -698,8 +708,11 @@ class IB_Trading_APP(QMainWindow):
         try:
             logger.info(f"Trading configuration update received: {config_data}")
             
-            # Update the underlying symbol display
+            # Extract new values
             underlying_symbol = config_data.get('underlying_symbol', '---')
+            new_cfg = config_data.get('trading_config', {}) or {}
+            
+            # Update the underlying symbol display
             self.ui.label_spy_name.setText(f"{underlying_symbol}")
             
             # Clear values that are affected by symbol change
@@ -712,6 +725,28 @@ class IB_Trading_APP(QMainWindow):
             # Clear option information fields that are affected by symbol change
             self.ui.label_strike_value.setText(f"---")
             self.ui.label_expiration_value.setText(f"---")
+            
+            # Detect if ONLY the underlying symbol changed compared to our last snapshot
+            try:
+                keys_to_check = ['underlying_symbol', 'trade_delta', 'max_trade_value', 'runner', 'risk_levels']
+                previous_cfg = getattr(self, '_last_trading_config_snapshot', {}) or {}
+                old_values = {k: previous_cfg.get(k) for k in keys_to_check}
+                # Compose new values by overlaying provided new_cfg on previous for comparison
+                new_values = {k: (new_cfg.get(k) if k in new_cfg else previous_cfg.get(k)) for k in keys_to_check}
+                changed = {k for k in keys_to_check if old_values.get(k) != new_values.get(k)}
+                logger.info(f"Trading config changed keys: {changed}")
+                if changed == {'underlying_symbol'}:
+                    logger.info("Only underlying symbol changed; refreshing AI insights")
+                    self.refresh_ai()
+                # Update snapshot after handling
+                try:
+                    merged = dict(previous_cfg)
+                    merged.update(new_cfg)
+                    self._last_trading_config_snapshot = merged
+                except Exception:
+                    self._last_trading_config_snapshot = new_cfg or previous_cfg
+            except Exception as detect_err:
+                logger.warning(f"Could not detect underlying-only change: {detect_err}")
             
             logger.info(f"Main GUI updated with new underlying symbol: {underlying_symbol}")
             

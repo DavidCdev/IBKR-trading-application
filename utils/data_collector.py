@@ -111,7 +111,9 @@ class DataCollectorWorker(QObject):
             
             # Update the collector's trading configuration
             self.collector.trading_config = trading_config
-            self.collector.underlying_symbol = trading_config.get('underlying_symbol', self.collector.underlying_symbol)
+            new_symbol = trading_config.get('underlying_symbol', self.collector.underlying_symbol)
+            symbol_changed = new_symbol is not None and new_symbol != self.collector.underlying_symbol
+            self.collector.underlying_symbol = new_symbol
 
             # Propagate to trading manager so live calculations use new tiers/settings
             try:
@@ -141,12 +143,21 @@ class DataCollectorWorker(QObject):
                 'trading_config': trading_config
             })
             
-            # If connected, restart data collection with new configuration
-            if self.collector.ib.isConnected():
-                logger.info("Restarting data collection with new trading configuration")
-                # This will trigger a reconnection with the new configuration
-                self._manual_disconnect_requested = False
-                self.reconnect_attempts = 0
+            # If connected and the symbol changed, immediately refresh subscriptions for new symbol
+            if symbol_changed and self.collector.ib.isConnected():
+                logger.info("Underlying symbol changed while connected - refreshing subscriptions for new symbol")
+                try:
+                    # Run the async refresh on the collector's event loop
+                    loop = getattr(self.collector, '_loop', None)
+                    if loop and loop.is_running():
+                        asyncio.run_coroutine_threadsafe(
+                            self.collector.refresh_for_new_symbol(self.collector.underlying_symbol),
+                            loop
+                        )
+                    else:
+                        logger.warning("Collector event loop not available; cannot schedule symbol refresh")
+                except Exception as refresh_err:
+                    logger.warning(f"Could not schedule symbol refresh: {refresh_err}")
             
         except Exception as e:
             logger.error(f"Error updating trading configuration: {e}")

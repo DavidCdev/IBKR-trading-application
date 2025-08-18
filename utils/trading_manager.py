@@ -64,6 +64,17 @@ class TradingManager:
             if not trading_config:
                 return
             with self._config_lock:
+                # Detect underlying symbol change before mutating config
+                try:
+                    incoming_symbol = None
+                    if isinstance(trading_config, dict):
+                        incoming_symbol = trading_config.get('underlying_symbol')
+                    symbol_changed = (
+                        incoming_symbol is not None and str(incoming_symbol) != str(getattr(self, 'underlying_symbol', ''))
+                    )
+                except Exception:
+                    symbol_changed = False
+
                 # Merge dict and refresh derived attributes
                 if isinstance(self.trading_config, dict):
                     self.trading_config.update(trading_config)
@@ -75,6 +86,46 @@ class TradingManager:
                 self.max_trade_value = self.trading_config.get('max_trade_value', self.max_trade_value)
                 self.runner = self.trading_config.get('runner', self.runner)
                 self.risk_levels = self.trading_config.get('risk_levels', self.risk_levels) or []
+
+                # If the underlying symbol changed, clear cached market-data to avoid stale orders
+                if symbol_changed:
+                    try:
+                        self._current_call_option = None
+                        self._current_put_option = None
+                        self._underlying_price = 0
+                        # Clear any locally cached expirations so fresh ones are requested
+                        if hasattr(self, '_local_available_expirations'):
+                            self._local_available_expirations = []
+                        # Drop any tracked positions that don't match the new underlying
+                        try:
+                            with self._position_lock:
+                                symbols_to_remove = []
+                                for pos_symbol, pos in self._active_positions.items():
+                                    try:
+                                        contract_obj = pos.get('contract') if isinstance(pos, dict) else None
+                                        contract_symbol = getattr(contract_obj, 'symbol', None)
+                                        # Match either by explicit contract symbol or by stored symbol prefix
+                                        matches_new_underlying = (
+                                            (contract_symbol == self.underlying_symbol) or
+                                            (isinstance(pos_symbol, str) and (
+                                                pos_symbol == self.underlying_symbol or pos_symbol.startswith(f"{self.underlying_symbol} ")
+                                            ))
+                                        )
+                                        if not matches_new_underlying:
+                                            symbols_to_remove.append(pos_symbol)
+                                    except Exception:
+                                        symbols_to_remove.append(pos_symbol)
+                                for sym in symbols_to_remove:
+                                    self._active_positions.pop(sym, None)
+                                if symbols_to_remove:
+                                    logger.info(f"Removed {len(symbols_to_remove)} positions not matching new underlying '{self.underlying_symbol}'")
+                        except Exception as pos_err:
+                            logger.warning(f"Error pruning positions on symbol change: {pos_err}")
+                        logger.info(
+                            f"Underlying symbol changed. Cleared cached market data to wait for fresh '{self.underlying_symbol}' updates"
+                        )
+                    except Exception as clear_err:
+                        logger.warning(f"Error clearing cached market data on symbol change: {clear_err}")
 
             logger.info(
                 f"Trading config updated: symbol={self.underlying_symbol}, trade_delta={self.trade_delta}, "
@@ -499,9 +550,34 @@ class TradingManager:
                     logger.warning("No active positions to sell")
                     return False
                 
-                positions = list(self._active_positions.values())
+                # Filter positions to the current underlying symbol only
+                filtered_positions = []
+                for pos in self._active_positions.values():
+                    try:
+                        contract_obj = pos.get('contract') if isinstance(pos, dict) else None
+                        contract_symbol = getattr(contract_obj, 'symbol', None)
+                        pos_symbol_str = str(pos.get('symbol', '')) if isinstance(pos, dict) else ''
+                        # Match by contract symbol when available, else by symbol string prefix
+                        matches_underlying = False
+                        if contract_symbol:
+                            matches_underlying = (contract_symbol == self.underlying_symbol)
+                        else:
+                            # Accept exact match or prefix like "SPY CALL" / "SPY PUT"
+                            matches_underlying = (
+                                pos_symbol_str == self.underlying_symbol or pos_symbol_str.startswith(f"{self.underlying_symbol} ")
+                            )
+                        if matches_underlying:
+                            filtered_positions.append(pos)
+                    except Exception:
+                        continue
+
+                if not filtered_positions:
+                    logger.warning(f"No active positions found for current underlying {self.underlying_symbol}")
+                    return False
+                
+                positions = filtered_positions
             
-            # For now, sell the first position (should be the only one due to one active position rule)
+            # For now, sell the first matching position (should typically be the only one)
             position = positions[0]
             symbol = position['symbol']
             quantity = position.get('position_size', 0)  # Use position_size instead of quantity
@@ -522,12 +598,25 @@ class TradingManager:
             
             # Get current pricing data for the position
             pricing_data = None
-            if "CALL" in symbol.upper():
-                pricing_data = self._current_call_option
-            elif "PUT" in symbol.upper():
-                pricing_data = self._current_put_option
-            else:
-                # For stock positions, use underlying price as reference
+            try:
+                contract_obj = position.get('contract')
+                sec_type = getattr(contract_obj, 'secType', '').upper() if contract_obj else ''
+                right = getattr(contract_obj, 'right', '').upper() if contract_obj else ''
+                if sec_type == 'OPT':
+                    if right == 'C':
+                        pricing_data = self._current_call_option
+                    elif right == 'P':
+                        pricing_data = self._current_put_option
+                # Fallbacks based on symbol string if contract info missing
+                if pricing_data is None:
+                    if "CALL" in symbol.upper():
+                        pricing_data = self._current_call_option
+                    elif "PUT" in symbol.upper():
+                        pricing_data = self._current_put_option
+                # Stock pricing fallback
+                if pricing_data is None:
+                    pricing_data = {"Bid": self._underlying_price * 0.999, "Ask": self._underlying_price * 1.001}
+            except Exception:
                 pricing_data = {"Bid": self._underlying_price * 0.999, "Ask": self._underlying_price * 1.001}
             
             if not pricing_data:
