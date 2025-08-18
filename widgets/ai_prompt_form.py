@@ -13,9 +13,7 @@ class AI_Prompt_Form(QDialog):
         self.ui.setupUi(self)
         self.config = config
         self.refresh_callback = refresh_callback  # Store the refresh callback
-        if self.config:
-            self.load_config_values()
-        else:
+        if not self.config:
             # Create a default config if none provided
             from utils.config_manager import AppConfig
             self.config = AppConfig()
@@ -27,6 +25,8 @@ class AI_Prompt_Form(QDialog):
         
         # Create additional UI elements for new configuration options
         self._create_advanced_ui()
+        # Load values after UI elements are created so inputs get populated
+        self.load_config_values()
         
         self.ui.outputArea.textChanged.connect(self.on_prompt_input_changed)
         self.ui.submitBtn.clicked.connect(self.save_config_values)
@@ -283,7 +283,10 @@ class AI_Prompt_Form(QDialog):
             
             # Save advanced settings
             if hasattr(self, 'api_key_input'):
-                self.config.ai_prompt["gemini_api_key"] = self.api_key_input.text()
+                new_api_key = self.api_key_input.text().strip()
+                # Only update the key if the user provided a non-empty value
+                if new_api_key:
+                    self.config.ai_prompt["gemini_api_key"] = new_api_key
             
             if hasattr(self, 'enable_polling_checkbox'):
                 self.config.ai_prompt["enable_auto_polling"] = self.enable_polling_checkbox.isChecked()
