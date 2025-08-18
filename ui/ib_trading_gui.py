@@ -489,8 +489,8 @@ class Ui_MainWindow(object):
         font.setKerning(True)
         self.textbrowser_ai_strategy_value.setFont(font)
         self.textbrowser_ai_strategy_value.setStyleSheet("QTextBrowser {\n"
-"    color: #D8DEE9;\n"
-"    border: 1px solid #A9B4C9;\n"
+"    color: #071229;\n"
+"    border: 1px solid #D8DEE9;\n"
 "    border-radius: 6px;\n"
 "    padding: 1px;\n"
 "}\n"
@@ -552,8 +552,8 @@ class Ui_MainWindow(object):
         self.horizontalLayout_ai_alert.setObjectName("horizontalLayout_ai_alert")
         self.textbrowser_ai_alert_value = QtWidgets.QTextBrowser(parent=self.groupBox_ai_insights)
         self.textbrowser_ai_alert_value.setStyleSheet("QTextBrowser {\n"
-"    color: #D8DEE9;\n"
-"    border: 1px solid #A9B4C9;\n"
+"    color: #071229;\n"
+"    border: 1px solid #D8DEE9;\n"
 "    border-radius: 6px;\n"
 "    padding: 1px;\n"
 "}\n"

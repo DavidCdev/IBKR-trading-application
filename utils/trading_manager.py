@@ -37,6 +37,10 @@ class TradingManager:
         self._chase_thread = None
         self._stop_chase = Event()
         
+        # Bracket order tracking for risk management
+        self._bracket_orders = {}  # {parent_order_id: {stop_loss_id, take_profit_id, contract, quantity}}
+        self._bracket_lock = Lock()
+        
         # PDT buffer calculation
         self._pdt_minimum_usd = 2000
         self._pdt_minimum_cad = 2500
@@ -429,6 +433,9 @@ class TradingManager:
                         'price': option_price
                     }
                 
+                # Place bracket orders for risk management
+                await self._place_bracket_orders(trade.order.orderId, contract, quantity, option_price, option_type)
+                
                 return True
             else:
                 logger.error(f"BUY {option_type} order failed: {trade.orderStatus.status}")
@@ -591,8 +598,25 @@ class TradingManager:
             
             for order_id in orders_to_cancel:
                 try:
-                    self.ib.cancelOrder(order_id)
-                    logger.info(f"Cancelled order {order_id}")
+                    # Retrieve the actual Order/Trade object for cancellation
+                    with self._order_lock:
+                        order_data = self._open_orders.get(order_id)
+                        order_obj = None
+                        if order_data:
+                            if order_data.get('order'):
+                                order_obj = order_data['order']
+                            elif order_data.get('trade'):
+                                order_obj = order_data['trade'].order
+
+                    if order_obj:
+                        self.ib.cancelOrder(order_obj)
+                        logger.info(f"Cancelled order {order_id}")
+                    else:
+                        logger.warning(f"No order object found for order {order_id}; skipping cancel")
+                    
+                    # Cancel associated bracket orders
+                    await self._cancel_bracket_orders(order_id)
+                    
                 except Exception as e:
                     logger.error(f"Error cancelling order {order_id}: {e}")
             
@@ -649,7 +673,7 @@ class TradingManager:
             
             # Cancel the original limit order
             try:
-                self.ib.cancelOrder(order_id)
+                self.ib.cancelOrder(chase_data['trade'].order)
                 logger.info(f"Cancelled limit order {order_id} for chase logic")
             except Exception as e:
                 logger.error(f"Error cancelling limit order {order_id}: {e}")
@@ -666,6 +690,191 @@ class TradingManager:
             
         except Exception as e:
             logger.error(f"Error converting to market order: {e}")
+    
+    async def _place_bracket_orders(self, parent_order_id: int, contract, quantity: int, entry_price: float, option_type: str):
+        """Place bracket orders (stop loss and take profit) for risk management"""
+        try:
+            # Get current risk level based on daily P&L
+            current_risk_level = self._get_current_risk_level()
+            if not current_risk_level:
+                logger.warning("No risk level found, skipping bracket orders")
+                return
+            
+            stop_loss_percent = current_risk_level.get('stop_loss')
+            profit_gain_percent = current_risk_level.get('profit_gain')
+            
+            # If both are empty, no bracket orders needed
+            if not stop_loss_percent and not profit_gain_percent:
+                logger.info("No stop loss or profit gain configured, skipping bracket orders")
+                return
+            
+            logger.info(f"Placing bracket orders for {option_type}: Stop Loss={stop_loss_percent}%, Profit Gain={profit_gain_percent}%")
+            
+            bracket_orders = {}
+            
+            # Place stop loss order if configured
+            if stop_loss_percent:
+                stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent), option_type)
+                stop_loss_order = self._create_stop_loss_order(quantity, stop_loss_price)
+                stop_loss_trade = self.ib.placeOrder(contract, stop_loss_order)
+                
+                bracket_orders['stop_loss_id'] = stop_loss_trade.order.orderId
+                bracket_orders['stop_loss_trade'] = stop_loss_trade
+                logger.info(f"Stop loss order placed: {quantity} contracts at ${stop_loss_price:.2f}")
+            
+            # Place take profit order if configured
+            if profit_gain_percent:
+                take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent), option_type)
+                take_profit_order = self._create_take_profit_order(quantity, take_profit_price)
+                take_profit_trade = self.ib.placeOrder(contract, take_profit_order)
+                
+                bracket_orders['take_profit_id'] = take_profit_trade.order.orderId
+                bracket_orders['take_profit_trade'] = take_profit_trade
+                logger.info(f"Take profit order placed: {quantity} contracts at ${take_profit_price:.2f}")
+            
+            # Store bracket order information
+            if bracket_orders:
+                with self._bracket_lock:
+                    self._bracket_orders[parent_order_id] = {
+                        **bracket_orders,
+                        'contract': contract,
+                        'quantity': quantity,
+                        'entry_price': entry_price,
+                        'option_type': option_type
+                    }
+                
+                logger.info(f"Bracket orders created for parent order {parent_order_id}")
+            
+        except Exception as e:
+            logger.error(f"Error placing bracket orders: {e}")
+    
+    def _get_current_risk_level(self) -> Dict[str, Any]:
+        """Get the current risk level based on daily P&L"""
+        try:
+            current_pnl_percent = abs(self._daily_pnl_percent)
+            
+            for risk_level in self.risk_levels:
+                loss_threshold = float(risk_level.get('loss_threshold', 0))
+                
+                if current_pnl_percent >= loss_threshold:
+                    logger.info(f"Selected risk level: PnL={current_pnl_percent}%, Threshold={loss_threshold}%")
+                    return risk_level
+            
+            # Return first risk level as default
+            if self.risk_levels:
+                logger.info("Using default risk level")
+                return self.risk_levels[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting current risk level: {e}")
+            return None
+    
+    def _calculate_stop_loss_price(self, entry_price: float, stop_loss_percent: float, option_type: str) -> float:
+        """Calculate stop loss price based on entry price and percentage"""
+        try:
+            # For options, stop loss is a percentage decrease from entry price
+            stop_loss_price = entry_price * (1 - stop_loss_percent / 100)
+            
+            # Ensure minimum price
+            stop_loss_price = max(0.01, stop_loss_price)
+            
+            logger.info(f"Stop loss calculation: Entry=${entry_price:.2f}, Loss={stop_loss_percent}%, Stop=${stop_loss_price:.2f}")
+            return stop_loss_price
+            
+        except Exception as e:
+            logger.error(f"Error calculating stop loss price: {e}")
+            return entry_price * 0.8  # Default to 20% loss
+    
+    def _calculate_take_profit_price(self, entry_price: float, profit_gain_percent: float, option_type: str) -> float:
+        """Calculate take profit price based on entry price and percentage"""
+        try:
+            # For options, take profit is a percentage increase from entry price
+            take_profit_price = entry_price * (1 + profit_gain_percent / 100)
+            
+            logger.info(f"Take profit calculation: Entry=${entry_price:.2f}, Gain={profit_gain_percent}%, Target=${take_profit_price:.2f}")
+            return take_profit_price
+            
+        except Exception as e:
+            logger.error(f"Error calculating take profit price: {e}")
+            return entry_price * 1.2  # Default to 20% gain
+    
+    def _create_stop_loss_order(self, quantity: int, stop_loss_price: float) -> Order:
+        """Create a stop loss order"""
+        try:
+            order = Order(
+                action="SELL",
+                totalQuantity=quantity,
+                orderType="STP",
+                auxPrice=stop_loss_price,
+                tif="GTC"  # Good Till Cancelled
+            )
+            
+            logger.info(f"Created stop loss order: {quantity} contracts at ${stop_loss_price:.2f}")
+            return order
+            
+        except Exception as e:
+            logger.error(f"Error creating stop loss order: {e}")
+            raise
+    
+    def _create_take_profit_order(self, quantity: int, take_profit_price: float) -> Order:
+        """Create a take profit order"""
+        try:
+            order = Order(
+                action="SELL",
+                totalQuantity=quantity,
+                orderType="LMT",
+                lmtPrice=take_profit_price,
+                tif="GTC"  # Good Till Cancelled
+            )
+            
+            logger.info(f"Created take profit order: {quantity} contracts at ${take_profit_price:.2f}")
+            return order
+            
+        except Exception as e:
+            logger.error(f"Error creating take profit order: {e}")
+            raise
+    
+    async def _cancel_bracket_orders(self, parent_order_id: int):
+        """Cancel bracket orders associated with a parent order"""
+        try:
+            with self._bracket_lock:
+                if parent_order_id not in self._bracket_orders:
+                    return
+                
+                bracket_data = self._bracket_orders[parent_order_id]
+            
+            # Cancel stop loss order
+            if 'stop_loss_id' in bracket_data:
+                try:
+                    if 'stop_loss_trade' in bracket_data:
+                        self.ib.cancelOrder(bracket_data['stop_loss_trade'].order)
+                        logger.info(f"Cancelled stop loss order {bracket_data['stop_loss_id']}")
+                    else:
+                        logger.warning("Stop loss trade object not available; cannot cancel by id")
+                except Exception as e:
+                    logger.error(f"Error cancelling stop loss order: {e}")
+            
+            # Cancel take profit order
+            if 'take_profit_id' in bracket_data:
+                try:
+                    if 'take_profit_trade' in bracket_data:
+                        self.ib.cancelOrder(bracket_data['take_profit_trade'].order)
+                        logger.info(f"Cancelled take profit order {bracket_data['take_profit_id']}")
+                    else:
+                        logger.warning("Take profit trade object not available; cannot cancel by id")
+                except Exception as e:
+                    logger.error(f"Error cancelling take profit order: {e}")
+            
+            # Remove from tracking
+            with self._bracket_lock:
+                self._bracket_orders.pop(parent_order_id, None)
+            
+            logger.info(f"Bracket orders cancelled for parent order {parent_order_id}")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling bracket orders: {e}")
     
     def update_position(self, position_data: Dict[str, Any]):
         """Update position information"""
@@ -699,6 +908,232 @@ class TradingManager:
         """Get current open orders"""
         with self._order_lock:
             return self._open_orders.copy()
+    
+    def get_bracket_orders(self) -> Dict[str, Any]:
+        """Get current bracket orders"""
+        with self._bracket_lock:
+            return self._bracket_orders.copy()
+    
+    def get_risk_management_status(self) -> Dict[str, Any]:
+        """Get current risk management status"""
+        try:
+            current_risk_level = self._get_current_risk_level()
+            active_brackets = len(self._bracket_orders)
+            
+            return {
+                'current_risk_level': current_risk_level,
+                'active_bracket_orders': active_brackets,
+                'daily_pnl_percent': self._daily_pnl_percent,
+                'account_value': self._account_value
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting risk management status: {e}")
+            return {'error': str(e)}
+    
+    def handle_order_fill(self, order_id: int, filled_quantity: int, fill_price: float):
+        """Handle order fill events and manage bracket orders accordingly"""
+        try:
+            logger.info(f"Order fill event: Order {order_id}, Quantity {filled_quantity}, Price ${fill_price:.2f}")
+            
+            # Check if this is a bracket order fill
+            with self._bracket_lock:
+                for parent_id, bracket_data in self._bracket_orders.items():
+                    if bracket_data.get('stop_loss_id') == order_id:
+                        logger.info(f"Stop loss order {order_id} filled - cancelling take profit order")
+                        self._cancel_remaining_bracket_order(parent_id, 'take_profit_id')
+                        return
+                    elif bracket_data.get('take_profit_id') == order_id:
+                        logger.info(f"Take profit order {order_id} filled - cancelling stop loss order")
+                        self._cancel_remaining_bracket_order(parent_id, 'stop_loss_id')
+                        return
+            
+            # Check if this is a primary order fill
+            with self._order_lock:
+                if order_id in self._open_orders:
+                    order_data = self._open_orders[order_id]
+                    if order_data['type'] == 'BUY':
+                        logger.info(f"Primary BUY order {order_id} filled - position opened")
+                        # The bracket orders are already in place from when the order was submitted
+                        # Just update the position tracking
+                        self._update_position_from_fill(order_data, filled_quantity, fill_price)
+                    elif order_data['type'] == 'SELL':
+                        logger.info(f"Primary SELL order {order_id} filled - position closed")
+                        # Cancel any remaining bracket orders
+                        asyncio.run(self._cancel_bracket_orders(order_id))
+                        # Clear any chase tracking for this order if present
+                        if order_id in self._chase_orders:
+                            self._chase_orders.pop(order_id, None)
+            
+        except Exception as e:
+            logger.error(f"Error handling order fill: {e}")
+    
+    def _cancel_remaining_bracket_order(self, parent_id: int, order_type: str):
+        """Cancel the remaining bracket order when one is filled"""
+        try:
+            with self._bracket_lock:
+                if parent_id not in self._bracket_orders:
+                    return
+                
+                bracket_data = self._bracket_orders[parent_id]
+                order_id = bracket_data.get(order_type)
+                
+                if order_id:
+                    try:
+                        # Determine the matching trade key for the given order_type key
+                        trade_key = 'stop_loss_trade' if order_type == 'stop_loss_id' else 'take_profit_trade'
+                        if trade_key in bracket_data:
+                            self.ib.cancelOrder(bracket_data[trade_key].order)
+                            logger.info(f"Cancelled {order_type} order {order_id} due to other bracket order fill")
+                        else:
+                            logger.warning(f"Trade object for {order_type} not available; cannot cancel by id")
+                    except Exception as e:
+                        logger.error(f"Error cancelling {order_type} order: {e}")
+                    
+                    # Remove the cancelled order from tracking
+                    bracket_data.pop(order_type, None)
+                    if 'stop_loss_trade' in bracket_data and order_type == 'stop_loss_id':
+                        bracket_data.pop('stop_loss_trade', None)
+                    if 'take_profit_trade' in bracket_data and order_type == 'take_profit_id':
+                        bracket_data.pop('take_profit_trade', None)
+                    
+                    # If no more bracket orders, remove the entire entry
+                    if not bracket_data.get('stop_loss_id') and not bracket_data.get('take_profit_id'):
+                        self._bracket_orders.pop(parent_id, None)
+                        logger.info(f"All bracket orders for parent {parent_id} have been processed")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling remaining bracket order: {e}")
+    
+    def _update_position_from_fill(self, order_data: Dict[str, Any], filled_quantity: int, fill_price: float):
+        """Update position tracking when a buy order is filled"""
+        try:
+            symbol = f"{self.underlying_symbol} {order_data['option_type']}"
+            
+            with self._position_lock:
+                self._active_positions[symbol] = {
+                    'symbol': symbol,
+                    'position_type': order_data['option_type'],
+                    'position_size': filled_quantity,
+                    'entry_price': fill_price,
+                    'contract': order_data['contract'],
+                    'entry_time': datetime.now(),
+                    'pnl_percent': 0.0
+                }
+            
+            logger.info(f"Position updated: {symbol}, {filled_quantity} contracts at ${fill_price:.2f}")
+            
+        except Exception as e:
+            logger.error(f"Error updating position from fill: {e}")
+    
+    def handle_partial_fill(self, order_id: int, filled_quantity: int, remaining_quantity: int, fill_price: float):
+        """Handle partial fill events and adjust bracket orders accordingly"""
+        try:
+            logger.info(f"Partial fill: Order {order_id}, Filled {filled_quantity}, Remaining {remaining_quantity}")
+            
+            # Check if this is a bracket order partial fill
+            with self._bracket_lock:
+                for parent_id, bracket_data in self._bracket_orders.items():
+                    if bracket_data.get('stop_loss_id') == order_id or bracket_data.get('take_profit_id') == order_id:
+                        # Adjust the remaining bracket order quantity
+                        asyncio.run(self._adjust_bracket_order_quantity(parent_id, remaining_quantity))
+                        return
+            
+            # For primary orders, update position tracking
+            with self._order_lock:
+                if order_id in self._open_orders:
+                    order_data = self._open_orders[order_id]
+                    if order_data['type'] == 'BUY':
+                        self._update_position_from_fill(order_data, filled_quantity, fill_price)
+                        # Adjust bracket orders for remaining quantity
+                        asyncio.run(self._adjust_bracket_order_quantity(order_id, remaining_quantity))
+                    elif order_data['type'] == 'SELL':
+                        # Update chase remaining quantity if this SELL is being chased
+                        if order_id in self._chase_orders:
+                            self._chase_orders[order_id]['remaining_quantity'] = remaining_quantity
+                            if remaining_quantity <= 0:
+                                self._chase_orders.pop(order_id, None)
+            
+        except Exception as e:
+            logger.error(f"Error handling partial fill: {e}")
+    
+    async def _adjust_bracket_order_quantity(self, parent_order_id: int, new_quantity: int):
+        """Adjust bracket order quantities after partial fills"""
+        try:
+            with self._bracket_lock:
+                if parent_order_id not in self._bracket_orders:
+                    return
+                
+                bracket_data = self._bracket_orders[parent_order_id]
+            
+            # Cancel existing bracket orders
+            await self._cancel_bracket_orders(parent_order_id)
+            
+            # If there's remaining quantity, create new bracket orders
+            if new_quantity > 0:
+                contract = bracket_data['contract']
+                entry_price = bracket_data['entry_price']
+                option_type = bracket_data['option_type']
+                
+                # Place new bracket orders with adjusted quantity
+                await self._place_bracket_orders(parent_order_id, contract, new_quantity, entry_price, option_type)
+                
+                logger.info(f"Adjusted bracket orders for {new_quantity} remaining contracts")
+            
+        except Exception as e:
+            logger.error(f"Error adjusting bracket order quantity: {e}")
+    
+    def handle_runner_logic(self, position_symbol: str, sell_quantity: int):
+        """Handle runner logic when selling profitable positions"""
+        try:
+            with self._position_lock:
+                if position_symbol not in self._active_positions:
+                    return
+                
+                position = self._active_positions[position_symbol]
+                current_quantity = position.get('position_size', 0)
+                
+                if current_quantity <= 0:
+                    return
+                
+                # Calculate runner quantity
+                runner_quantity = min(self.runner, current_quantity)
+                sell_quantity = min(sell_quantity, current_quantity - runner_quantity)
+                
+                if sell_quantity > 0:
+                    logger.info(f"Runner logic: Selling {sell_quantity} of {current_quantity} contracts, keeping {runner_quantity} as runner")
+                    
+                    # Update position size
+                    position['position_size'] = current_quantity - sell_quantity
+                    
+                    # Adjust bracket orders for remaining quantity
+                    asyncio.run(self._adjust_bracket_order_quantity_for_position(position_symbol, position['position_size']))
+                    
+                    return sell_quantity
+                else:
+                    logger.info("Runner logic: No contracts to sell, keeping all as runner")
+                    return 0
+            
+        except Exception as e:
+            logger.error(f"Error handling runner logic: {e}")
+            return 0
+    
+    async def _adjust_bracket_order_quantity_for_position(self, position_symbol: str, new_quantity: int):
+        """Adjust bracket orders for a specific position"""
+        try:
+            # Find the parent order for this position
+            with self._order_lock:
+                parent_order_id = None
+                for order_id, order_data in self._open_orders.items():
+                    if order_data['type'] == 'BUY' and order_data['option_type'] in position_symbol:
+                        parent_order_id = order_id
+                        break
+            
+            if parent_order_id:
+                await self._adjust_bracket_order_quantity(parent_order_id, new_quantity)
+            
+        except Exception as e:
+            logger.error(f"Error adjusting bracket orders for position: {e}")
     
     def cleanup(self):
         """Cleanup resources"""

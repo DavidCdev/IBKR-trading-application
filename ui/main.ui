@@ -893,8 +893,8 @@ QGroupBox::title {
              </property>
              <property name="styleSheet">
               <string notr="true">QTextBrowser {
-    color: #D8DEE9;
-    border: 1px solid #A9B4C9;
+    color: #071229;
+    border: 1px solid #D8DEE9;
     border-radius: 6px;
     padding: 1px;
 }
@@ -979,8 +979,8 @@ li.checked::marker { content: &quot;\2612&quot;; }
             <widget class="QTextBrowser" name="textbrowser_ai_alert_value">
              <property name="styleSheet">
               <string notr="true">QTextBrowser {
-    color: #D8DEE9;
-    border: 1px solid #A9B4C9;
+    color: #071229;
+    border: 1px solid #D8DEE9;
     border-radius: 6px;
     padding: 1px;
 }
