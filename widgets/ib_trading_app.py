@@ -201,6 +201,25 @@ class IB_Trading_APP(QMainWindow):
             logger.info("Initializing hotkey manager...")
             if self.data_worker and self.data_worker.collector:
                 self.hotkey_manager = HotkeyManager(self.data_worker.collector.trading_manager, parent_window=self)
+                # Provide UI notify hook to trading manager for asynchronous notifications (e.g., chase convert)
+                try:
+                    from PyQt6.QtCore import QTimer
+                    def ui_notify(message: str, success: bool):
+                        # Ensure this runs on the UI thread
+                        def _show():
+                            try:
+                                if success:
+                                    QMessageBox.information(self, "Trade Notice", message)
+                                else:
+                                    QMessageBox.warning(self, "Trade Notice", message)
+                            except Exception as _e:
+                                logger.warning(f"Failed to show UI notify: {_e}")
+                        QTimer.singleShot(0, _show)
+                    # Attach to trading manager if available
+                    if hasattr(self.data_worker.collector, 'trading_manager') and self.data_worker.collector.trading_manager:
+                        self.data_worker.collector.trading_manager.ui_notify = ui_notify
+                except Exception as _e:
+                    logger.warning(f"Failed to attach UI notify hook: {_e}")
                 self.hotkey_manager.start()
                 logger.info("Hotkey manager initialized and started successfully")
             else:

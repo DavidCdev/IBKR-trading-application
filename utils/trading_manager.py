@@ -58,6 +58,8 @@ class TradingManager:
         
         # Last action message for UI notifications
         self._last_action_message = ""
+        # Optional UI notify callback set by UI layer (callable: (message: str, success: bool) -> None)
+        self.ui_notify = None
         
         logger.info("Trading Manager initialized")
     
@@ -738,6 +740,11 @@ class TradingManager:
             await self._cancel_all_orders()
             
             logger.info("Panic button execution completed")
+            self._last_action_message = (
+                "PANIC executed: submitted market sell for all positions and cancelled remaining orders."
+                if sell_success else
+                "PANIC attempted but no active positions were found. All open orders cancelled."
+            )
             return sell_success
             
         except Exception as e:
@@ -837,6 +844,14 @@ class TradingManager:
             trade = self.ib.placeOrder(chase_data['contract'], market_order)
             
             logger.info(f"Converted to market order: {remaining_quantity} contracts")
+            self._last_action_message = (
+                f"SELL order converted to MARKET after 10s: {remaining_quantity} contracts (order {order_id})."
+            )
+            try:
+                if callable(self.ui_notify):
+                    self.ui_notify(self._last_action_message, True)
+            except Exception as notify_err:
+                logger.warning(f"UI notify callback error: {notify_err}")
             
             # Remove from chase orders
             with self._order_lock:

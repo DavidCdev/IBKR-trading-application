@@ -177,11 +177,13 @@ class HotkeyManager(QObject):
                 # Run in event loop
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # If loop is running, schedule the coroutine
-                    asyncio.create_task(self.trading_manager.panic_button())
+                    async def _run():
+                        ok = await self.trading_manager.panic_button()
+                        self._show_action_result(ok)
+                    asyncio.create_task(_run())
                 else:
-                    # If loop is not running, run it
-                    loop.run_until_complete(self.trading_manager.panic_button())
+                    ok = loop.run_until_complete(self.trading_manager.panic_button())
+                    self._show_action_result(ok)
         except Exception as e:
             logger.error(f"Error executing panic button hotkey: {e}")
 
