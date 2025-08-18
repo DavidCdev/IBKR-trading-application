@@ -51,7 +51,7 @@ class Ui_MainWindow(object):
         font.setBold(True)
         self.groupBox_trading_info.setFont(font)
         self.groupBox_trading_info.setStyleSheet("QGroupBox {\n"
-"        border: 2px solid #5dade2;\n"
+"        border: 1px solid #5dade2;\n"
 "        border-radius: 6px;\n"
 "        margin-top: 1ex;\n"
 "        font-weight: bold;\n"
@@ -125,7 +125,7 @@ class Ui_MainWindow(object):
         font.setBold(True)
         self.groupBox_active_contract.setFont(font)
         self.groupBox_active_contract.setStyleSheet("QGroupBox {\n"
-"        border: 2px solid #f39c12;\n"
+"        border: 1px solid #f39c12;\n"
 "        border-radius: 6px;\n"
 "        margin-top: 1ex;\n"
 "        font-weight: bold;\n"
@@ -194,7 +194,7 @@ class Ui_MainWindow(object):
         self.groupBox_option_info.setSizePolicy(sizePolicy)
         self.groupBox_option_info.setMinimumSize(QtCore.QSize(270, 240))
         self.groupBox_option_info.setStyleSheet("QGroupBox {\n"
-"    border: 2px solid #5dade2;\n"
+"    border: 1px solid #5dade2;\n"
 "    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
@@ -440,7 +440,7 @@ class Ui_MainWindow(object):
         self.groupBox_ai_insights.setSizePolicy(sizePolicy)
         self.groupBox_ai_insights.setMinimumSize(QtCore.QSize(200, 120))
         self.groupBox_ai_insights.setStyleSheet("QGroupBox {\n"
-"    border: 2px solid #4a90e2;\n"
+"    border: 1px solid #4a90e2;\n"
 "    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
@@ -615,7 +615,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout_bottom.setObjectName("horizontalLayout_bottom")
         self.groupBox_account_metrics = QtWidgets.QGroupBox(parent=self.centralwidget)
         self.groupBox_account_metrics.setStyleSheet("QGroupBox {\n"
-"    border: 2px solid #27ae60;\n"
+"    border: 1px solid #27ae60;\n"
 "    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"
@@ -684,7 +684,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout_bottom.addWidget(self.groupBox_account_metrics)
         self.groupBox_trade_statistics = QtWidgets.QGroupBox(parent=self.centralwidget)
         self.groupBox_trade_statistics.setStyleSheet("QGroupBox {\n"
-"    border: 2px solid #e67e22;\n"
+"    border: 1px solid #e67e22;\n"
 "    border-radius: 6px;\n"
 "    margin-top: 1ex;\n"
 "    font-weight: bold;\n"

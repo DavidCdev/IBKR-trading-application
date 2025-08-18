@@ -96,7 +96,7 @@
           </property>
           <property name="styleSheet">
            <string notr="true">QGroupBox {
-        border: 2px solid #5dade2;
+        border: 1px solid #5dade2;
         border-radius: 6px;
         margin-top: 1ex;
         font-weight: bold;
@@ -226,7 +226,7 @@
           </property>
           <property name="styleSheet">
            <string notr="true">QGroupBox {
-        border: 2px solid #f39c12;
+        border: 1px solid #f39c12;
         border-radius: 6px;
         margin-top: 1ex;
         font-weight: bold;
@@ -351,7 +351,7 @@
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #5dade2;
+    border: 1px solid #5dade2;
     border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
@@ -812,7 +812,7 @@ QGroupBox::title {
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #4a90e2;
+    border: 1px solid #4a90e2;
     border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
@@ -1069,7 +1069,7 @@ li.checked::marker { content: &quot;\2612&quot;; }
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #27ae60;
+    border: 1px solid #27ae60;
     border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
@@ -1192,7 +1192,7 @@ QGroupBox::title {
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #e67e22;
+    border: 1px solid #e67e22;
     border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
