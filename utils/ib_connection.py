@@ -97,6 +97,9 @@ class IBDataCollector:
                 if hasattr(self, 'trading_manager') and self.trading_manager:
                     if hasattr(self.trading_manager, 'update_available_expirations'):
                         self.trading_manager.update_available_expirations([])
+                    # Also notify trading manager of underlying symbol change so cached prices are cleared
+                    if hasattr(self.trading_manager, 'update_trading_config'):
+                        self.trading_manager.update_trading_config({'underlying_symbol': symbol})
             except Exception as tm_err:
                 logger.debug(f"Could not notify trading manager about expiration reset: {tm_err}")
 
@@ -555,6 +558,9 @@ class IBDataCollector:
     def _on_underlying_price_update(self, ticker, symbol=None):
         """Callback handler for real-time underlying symbol price updates"""
         try:
+            # Ignore updates from tickers that don't match the current underlying symbol
+            if symbol is not None and symbol != self.underlying_symbol:
+                return
             old_price = self.underlying_symbol_price
             ticker_type = ""
             if ticker.last and ticker.last > 0:
@@ -582,19 +588,19 @@ class IBDataCollector:
                     logger.info(f"Underlying price changed from ${old_price:.2f} to type: {ticker_type}  ${self.underlying_symbol_price:.2f}, new strike: {new_strike}")
                     # Schedule strike update
                     asyncio.create_task(self._switch_option_subscriptions(new_strike=new_strike))
-            
-            # Emit signal for UI update if we have a data worker
+
+                # Emit signal for UI update if we have a data worker
                 if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'price_updated'):
                     self.data_worker.price_updated.emit({
-                        'symbol': symbol or self.underlying_symbol,
+                        'symbol': self.underlying_symbol,
                         'price': self.underlying_symbol_price,
                         'timestamp': datetime.now().isoformat()
                     })
-            
+
                 # Update trading manager with underlying price
                 if hasattr(self, 'trading_manager'):
                     self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
-                    
+
                 # Recalculate active positions PnL in real-time based on latest underlying price
                 if self.pos and self.underlying_symbol_price > 0:
                     try:
@@ -753,8 +759,8 @@ class IBDataCollector:
                 logger.info(f"Call qualification result: {call_qualified}")
                 logger.info(f"Put qualification result: {put_qualified}")
 
-                # Cache contracts for quick resubscription
-                cache_key = f"{self.option_strike}_{expiration}"
+                # Cache contracts for quick resubscription, keyed by symbol as well
+                cache_key = f"{symbol}_{self.option_strike}_{expiration}"
                 contracts_cache[cache_key] = {
                     'call': call_qualified[0] if call_qualified and call_qualified[0] else None,
                     'put': put_qualified[0] if put_qualified and put_qualified[0] else None
@@ -1522,8 +1528,8 @@ class IBDataCollector:
                 logger.warning("Cannot subscribe to new options: missing strike or expiration")
                 return
             
-            # Check if we have cached contracts for this strike/expiration
-            cache_key = f"{self.option_strike}_{self._current_expiration}"
+            # Check if we have cached contracts for this symbol+strike+expiration
+            cache_key = f"{self.underlying_symbol}_{self.option_strike}_{self._current_expiration}"
             if cache_key in self._cached_option_contracts:
                 contracts = self._cached_option_contracts[cache_key]
                 await self._subscribe_to_cached_contracts(contracts)
@@ -1587,8 +1593,8 @@ class IBDataCollector:
                 'put': put_qualified[0] if put_qualified and put_qualified[0] else None
             }
             
-            # Cache the contracts
-            cache_key = f"{strike}_{expiration}"
+            # Cache the contracts keyed by symbol+strike+expiration
+            cache_key = f"{symbol}_{strike}_{expiration}"
             self._cached_option_contracts[cache_key] = contracts
             
             return contracts

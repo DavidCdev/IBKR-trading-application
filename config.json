@@ -10,7 +10,7 @@
         "max_reconnect_delay": 300
     },
     "trading": {
-        "underlying_symbol": "IBKR",
+        "underlying_symbol": "SPY",
         "risk_levels": [
             {
                 "loss_threshold": "0",

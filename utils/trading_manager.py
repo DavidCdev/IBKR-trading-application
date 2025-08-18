@@ -128,7 +128,7 @@ class TradingManager:
                         logger.warning(f"Error clearing cached market data on symbol change: {clear_err}")
 
             logger.info(
-                f"Trading config updated: symbol={self.underlying_symbol}, trade_delta={self.trade_delta}, "
+                f"Trading config updated: symbol={self.underlying_symbol}, symbol_price: {self._underlying_price}, trade_delta={self.trade_delta}, "
                 f"max_trade_value={self.max_trade_value}, runner={self.runner}, tiers={len(self.risk_levels)}"
             )
         except Exception as e:

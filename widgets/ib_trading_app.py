@@ -735,9 +735,10 @@ class IB_Trading_APP(QMainWindow):
                 new_values = {k: (new_cfg.get(k) if k in new_cfg else previous_cfg.get(k)) for k in keys_to_check}
                 changed = {k for k in keys_to_check if old_values.get(k) != new_values.get(k)}
                 logger.info(f"Trading config changed keys: {changed}")
-                if changed == {'underlying_symbol'}:
-                    logger.info("Only underlying symbol changed; refreshing AI insights")
-                    self.refresh_ai()
+                # Do not refresh AI insights when only the underlying symbol changes
+                # if changed == {'underlying_symbol'}:
+                #     logger.info("Only underlying symbol changed; refreshing AI insights")
+                #     self.refresh_ai()
                 # Update snapshot after handling
                 try:
                     merged = dict(previous_cfg)
