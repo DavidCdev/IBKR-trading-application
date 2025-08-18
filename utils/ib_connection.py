@@ -780,7 +780,8 @@ class IBDataCollector:
                     logger.info(f"Added CALL option data: {call_option_data}")
 
                     call_option_ticker = self.ib.reqMktData(call_qualified[0], '100,101,104,106', False, False)
-                    call_option_ticker.updateEvent += self._on_update_calloption
+                    # Pass symbol/strike/expiration context to filter updates to current selection only
+                    call_option_ticker.updateEvent += (lambda option_ticker, sym=symbol, st=self.option_strike, exp=expiration: self._on_update_calloption(option_ticker, sym, st, exp))
                     self._active_subscriptions.add(call_qualified[0])
                     await asyncio.sleep(1)
 
@@ -796,7 +797,8 @@ class IBDataCollector:
                     logger.info(f"Added PUT option data: {put_option_data}")
 
                     put_option_ticker = self.ib.reqMktData(put_qualified[0], '100,101,104,106', False, False)
-                    put_option_ticker.updateEvent += self._on_update_putoption
+                    # Pass symbol/strike/expiration context to filter updates to current selection only
+                    put_option_ticker.updateEvent += (lambda option_ticker, sym=symbol, st=self.option_strike, exp=expiration: self._on_update_putoption(option_ticker, sym, st, exp))
                     self._active_subscriptions.add(put_qualified[0])
                     await asyncio.sleep(1)
 
@@ -819,7 +821,7 @@ class IBDataCollector:
             return pd.DataFrame()
 
 
-    def _on_update_calloption(self, option_ticker):
+    def _on_update_calloption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
         logger.info(f"Getting real-time Call Option Data in UI")
         # logger.info(f"Call Option ticker: {option_ticker}")
         tmp_data = {
@@ -835,6 +837,17 @@ class IBDataCollector:
             'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
         }
         # print(f"Calls option data: \n{tmp_data}")
+        # Ensure this update corresponds to current underlying/strike/expiration
+        try:
+            if symbol_ctx and symbol_ctx != self.underlying_symbol:
+                return
+            if strike_ctx and strike_ctx != self.option_strike:
+                return
+            if expiration_ctx and expiration_ctx != self._current_expiration:
+                return
+        except Exception:
+            pass
+
         self.data_worker.calls_option_updated.emit(tmp_data)
         
         # Update trading manager with call option data
@@ -842,7 +855,7 @@ class IBDataCollector:
             self.trading_manager.update_market_data(call_option=tmp_data)
 
 
-    def _on_update_putoption(self, option_ticker):
+    def _on_update_putoption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
         logger.info(f"Getting real-time Puts Option Data in UI")
         # logger.info(f"Puts Option ticker: {option_ticker}")
         tmp_data = {
@@ -858,6 +871,17 @@ class IBDataCollector:
             'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
         }
         # print(f"Puts option data: \n{tmp_data}")
+        # Ensure this update corresponds to current underlying/strike/expiration
+        try:
+            if symbol_ctx and symbol_ctx != self.underlying_symbol:
+                return
+            if strike_ctx and strike_ctx != self.option_strike:
+                return
+            if expiration_ctx and expiration_ctx != self._current_expiration:
+                return
+        except Exception:
+            pass
+
         self.data_worker.puts_option_updated.emit(tmp_data)
         
         # Update trading manager with put option data
