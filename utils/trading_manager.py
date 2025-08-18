@@ -111,13 +111,13 @@ class TradingManager:
             # Step 1: GUI Max Trade Value
             with self._config_lock:
                 gui_max_value = self.max_trade_value
-            
+            logger.info(f"GUI Max Trade Value: {gui_max_value}")
             # Step 2: Tiered Risk Limit
             tiered_max_value = self._calculate_tiered_risk_limit()
-            
+            logger.info(f"Tiered Max Trade Value: {tiered_max_value}")
             # Step 3: PDT Buffer
             pdt_max_value = self._calculate_pdt_buffer()
-            
+            logger.info(f"PDT Max Trade Value: {pdt_max_value}")
             # Use minimum of the three
             max_trade_value = min(gui_max_value, tiered_max_value, pdt_max_value)
             
@@ -163,8 +163,10 @@ class TradingManager:
         """Calculate buffer to stay above PDT minimum equity requirement"""
         try:
             # Determine currency and minimum requirement
-            # For now, assume USD - this should be determined from account currency
-            pdt_minimum = self._pdt_minimum_usd
+            with self._config_lock:
+                account_currency = (self.account_config or {}).get('currency', 'USD')
+            currency_upper = str(account_currency).upper()
+            pdt_minimum = self._pdt_minimum_cad if currency_upper == 'CAD' else self._pdt_minimum_usd
             
             # Calculate available buffer
             available_buffer = self._account_value - pdt_minimum
@@ -172,7 +174,7 @@ class TradingManager:
             # Use 80% of available buffer as safety margin
             safe_buffer = available_buffer * 0.8
             
-            logger.info(f"PDT buffer calculation: Account=${self._account_value:.2f}, Min=${pdt_minimum}, Available=${available_buffer:.2f}, Safe=${safe_buffer:.2f}")
+            logger.info(f"PDT buffer calculation ({currency_upper}): Account=${self._account_value:.2f}, Min=${pdt_minimum}, Available=${available_buffer:.2f}, Safe=${safe_buffer:.2f}")
             
             return max(0, safe_buffer)
             
@@ -383,6 +385,19 @@ class TradingManager:
                     totalQuantity=quantity,
                     orderType="MKT"  # Market order for immediate execution
                 )
+                # Apply IB Adaptive Algo (IBALGO) with "Normal" urgency for BUY orders
+                try:
+                    # Try IB API TagValue first
+                    from ibapi.tag_value import TagValue  # type: ignore
+                    setattr(order, 'algoStrategy', 'Adaptive')
+                    setattr(order, 'algoParams', [TagValue("adaptivePriority", "Normal")])
+                except Exception:
+                    # Fallback to generic structure if TagValue is unavailable in this environment
+                    try:
+                        setattr(order, 'algoStrategy', 'Adaptive')
+                        setattr(order, 'algoParams', [{"tag": "adaptivePriority", "value": "Normal"}])
+                    except Exception as e2:
+                        logger.warning(f"Could not set IB Adaptive Algo parameters: {e2}")
             elif action.upper() == "SELL":
                 if price:
                     # Limit order for sell
@@ -741,23 +756,37 @@ class TradingManager:
             logger.info(f"Placing bracket orders for {option_type}: Stop Loss={stop_loss_percent}%, Profit Gain={profit_gain_percent}%")
             
             bracket_orders = {}
+            stop_loss_order = None
+            take_profit_order = None
             
-            # Place stop loss order if configured
+            # Build orders (do not transmit yet) so we can set OCA if needed
             if stop_loss_percent:
                 stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent), option_type)
                 stop_loss_order = self._create_stop_loss_order(quantity, stop_loss_price)
-                stop_loss_trade = self.ib.placeOrder(contract, stop_loss_order)
-                
-                bracket_orders['stop_loss_id'] = stop_loss_trade.order.orderId
-                bracket_orders['stop_loss_trade'] = stop_loss_trade
-                logger.info(f"Stop loss order placed: {quantity} contracts at ${stop_loss_price:.2f}")
-            
-            # Place take profit order if configured
             if profit_gain_percent:
                 take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent), option_type)
                 take_profit_order = self._create_take_profit_order(quantity, take_profit_price)
+            
+            # If both exist, set OCA group so that one cancels the other at broker side
+            if stop_loss_order and take_profit_order:
+                oca_group = f"OCA_{parent_order_id}"
+                try:
+                    setattr(stop_loss_order, 'ocaGroup', oca_group)
+                    setattr(take_profit_order, 'ocaGroup', oca_group)
+                    # 1 = Cancel with block (typical OCO behavior)
+                    setattr(stop_loss_order, 'ocaType', 1)
+                    setattr(take_profit_order, 'ocaType', 1)
+                except Exception as e:
+                    logger.warning(f"Could not set OCA group on bracket orders: {e}")
+            
+            # Place orders that are configured
+            if stop_loss_order:
+                stop_loss_trade = self.ib.placeOrder(contract, stop_loss_order)
+                bracket_orders['stop_loss_id'] = stop_loss_trade.order.orderId
+                bracket_orders['stop_loss_trade'] = stop_loss_trade
+                logger.info(f"Stop loss order placed: {quantity} contracts at ${stop_loss_price:.2f}")
+            if take_profit_order:
                 take_profit_trade = self.ib.placeOrder(contract, take_profit_order)
-                
                 bracket_orders['take_profit_id'] = take_profit_trade.order.orderId
                 bracket_orders['take_profit_trade'] = take_profit_trade
                 logger.info(f"Take profit order placed: {quantity} contracts at ${take_profit_price:.2f}")
@@ -772,7 +801,6 @@ class TradingManager:
                         'entry_price': entry_price,
                         'option_type': option_type
                     }
-                
                 logger.info(f"Bracket orders created for parent order {parent_order_id}")
             
         except Exception as e:
