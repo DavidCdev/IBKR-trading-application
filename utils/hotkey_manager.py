@@ -2,7 +2,7 @@ import sys
 import platform
 from typing import Callable, Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal, Qt
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QKeySequence
 from .smart_logger import get_logger
 
@@ -20,9 +20,10 @@ class HotkeyManager(QObject):
     hotkey_sell_position = pyqtSignal()
     hotkey_panic_button = pyqtSignal()
     
-    def __init__(self, trading_manager):
+    def __init__(self, trading_manager, parent_window=None):
         super().__init__()
         self.trading_manager = trading_manager
+        self.parent_window = parent_window
         self.is_active = False
         self._hotkey_shortcuts = {}
         
@@ -118,11 +119,14 @@ class HotkeyManager(QObject):
                 # Run in event loop
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # If loop is running, schedule the coroutine
-                    asyncio.create_task(self.trading_manager.place_buy_order("CALL"))
+                    async def _run():
+                        ok = await self.trading_manager.place_buy_order("CALL")
+                        self._show_action_result(ok)
+                    asyncio.create_task(_run())
                 else:
-                    # If loop is not running, run it
-                    loop.run_until_complete(self.trading_manager.place_buy_order("CALL"))
+                    # If loop is not running, run it and then show
+                    ok = loop.run_until_complete(self.trading_manager.place_buy_order("CALL"))
+                    self._show_action_result(ok)
         except Exception as e:
             logger.error(f"Error executing buy call hotkey: {e}")
     
@@ -135,11 +139,13 @@ class HotkeyManager(QObject):
                 # Run in event loop
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # If loop is running, schedule the coroutine
-                    asyncio.create_task(self.trading_manager.place_buy_order("PUT"))
+                    async def _run():
+                        ok = await self.trading_manager.place_buy_order("PUT")
+                        self._show_action_result(ok)
+                    asyncio.create_task(_run())
                 else:
-                    # If loop is not running, run it
-                    loop.run_until_complete(self.trading_manager.place_buy_order("PUT"))
+                    ok = loop.run_until_complete(self.trading_manager.place_buy_order("PUT"))
+                    self._show_action_result(ok)
         except Exception as e:
             logger.error(f"Error executing buy put hotkey: {e}")
     
@@ -152,11 +158,13 @@ class HotkeyManager(QObject):
                 # Run in event loop
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    # If loop is running, schedule the coroutine
-                    asyncio.create_task(self.trading_manager.place_sell_order(use_chase_logic=True))
+                    async def _run():
+                        ok = await self.trading_manager.place_sell_order(use_chase_logic=True)
+                        self._show_action_result(ok)
+                    asyncio.create_task(_run())
                 else:
-                    # If loop is not running, run it
-                    loop.run_until_complete(self.trading_manager.place_sell_order(use_chase_logic=True))
+                    ok = loop.run_until_complete(self.trading_manager.place_sell_order(use_chase_logic=True))
+                    self._show_action_result(ok)
         except Exception as e:
             logger.error(f"Error executing sell position hotkey: {e}")
     
@@ -176,6 +184,24 @@ class HotkeyManager(QObject):
                     loop.run_until_complete(self.trading_manager.panic_button())
         except Exception as e:
             logger.error(f"Error executing panic button hotkey: {e}")
+
+    def _show_action_result(self, success: bool):
+        """Show a message box with the last action result from trading manager"""
+        try:
+            message = ""
+            try:
+                if hasattr(self.trading_manager, 'get_last_action_message'):
+                    message = self.trading_manager.get_last_action_message() or ""
+            except Exception:
+                message = ""
+            parent = self.parent_window if self.parent_window is not None else None
+            if success:
+                QMessageBox.information(parent, "Trade Result", message or "Action completed successfully.")
+            else:
+                # If we failed due to active contract rule, message will already explain
+                QMessageBox.warning(parent, "Trade Failed", message or "Action failed. See logs for details.")
+        except Exception as e:
+            logger.error(f"Error showing action result: {e}")
     
     def keyPressEvent(self, event):
         """Handle key press events for hotkey detection"""

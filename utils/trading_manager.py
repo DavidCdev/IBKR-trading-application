@@ -56,6 +56,9 @@ class TradingManager:
         # Est timezone for expiration calculations
         self._est_timezone = pytz.timezone('US/Eastern')
         
+        # Last action message for UI notifications
+        self._last_action_message = ""
+        
         logger.info("Trading Manager initialized")
     
     def update_trading_config(self, trading_config: Dict[str, Any]):
@@ -481,24 +484,28 @@ class TradingManager:
             # Validate option type
             if option_type.upper() not in ["CALL", "PUT"]:
                 logger.error(f"Invalid option type: {option_type}")
+                self._last_action_message = f"Invalid option type: {option_type}"
                 return False
             
             # Check for existing positions (one active position rule)
             with self._position_lock:
                 if self._active_positions:
                     logger.warning("One active position rule: Cannot place new order while position exists")
+                    self._last_action_message = "Cannot BUY: an active position already exists. Close or sell the current position first."
                     return False
             
             # Get current option data
             option_data = self._current_call_option if option_type.upper() == "CALL" else self._current_put_option
             if not option_data:
                 logger.error(f"No {option_type} option data available")
+                self._last_action_message = f"Cannot BUY {option_type}: option data unavailable."
                 return False
             
             # Get option price and calculate quantity
             option_price = option_data.get("Ask", 0)
             if option_price <= 0:
                 logger.error(f"Invalid {option_type} option price: {option_price}")
+                self._last_action_message = f"Cannot BUY {option_type}: invalid ask price ({option_price})."
                 return False
             
             quantity = self._calculate_order_quantity(option_price)
@@ -516,6 +523,7 @@ class TradingManager:
             
             if trade.orderStatus.status == "Submitted":
                 logger.info(f"BUY {option_type} order submitted: {quantity} contracts at ${option_price:.2f}")
+                self._last_action_message = f"BUY {option_type} submitted: {quantity} contracts at ${option_price:.2f}."
                 
                 # Track the order
                 with self._order_lock:
@@ -535,10 +543,16 @@ class TradingManager:
                 return True
             else:
                 logger.error(f"BUY {option_type} order failed: {trade.orderStatus.status}")
+                try:
+                    status_text = str(trade.orderStatus.status)
+                except Exception:
+                    status_text = "Unknown"
+                self._last_action_message = f"BUY {option_type} failed: status={status_text}."
                 return False
                 
         except Exception as e:
             logger.error(f"Error placing BUY {option_type} order: {e}")
+            self._last_action_message = f"BUY {option_type} error: {str(e)}"
             return False
     
     async def place_sell_order(self, use_chase_logic: bool = True) -> bool:
@@ -548,6 +562,7 @@ class TradingManager:
             with self._position_lock:
                 if not self._active_positions:
                     logger.warning("No active positions to sell")
+                    self._last_action_message = "Cannot SELL: no active positions."
                     return False
                 
                 # Filter positions to the current underlying symbol only
@@ -573,6 +588,7 @@ class TradingManager:
 
                 if not filtered_positions:
                     logger.warning(f"No active positions found for current underlying {self.underlying_symbol}")
+                    self._last_action_message = f"Cannot SELL: no active positions for {self.underlying_symbol}."
                     return False
                 
                 positions = filtered_positions
@@ -585,6 +601,7 @@ class TradingManager:
             # Validate quantity
             if quantity <= 0:
                 logger.error(f"Invalid position quantity: {quantity}")
+                self._last_action_message = f"Cannot SELL: invalid position quantity ({quantity})."
                 return False
             
             logger.info(f"Processing sell order for position: {symbol}, quantity: {quantity}, type: {position.get('position_type', 'UNKNOWN')}")
@@ -671,6 +688,7 @@ class TradingManager:
                 self._start_chase_monitoring()
                 
                 logger.info(f"SELL order submitted with chase logic: {sell_quantity} contracts at ${limit_price:.2f}")
+                self._last_action_message = f"SELL submitted (chase): {sell_quantity} contracts at ${limit_price:.2f}."
                 return True
             else:
                 # Direct market order
@@ -700,10 +718,12 @@ class TradingManager:
                 trade = self.ib.placeOrder(contract, order)
                 
                 logger.info(f"SELL order submitted: {sell_quantity} contracts at market")
+                self._last_action_message = f"SELL submitted: {sell_quantity} contracts at market."
                 return True
                 
         except Exception as e:
             logger.error(f"Error placing SELL order: {e}")
+            self._last_action_message = f"SELL error: {str(e)}"
             return False
     
     async def panic_button(self) -> bool:
@@ -1294,6 +1314,13 @@ class TradingManager:
             logger.info("Trading Manager cleanup completed")
         except Exception as e:
             logger.error(f"Error during trading manager cleanup: {e}")
+
+    def get_last_action_message(self) -> str:
+        """Return the last user-facing action message for UI notifications"""
+        try:
+            return str(self._last_action_message)
+        except Exception:
+            return ""
 
     def manual_expiration_switch(self, target_expiration: str = None) -> bool:
         """Manually trigger expiration switching to a specific expiration or best available"""

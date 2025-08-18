@@ -200,7 +200,7 @@ class IB_Trading_APP(QMainWindow):
         try:
             logger.info("Initializing hotkey manager...")
             if self.data_worker and self.data_worker.collector:
-                self.hotkey_manager = HotkeyManager(self.data_worker.collector.trading_manager)
+                self.hotkey_manager = HotkeyManager(self.data_worker.collector.trading_manager, parent_window=self)
                 self.hotkey_manager.start()
                 logger.info("Hotkey manager initialized and started successfully")
             else:
