@@ -1,13 +1,11 @@
 import asyncio
-from typing import Dict, Any, Optional, List
-from ib_async import IB, Option, Order, Trade
-import pandas as pd
-from datetime import datetime, timedelta, date
+from typing import Dict, Any, List
+from ib_async import IB, Option, Order
+from datetime import datetime, timedelta
 import pytz
 from threading import Thread, Event, Lock
 import time
-from .smart_logger import get_logger, log_error_with_context
-from .performance_monitor import monitor_function, monitor_async_function
+from .smart_logger import get_logger
 
 logger = get_logger("TRADING_MANAGER")
 

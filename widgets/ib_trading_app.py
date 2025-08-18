@@ -1,14 +1,14 @@
 from ui.ib_trading_gui import Ui_MainWindow
 from utils.config_manager import AppConfig
 from widgets.settings_form import Settings_Form
-from widgets.ai_prompt_form import AIPrompt_Form
+from widgets.ai_prompt_form import AI_Prompt_Form
 
 from utils.data_collector import DataCollectorWorker
 from utils.ai_engine import AI_Engine
 from utils.hotkey_manager import HotkeyManager
 
 from typing import Dict, Any, Union, List
-from datetime import datetime, date
+from datetime import datetime
 from utils.smart_logger import get_logger
 
 logger = get_logger("GUI")
@@ -24,6 +24,7 @@ except ImportError as e:
 class IB_Trading_APP(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.refresh_timer = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
 
@@ -33,8 +34,8 @@ class IB_Trading_APP(QMainWindow):
             logger.info("Loading configuration...")
             self.config = AppConfig.load_from_file()
             logger.info("Configuration loaded successfully")
-        except Exception as e:
-            logger.error(f"Failed to load configuration: {e}")
+        except Exception as e1:
+            logger.error(f"Failed to load configuration: {e1}")
             logger.info("Creating default configuration...")
             self.config = AppConfig()
             self.config.save_to_file()
@@ -48,8 +49,8 @@ class IB_Trading_APP(QMainWindow):
             self.worker_thread = QThread()
             self.data_worker.moveToThread(self.worker_thread)
             logger.info("Data collector worker initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize data collector worker: {e}")
+        except Exception as e2:
+            logger.error(f"Failed to initialize data collector worker: {e2}")
             self.data_worker = None
             self.worker_thread = None
         
@@ -74,8 +75,8 @@ class IB_Trading_APP(QMainWindow):
                 self.worker_thread.started.connect(self.data_worker.start_collection)
                 self.worker_thread.finished.connect(self.data_worker.cleanup)
                 logger.info("Data worker signals connected successfully")
-            except Exception as e:
-                logger.error(f"Failed to connect data worker signals: {e}")
+            except Exception as e3:
+                logger.error(f"Failed to connect data worker signals: {e3}")
         else:
             logger.warning("Data worker not available, skipping signal connections")
         
@@ -108,7 +109,7 @@ class IB_Trading_APP(QMainWindow):
                 logger.error(f"AI Prompt UI file not found: {ai_ui_file_path}")
                 raise FileNotFoundError(f"AI Prompt UI file not found: {ai_ui_file_path}")
             
-            self.ai_prompt_ui = AIPrompt_Form(self.config, self.refresh_ai)
+            self.ai_prompt_ui = AI_Prompt_Form(self.config, self.refresh_ai)
             logger.info("AIPrompt_Form initialized successfully")
             
             # Connect form signals
@@ -146,13 +147,13 @@ class IB_Trading_APP(QMainWindow):
                     self.data_worker.connection_disconnected.connect(on_connection_disconnected)
                     self.data_worker.error_occurred.connect(on_error)
                     logger.info("Settings form signal connections established")
-                except Exception as e:
-                    logger.error(f"Failed to connect settings form signals: {e}")
+                except Exception as e3:
+                    logger.error(f"Failed to connect settings form signals: {e3}")
                 
-        except Exception as e:
-            logger.error(f"Error initializing UI forms: {e}")
-            logger.error(f"Exception type: {type(e).__name__}")
-            logger.error(f"Exception details: {str(e)}")
+        except Exception as e3:
+            logger.error(f"Error initializing UI forms: {e3}")
+            logger.error(f"Exception type: {type(e3).__name__}")
+            logger.error(f"Exception details: {str(e3)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Create minimal forms if there's an error
@@ -164,8 +165,8 @@ class IB_Trading_APP(QMainWindow):
             try:
                 self.worker_thread.start()
                 logger.info("Data collection thread started successfully")
-            except Exception as e:
-                logger.error(f"Failed to start data collection thread: {e}")
+            except Exception as e3:
+                logger.error(f"Failed to start data collection thread: {e3}")
         else:
             logger.warning("Data collection thread not available")
 
@@ -181,8 +182,8 @@ class IB_Trading_APP(QMainWindow):
                 self.ai_engine.polling_status.connect(self.on_ai_polling_status)
                 self.ai_engine.cache_status.connect(self.on_ai_cache_status)
                 logger.info("AI engine signals connected successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize AI engine: {e}")
+        except Exception as e3:
+            logger.error(f"Failed to initialize AI engine: {e3}")
             self.ai_engine = None
         
         # Initialize hotkey manager
@@ -195,8 +196,8 @@ class IB_Trading_APP(QMainWindow):
             else:
                 logger.warning("Data worker not available, skipping hotkey manager initialization")
                 self.hotkey_manager = None
-        except Exception as e:
-            logger.error(f"Failed to initialize hotkey manager: {e}")
+        except Exception as e3:
+            logger.error(f"Failed to initialize hotkey manager: {e3}")
             self.hotkey_manager = None
         
         self.refresh_ui_with_whitespace()
@@ -223,15 +224,15 @@ class IB_Trading_APP(QMainWindow):
         if hasattr(self.ui, 'pushButton_settings'):
             try:
                 self.ui.pushButton_settings.clicked.connect(self.show_setting_ui)
-            except Exception as e:
-                logger.error(f"Error connecting settings button: {e}")
+            except Exception as e4:
+                logger.error(f"Error connecting settings button: {e4}")
         
         # Connect AI prompt button
         if hasattr(self.ui, 'button_ai_prompt'):
             try:
                 self.ui.button_ai_prompt.clicked.connect(self.show_ai_prompt_ui)
-            except Exception as e:
-                logger.error(f"Error connecting AI prompt button: {e}")
+            except Exception as e5:
+                logger.error(f"Error connecting AI prompt button: {e5}")
         
         if hasattr(self.ui, 'button_refresh_ai'):
             try:
@@ -487,7 +488,7 @@ class IB_Trading_APP(QMainWindow):
         if not hasattr(self, 'ai_prompt_ui') or self.ai_prompt_ui is None:
             logger.error("AI Prompt UI not available - attempting to reinitialize...")
             try:
-                self.ai_prompt_ui = AIPrompt_Form(self.config, self.refresh_ai)
+                self.ai_prompt_ui = AI_Prompt_Form(self.config, self.refresh_ai)
                 logger.info("AIPrompt_Form reinitialized successfully")
             except Exception as e:
                 logger.error(f"Failed to reinitialize AIPrompt_Form: {e}")

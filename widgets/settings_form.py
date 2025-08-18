@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QDialog
 from PyQt6 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.settings_gui import Ui_PreferencesDialog
-from utils.smart_logger import get_logger, log_error_with_context
+from utils.smart_logger import get_logger
 from datetime import datetime
 
 logger = get_logger("SETTINGS")

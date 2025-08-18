@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
 from datetime import datetime, date, timedelta, time

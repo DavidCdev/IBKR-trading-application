@@ -6,7 +6,7 @@ from utils.smart_logger import get_logger
 
 logger = get_logger("AI_PROMPT")
 
-class AIPrompt_Form(QDialog):
+class AI_Prompt_Form(QDialog):
     def __init__(self, config: AppConfig = None, refresh_callback=None):
         super().__init__()
         self.ui = Ui_AiPromptPanel()

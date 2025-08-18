@@ -3,8 +3,7 @@ from utils.config_manager import AppConfig
 from utils.ib_connection import IBDataCollector
 import asyncio
 import random
-from .smart_logger import get_logger, log_error_with_context
-from .performance_monitor import monitor_function
+from .smart_logger import get_logger
 
 logger = get_logger("DATA_COLLECTOR")
 

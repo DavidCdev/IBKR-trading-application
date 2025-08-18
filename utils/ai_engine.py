@@ -1,12 +1,10 @@
 import json
 import asyncio
-import time
 import threading
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
-import pandas as pd
 import google.generativeai as genai
 from utils.config_manager import AppConfig
 from utils.smart_logger import get_logger
@@ -198,7 +196,8 @@ class AI_Engine(QObject):
             logger.error(f"Error collecting historical data: {e}")
             return []
     
-    def _identify_inflection_points(self, prices: List[PricePoint]) -> List[InflectionPoint]:
+    @staticmethod
+    def _identify_inflection_points(prices: List[PricePoint]) -> List[InflectionPoint]:
         """Identify key inflection points in price action"""
         if len(prices) < 3:
             return []
@@ -235,7 +234,8 @@ class AI_Engine(QObject):
         inflection_points.sort(key=lambda x: x.significance, reverse=True)
         return inflection_points[:10]  # Return top 10 most significant points
     
-    def _generate_price_summary(self, prices: List[PricePoint], inflection_points: List[InflectionPoint]) -> str:
+    @staticmethod
+    def _generate_price_summary(prices: List[PricePoint], inflection_points: List[InflectionPoint]) -> str:
         """Generate a token-efficient summary of historical price action"""
         if not prices:
             return "No historical price data available."
@@ -271,8 +271,9 @@ Historical Price Summary ({len(prices)} data points):
                 summary += f"{i}. {point.type.upper()}: ${point.price:.2f} at {point.timestamp.strftime('%Y-%m-%d %H:%M')} (significance: {point.significance:.2f})\n"
         
         return summary.strip()
-    
-    def _construct_final_prompt(self, price_summary: str, current_price: float, user_prompt: str) -> str:
+
+    @staticmethod
+    def _construct_final_prompt(price_summary: str, current_price: float, user_prompt: str) -> str:
         """Construct the final prompt for Gemini API"""
         system_prompt = """You are an expert financial analyst specializing in options trading and market analysis. 
 Analyze the provided market data and respond with a structured JSON format containing:
@@ -303,9 +304,9 @@ USER ANALYSIS REQUEST:
 
 Please provide your analysis in the specified JSON format.
 """
-        
+
         return final_prompt.strip()
-    
+
     def _should_skip_cache(self, user_prompt: str, current_price: float) -> bool:
         """Determine if we should skip cache and make a new API call"""
         # Check if prompt has changed
@@ -369,7 +370,8 @@ Please provide your analysis in the specified JSON format.
             logger.error(f"Gemini API call failed: {e}")
             raise
     
-    def _extract_json_from_response(self, response_text: str) -> str:
+    @staticmethod
+    def _extract_json_from_response(response_text: str) -> str:
         """Extract JSON from response, handling markdown code blocks"""
         text = response_text.strip()
         
@@ -384,7 +386,8 @@ Please provide your analysis in the specified JSON format.
         
         return text.strip()
     
-    def _parse_ai_response(self, response: Dict[str, Any]) -> AIAnalysisResult:
+    @staticmethod
+    def _parse_ai_response(response: Dict[str, Any]) -> AIAnalysisResult:
         """Parse and validate AI response"""
         try:
             # Validate required fields
@@ -501,7 +504,8 @@ Please provide your analysis in the specified JSON format.
             logger.error(f"Error getting current price: {e}")
             return 0
     
-    def _analysis_result_to_dict(self, result: AIAnalysisResult) -> Dict[str, Any]:
+    @staticmethod
+    def _analysis_result_to_dict(result: AIAnalysisResult) -> Dict[str, Any]:
         """Convert AIAnalysisResult to dictionary for signal emission"""
         return {
             'valid_price_range': result.valid_price_range,
