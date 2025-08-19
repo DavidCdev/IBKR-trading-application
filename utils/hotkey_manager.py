@@ -247,11 +247,25 @@ class HotkeyManager(QObject):
             except Exception:
                 message = ""
             parent = self.parent_window if self.parent_window is not None else None
+            msg_box = QMessageBox(parent)
             if success:
-                QMessageBox.information(parent, "Trade Result", message or "Action completed successfully.")
+                msg_box.setWindowTitle("Trade Result")
+                msg_box.setIcon(QMessageBox.Icon.Information)
+                msg_box.setText(message or "Action completed successfully.")
             else:
                 # If we failed due to active contract rule, message will already explain
-                QMessageBox.warning(parent, "Trade Failed", message or "Action failed. See logs for details.")
+                msg_box.setWindowTitle("Trade Failed")
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setText(message or "Action failed. See logs for details.")
+
+            # Force the notification to stay on top of all applications
+            try:
+                msg_box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+            except Exception:
+                pass
+
+            # Show the dialog (modal, to keep behavior consistent, but top-most)
+            msg_box.exec()
         except Exception as e:
             logger.error(f"Error showing action result: {e}")
     
