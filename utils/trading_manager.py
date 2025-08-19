@@ -403,14 +403,14 @@ class TradingManager:
         """Create an option contract"""
         try:
             expiration = self._get_contract_expiration()
-            
+
             contract = Option(
                 symbol=self.underlying_symbol,
                 exchange="SMART",
                 currency="USD",
-                lastTradingDay=expiration,
+                lastTradeDateOrContractMonth=expiration,  # e.g. '20250117'
                 strike=strike,
-                right=option_type.upper(),  # "C" for call, "P" for put
+                right='C' if option_type.upper() == 'CALL' else 'P',
                 multiplier="100"
             )
             
