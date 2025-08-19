@@ -12,6 +12,21 @@ from datetime import datetime
 from utils.smart_logger import get_logger
 
 logger = get_logger("GUI")
+
+# Helper to consistently format currency values like $1,000,000.00
+def format_currency(value) -> str:
+    try:
+        if isinstance(value, str):
+            cleaned = value.replace(",", "").replace("$", "").strip()
+            if cleaned in ("", "---"):
+                return "---"
+            val = float(cleaned)
+        else:
+            val = float(value)
+    except Exception:
+        return "---" if value in (None, "", "---") else str(value)
+    sign = "-" if val < 0 else ""
+    return f"{sign}${abs(val):,.2f}"
 try:
     from PyQt6.QtWidgets import QMainWindow, QMessageBox
     from PyQt6.QtCore import QThread, QTimer
@@ -325,7 +340,7 @@ class IB_Trading_APP(QMainWindow):
             risk_assessment = analysis_data.get('risk_assessment', '')
             
             # Update UI with analysis results
-            logger.info(f"AI Analysis - Price Range: ${price_range.get('low', 0):.2f} - ${price_range.get('high', 0):.2f}")
+            logger.info(f"AI Analysis - Price Range: {format_currency(price_range.get('low', 0))} - {format_currency(price_range.get('high', 0))}")
             logger.info(f"AI Analysis - Confidence: {confidence_level:.2f}")
             logger.info(f"AI Analysis - Summary: {analysis_summary[:100]}...")
             
@@ -436,7 +451,7 @@ class IB_Trading_APP(QMainWindow):
             if low_price <= 0 or high_price <= 0:
                 return "N/A"
             
-            return f"${low_price:.2f} - ${high_price:.2f}"
+            return f"{format_currency(low_price)} - {format_currency(high_price)}"
             
         except Exception as e:
             logger.error(f"Error formatting key levels: {e}")
@@ -840,7 +855,7 @@ class IB_Trading_APP(QMainWindow):
 
             # Update SPY price
             if data.get('underlying_symbol_price') is not None and data['underlying_symbol_price'] > 0:
-                self.ui.label_spy_value.setText(f"${data['underlying_symbol_price']:.2f}")
+                self.ui.label_spy_value.setText(format_currency(data['underlying_symbol_price']))
 
             if data.get('fx_ratio') is not None and data['fx_ratio'] > 0:
                 self.ui.label_usd_cad_value.setText(f"{data['fx_ratio']:.4f}")
@@ -855,10 +870,10 @@ class IB_Trading_APP(QMainWindow):
                 starting_value = account_data.get('StartingValue','---')
                 high_water_mark = account_data.get('HighWaterMark', '---')
 
-                self.ui.label_account_value_value.setText(f"${account_value}")
-                self.ui.label_starting_value_value.setText(f"${starting_value}")
-                self.ui.label_high_water_value.setText(f"${high_water_mark}")
-                logger.info(f"Account Net Liquidation: ${account_value}")
+                self.ui.label_account_value_value.setText(format_currency(account_value))
+                self.ui.label_starting_value_value.setText(format_currency(starting_value))
+                self.ui.label_high_water_value.setText(format_currency(high_water_mark))
+                logger.info(f"Account Net Liquidation: {format_currency(account_value)}")
                 # Update account-related UI elements here
             #
 
@@ -875,7 +890,7 @@ class IB_Trading_APP(QMainWindow):
                 logger.info(f"Active contract data: {active_contract_data}")
                 self.ui.label_symbol_value.setText(f"{active_contract_data.get('symbol', '---')}")
                 self.ui.label_quantity_value.setText(f"{active_contract_data.get('position_size', '---')}")
-                self.ui.label_pl_dollar_value.setText(f"{active_contract_data.get('pnl_dollar', '---')}$")
+                self.ui.label_pl_dollar_value.setText(format_currency(active_contract_data.get('pnl_dollar', 0)))
                 self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
 
             # Update option information data
@@ -960,11 +975,11 @@ class IB_Trading_APP(QMainWindow):
             price = price_data.get('price', 0)
             timestamp = price_data.get('timestamp', '')
             
-            logger.info(f"Real-time price update: {symbol} = ${price:.2f} at {timestamp}")
+            logger.info(f"Real-time price update: {symbol} = {format_currency(price)} at {timestamp}")
             
             # Update the underlying symbol price in UI
             if hasattr(self, 'config') and self.config and self.config.trading and symbol == self.config.trading.get('underlying_symbol'):
-                self.ui.label_spy_value.setText(f"${price:.2f}")
+                self.ui.label_spy_value.setText(format_currency(price))
                 
                 # Check if price-triggered AI analysis should be performed
                 if (hasattr(self, 'ai_engine') and self.ai_engine and 
@@ -986,7 +1001,7 @@ class IB_Trading_APP(QMainWindow):
             
             # If price is outside the valid range, trigger analysis
             if current_price < low or current_price > high:
-                logger.info(f"Price ${current_price:.2f} outside AI range [${low:.2f}, ${high:.2f}] - triggering analysis")
+                logger.info(f"Price {format_currency(current_price)} outside AI range [{format_currency(low)}, {format_currency(high)}] - triggering analysis")
                 if self.ai_engine:
                     import asyncio
                     asyncio.create_task(self.ai_engine.analyze_market_data())
@@ -1015,7 +1030,7 @@ class IB_Trading_APP(QMainWindow):
             # logger.info(f"Updating daily PNL update: {daily_pnl_data}")
             daily_pnl_price = daily_pnl_data.get('daily_pnl_price', 0)
             daily_pnl_percent = daily_pnl_data.get('daily_pnl_percent', 0)
-            self.ui.label_daily_pl_value.setText(f"${daily_pnl_price:.2f}")
+            self.ui.label_daily_pl_value.setText(format_currency(daily_pnl_price))
             self.ui.label_daily_pl_percent_value.setText(f"{daily_pnl_percent:.4f}%")
             logger.info(f"GUI updated Daily pnl price : {daily_pnl_price}   Percent: {daily_pnl_percent}%")
 
@@ -1024,9 +1039,9 @@ class IB_Trading_APP(QMainWindow):
 
     def update_account_summary(self, account_summary: Dict[str, Any]):
         try:
-            self.ui.label_account_value_value.setText(f"${account_summary['NetLiquidation']:.2f}")
-            self.ui.label_starting_value_value.setText(f"${account_summary['StartingValue']:.2f}")
-            self.ui.label_high_water_value.setText(f"${account_summary['HighWaterMark']:.2f}")
+            self.ui.label_account_value_value.setText(format_currency(account_summary['NetLiquidation']))
+            self.ui.label_starting_value_value.setText(format_currency(account_summary['StartingValue']))
+            self.ui.label_high_water_value.setText(format_currency(account_summary['HighWaterMark']))
 
         except Exception as e:
             logger.error(f"Error updating Daily Pnl rate: {e}")
@@ -1035,7 +1050,7 @@ class IB_Trading_APP(QMainWindow):
         try:
             logger.info(f"Updating active contracts PNL: {active_contracts_pnl}")
             self.ui.label_pl_percent_value.setText(f"{active_contracts_pnl['pnl_percent']:.2f}%")
-            self.ui.label_pl_dollar_value.setText(f"{active_contracts_pnl['pnl_dollar']:.2f}$")
+            self.ui.label_pl_dollar_value.setText(format_currency(active_contracts_pnl['pnl_dollar']))
         except Exception as e:
             logger.error(f"Error updating active contracts PNL: {e}")
 
@@ -1045,8 +1060,8 @@ class IB_Trading_APP(QMainWindow):
             self.ui.label_total_trades_value.setText(f"{stats['Total_Trades']}")
             self.ui.label_total_wins_count_value.setText(f"{stats['Total_Wins_Count']}")
             self.ui.label_total_losses_count_value.setText(f"{stats['Total_Losses_Count']}")
-            self.ui.label_total_losses_sum_value.setText(f"-${stats['Total_Losses_Sum']:.2f}")
-            self.ui.label_total_wins_sum_value.setText(f"${stats['Total_Wins_Sum']:.2f}")
+            self.ui.label_total_losses_sum_value.setText(format_currency(-abs(stats['Total_Losses_Sum'])))
+            self.ui.label_total_wins_sum_value.setText(format_currency(stats['Total_Wins_Sum']))
         except Exception as e:
             logger.error(f"Error updating closed trades: {e}")
 
