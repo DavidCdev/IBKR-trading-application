@@ -26,6 +26,7 @@ class HotkeyManager(QObject):
         self.parent_window = parent_window
         self.is_active = False
         self._hotkey_shortcuts = {}
+        self._global_listener = None
         
         # Platform-specific hotkey handling
         self.system = platform.system().lower()
@@ -73,25 +74,65 @@ class HotkeyManager(QObject):
             logger.error(f"Error setting up hotkeys: {e}")
     
     def _setup_macos_hotkeys(self):
-        """Setup hotkeys for macOS using Command key"""
+        """Setup system-wide hotkeys for macOS using Command key"""
         try:
-            # Note: For macOS, we'll use Qt's native key handling
-            # The actual global hotkey registration would require additional libraries
-            # For now, we'll implement a basic version that works within the application
-            
-            logger.info("macOS hotkey setup completed (application-level)")
+            # Use pynput's global hotkeys (requires Accessibility permission)
+            try:
+                from pynput import keyboard
+            except Exception as import_error:
+                logger.error(f"pynput is required for global hotkeys on macOS: {import_error}")
+                return
+
+            hotkeys = {
+                '<cmd>+<alt>+p': lambda: self.hotkey_buy_put.emit(),
+                '<cmd>+<alt>+c': lambda: self.hotkey_buy_call.emit(),
+                '<cmd>+<alt>+x': lambda: self.hotkey_sell_position.emit(),
+                '<cmd>+<alt>+f': lambda: self.hotkey_panic_button.emit(),
+            }
+
+            # Stop any existing listener first
+            if self._global_listener is not None:
+                try:
+                    self._global_listener.stop()
+                except Exception:
+                    pass
+
+            self._global_listener = keyboard.GlobalHotKeys(hotkeys)
+            self._global_listener.start()
+
+            logger.info("macOS global hotkey setup completed (system-wide)")
             
         except Exception as e:
             logger.error(f"Error setting up macOS hotkeys: {e}")
     
     def _setup_windows_linux_hotkeys(self):
-        """Setup hotkeys for Windows/Linux using Ctrl key"""
+        """Setup system-wide hotkeys for Windows/Linux using Ctrl key"""
         try:
-            # Note: For Windows/Linux, we'll use Qt's native key handling
-            # The actual global hotkey registration would require additional libraries
-            # For now, we'll implement a basic version that works within the application
-            
-            logger.info("Windows/Linux hotkey setup completed (application-level)")
+            # Use pynput's global hotkeys
+            try:
+                from pynput import keyboard
+            except Exception as import_error:
+                logger.error(f"pynput is required for global hotkeys on Windows/Linux: {import_error}")
+                return
+
+            hotkeys = {
+                '<ctrl>+<alt>+p': lambda: self.hotkey_buy_put.emit(),
+                '<ctrl>+<alt>+c': lambda: self.hotkey_buy_call.emit(),
+                '<ctrl>+<alt>+x': lambda: self.hotkey_sell_position.emit(),
+                '<ctrl>+<alt>+f': lambda: self.hotkey_panic_button.emit(),
+            }
+
+            # Stop any existing listener first
+            if self._global_listener is not None:
+                try:
+                    self._global_listener.stop()
+                except Exception:
+                    pass
+
+            self._global_listener = keyboard.GlobalHotKeys(hotkeys)
+            self._global_listener.start()
+
+            logger.info("Windows/Linux global hotkey setup completed (system-wide)")
             
         except Exception as e:
             logger.error(f"Error setting up Windows/Linux hotkeys: {e}")
@@ -104,6 +145,15 @@ class HotkeyManager(QObject):
             self.hotkey_buy_put.disconnect()
             self.hotkey_sell_position.disconnect()
             self.hotkey_panic_button.disconnect()
+            
+            # Stop global listener if running
+            if self._global_listener is not None:
+                try:
+                    self._global_listener.stop()
+                except Exception as stop_error:
+                    logger.warning(f"Error stopping global hotkey listener: {stop_error}")
+                finally:
+                    self._global_listener = None
             
             logger.info("Hotkey cleanup completed")
             
