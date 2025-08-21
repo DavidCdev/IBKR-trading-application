@@ -10,7 +10,7 @@
     <x>0</x>
     <y>0</y>
     <width>731</width>
-    <height>529</height>
+    <height>550</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -40,6 +40,9 @@
   <property name="windowTitle">
    <string>IB Trading GUI</string>
   </property>
+  <property name="styleSheet">
+   <string notr="true">background-color: rgb(255, 255, 255);</string>
+  </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout_main">
     <property name="spacing">
@@ -55,7 +58,7 @@
      <number>20</number>
     </property>
     <property name="bottomMargin">
-     <number>20</number>
+     <number>0</number>
     </property>
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_top">
@@ -83,8 +86,8 @@
           </property>
           <property name="font">
            <font>
+            <family>Segoe UI</family>
             <pointsize>11</pointsize>
-            <weight>75</weight>
             <bold>true</bold>
            </font>
           </property>
@@ -93,8 +96,8 @@
           </property>
           <property name="styleSheet">
            <string notr="true">QGroupBox {
-        border: 2px solid #5dade2;
-        border-radius: 12px;
+        border: 1px solid #5dade2;
+        border-radius: 6px;
         margin-top: 1ex;
         font-weight: bold;
         color: #2c3e50;
@@ -116,6 +119,9 @@
            <string>Trading Information</string>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_trading">
+           <property name="bottomMargin">
+            <number>20</number>
+           </property>
            <item>
             <layout class="QVBoxLayout" name="verticalLayout_5">
              <property name="spacing">
@@ -126,7 +132,6 @@
                <property name="font">
                 <font>
                  <pointsize>10</pointsize>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -134,7 +139,7 @@
                 <string>  SPY:</string>
                </property>
                <property name="alignment">
-                <set>Qt::AlignCenter</set>
+                <set>Qt::AlignmentFlag::AlignCenter</set>
                </property>
               </widget>
              </item>
@@ -143,7 +148,6 @@
                <property name="font">
                 <font>
                  <pointsize>12</pointsize>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -151,7 +155,7 @@
                 <string>$498.33</string>
                </property>
                <property name="alignment">
-                <set>Qt::AlignCenter</set>
+                <set>Qt::AlignmentFlag::AlignCenter</set>
                </property>
               </widget>
              </item>
@@ -159,14 +163,14 @@
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_usd_cad">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_usd_cad_name">
                <property name="text">
                 <string>USD/CAD:</string>
                </property>
               </widget>
              </item>
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_usd_cad_value">
                <property name="text">
                 <string>1.3750</string>
@@ -177,14 +181,14 @@
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_cad_usd">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_cad_usd_name">
                <property name="text">
                 <string>CAD/USD:</string>
                </property>
               </widget>
              </item>
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_cad_usd_value">
                <property name="text">
                 <string>0.7272</string>
@@ -212,8 +216,8 @@
           </property>
           <property name="font">
            <font>
+            <family>Segoe UI</family>
             <pointsize>10</pointsize>
-            <weight>75</weight>
             <bold>true</bold>
            </font>
           </property>
@@ -222,8 +226,8 @@
           </property>
           <property name="styleSheet">
            <string notr="true">QGroupBox {
-        border: 2px solid #f39c12;
-        border-radius: 12px;
+        border: 1px solid #f39c12;
+        border-radius: 6px;
         margin-top: 1ex;
         font-weight: bold;
         color: #2c3e50;
@@ -245,16 +249,22 @@
            <string>Active Contract</string>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_4">
+           <property name="spacing">
+            <number>10</number>
+           </property>
+           <property name="bottomMargin">
+            <number>20</number>
+           </property>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_pl_percent">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_pl_percent_name">
                <property name="text">
                 <string>P/L (%):</string>
                </property>
               </widget>
              </item>
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_pl_percent_value">
                <property name="text">
                 <string>0.00%</string>
@@ -265,14 +275,14 @@
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_pl_dollar">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_pl_dollar_name">
                <property name="text">
                 <string>P/L ($):</string>
                </property>
               </widget>
              </item>
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_pl_dollar_value">
                <property name="text">
                 <string>$0.00</string>
@@ -283,14 +293,14 @@
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_quantity">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_quantity_name">
                <property name="text">
                 <string>Quantity:</string>
                </property>
               </widget>
              </item>
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_quantity_value">
                <property name="text">
                 <string>10</string>
@@ -301,14 +311,14 @@
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_symbol">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_symbol_name">
                <property name="text">
                 <string>Symbol:</string>
                </property>
               </widget>
              </item>
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_symbol_value">
                <property name="text">
                 <string>SPY 500C</string>
@@ -341,8 +351,8 @@
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #5dade2;
-    border-radius: 12px;
+    border: 1px solid #5dade2;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -372,7 +382,6 @@ QGroupBox::title {
               <widget class="QLabel" name="label_strike_name">
                <property name="font">
                 <font>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -385,7 +394,6 @@ QGroupBox::title {
               <widget class="QLabel" name="label_strike_value">
                <property name="font">
                 <font>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -402,7 +410,6 @@ QGroupBox::title {
               <widget class="QLabel" name="label_expiration_name">
                <property name="font">
                 <font>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -415,7 +422,6 @@ QGroupBox::title {
               <widget class="QLabel" name="label_expiration_value">
                <property name="font">
                 <font>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -432,11 +438,10 @@ QGroupBox::title {
           <layout class="QHBoxLayout" name="horizontalLayout_puts_calls">
            <item>
             <layout class="QVBoxLayout" name="verticalLayout_puts">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_puts_title">
                <property name="font">
                 <font>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -447,11 +452,10 @@ QGroupBox::title {
              </item>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_put_price">
-               <item alignment="Qt::AlignHCenter">
+               <item alignment="Qt::AlignmentFlag::AlignHCenter">
                 <widget class="QLabel" name="label_put_price_value">
                  <property name="font">
                   <font>
-                   <weight>75</weight>
                    <bold>true</bold>
                   </font>
                  </property>
@@ -610,11 +614,10 @@ QGroupBox::title {
            </item>
            <item>
             <layout class="QVBoxLayout" name="verticalLayout_calls">
-             <item alignment="Qt::AlignHCenter">
+             <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_calls_title">
                <property name="font">
                 <font>
-                 <weight>75</weight>
                  <bold>true</bold>
                 </font>
                </property>
@@ -625,11 +628,10 @@ QGroupBox::title {
              </item>
              <item>
               <layout class="QHBoxLayout" name="horizontalLayout_call_price">
-               <item alignment="Qt::AlignHCenter">
+               <item alignment="Qt::AlignmentFlag::AlignHCenter">
                 <widget class="QLabel" name="label_call_price_value">
                  <property name="font">
                   <font>
-                   <weight>75</weight>
                    <bold>true</bold>
                   </font>
                  </property>
@@ -810,8 +812,8 @@ QGroupBox::title {
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #4a90e2;
-    border-radius: 12px;
+    border: 1px solid #4a90e2;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -832,7 +834,7 @@ QGroupBox::title {
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_ai">
          <property name="spacing">
-          <number>12</number>
+          <number>3</number>
          </property>
          <property name="topMargin">
           <number>20</number>
@@ -849,28 +851,7 @@ QGroupBox::title {
            <item>
             <widget class="QLabel" name="label_ai_bias_value">
              <property name="text">
-              <string>Bullish</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_ai_strategy">
-           <item>
-            <widget class="QLabel" name="label_ai_strategy_name">
-             <property name="text">
-              <string>Strategy:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QTextBrowser" name="textbrowser_ai_strategy_value">
-             <property name="frameShape">
-              <enum>QFrame::NoFrame</enum>
-             </property>
-             <property name="text" stdset="0">
-              <string>Consider a bull call spread: Buy SPY 500C, sell SPY 510C. Target profit $400, max risk $200. Monitor for breakout above $502. Adjust stop to $497 if volatility increases.</string>
+              <string>--</string>
              </property>
             </widget>
            </item>
@@ -888,32 +869,181 @@ QGroupBox::title {
            <item>
             <widget class="QLabel" name="label_ai_keylevel_value">
              <property name="text">
-              <string>$502.00</string>
+              <string>--</string>
              </property>
             </widget>
            </item>
           </layout>
          </item>
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_ai_alert">
+          <widget class="QLabel" name="label_ai_strategy_name">
+           <property name="text">
+            <string>Strategy:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_strategy">
            <item>
-            <widget class="QLabel" name="label_ai_alert_name">
-             <property name="text">
-              <string>Alert:</string>
+            <widget class="QTextBrowser" name="textbrowser_ai_strategy_value">
+             <property name="font">
+              <font>
+               <kerning>true</kerning>
+              </font>
              </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QTextBrowser" name="textbrowser_ai_alert_value">
+             <property name="styleSheet">
+              <string notr="true">QTextBrowser {
+    color: #071229;
+    border: 1px solid #D8DEE9;
+    border-radius: 6px;
+    padding: 1px;
+}
+
+/* Scrollbar Customization */
+QScrollBar:vertical {
+    background: transparent;
+    width: 1px;
+    margin: 1px 0 1px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #4C566A;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0 10px 0 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #4C566A;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+    background: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}</string>
+             </property>
              <property name="frameShape">
-              <enum>QFrame::NoFrame</enum>
+              <enum>QFrame::Shape::NoFrame</enum>
              </property>
              <property name="html">
               <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
-&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
 p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p align=&quot;center&quot; style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;12&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+hr { height: 1px; border-width: 0; }
+li.unchecked::marker { content: &quot;\2610&quot;; }
+li.checked::marker { content: &quot;\2612&quot;; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Segoe UI'; font-size:9pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="text" stdset="0">
+              <string>Consider a bull call spread: Buy SPY 500C, sell SPY 510C. Target profit $400, max risk $200. Monitor for breakout above $502. Adjust stop to $497 if volatility increases.</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="label_ai_alert_name">
+           <property name="text">
+            <string>Alert:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ai_alert">
+           <item>
+            <widget class="QTextBrowser" name="textbrowser_ai_alert_value">
+             <property name="styleSheet">
+              <string notr="true">QTextBrowser {
+    color: #071229;
+    border: 1px solid #D8DEE9;
+    border-radius: 6px;
+    padding: 1px;
+}
+
+/* Scrollbar Customization */
+QScrollBar:vertical {
+    background: transparent;
+    width: 1px;
+    margin: 1px 0 1px 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #4C566A;
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+    background: none;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0 10px 0 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #4C566A;
+    border-radius: 5px;
+    min-width: 20px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+    background: none;
+}
+
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
+    background: none;
+}</string>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::Shape::NoFrame</enum>
+             </property>
+             <property name="html">
+              <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
+&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;meta charset=&quot;utf-8&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
+p, li { white-space: pre-wrap; }
+hr { height: 1px; border-width: 0; }
+li.unchecked::marker { content: &quot;\2610&quot;; }
+li.checked::marker { content: &quot;\2612&quot;; }
+&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'Segoe UI'; font-size:9pt; font-weight:400; font-style:normal;&quot;&gt;
+&lt;p style=&quot;-qt-paragraph-type:empty; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;br /&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
              </property>
              <property name="text" stdset="0">
               <string>⚠️ Unusual options volume detected in SPY 500C. Watch for sharp price swings at market open. Consider reducing position size if implied volatility rises above 25%.</string>
@@ -939,8 +1069,8 @@ p, li { white-space: pre-wrap; }
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #27ae60;
-    border-radius: 12px;
+    border: 1px solid #27ae60;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -1062,8 +1192,8 @@ QGroupBox::title {
         </property>
         <property name="styleSheet">
          <string notr="true">QGroupBox {
-    border: 2px solid #e67e22;
-    border-radius: 12px;
+    border: 1px solid #e67e22;
+    border-radius: 6px;
     margin-top: 1ex;
     font-weight: bold;
     color: #2c3e50;
@@ -1222,8 +1352,8 @@ QGroupBox::title {
         </property>
         <property name="font">
          <font>
+          <family>Segoe UI</family>
           <pointsize>13</pointsize>
-          <weight>50</weight>
           <bold>false</bold>
          </font>
         </property>
@@ -1246,6 +1376,7 @@ QPushButton:hover {
        <widget class="QLabel" name="label_connection_status">
         <property name="font">
          <font>
+          <family>Segoe UI</family>
           <pointsize>9</pointsize>
          </font>
         </property>
@@ -1257,10 +1388,10 @@ QPushButton:hover {
       <item>
        <spacer name="horizontalSpacer">
         <property name="orientation">
-         <enum>Qt::Horizontal</enum>
+         <enum>Qt::Orientation::Horizontal</enum>
         </property>
         <property name="sizeType">
-         <enum>QSizePolicy::Expanding</enum>
+         <enum>QSizePolicy::Policy::Expanding</enum>
         </property>
         <property name="sizeHint" stdset="0">
          <size>
@@ -1280,8 +1411,8 @@ QPushButton:hover {
         </property>
         <property name="font">
          <font>
+          <family>Segoe UI</family>
           <pointsize>8</pointsize>
-          <weight>75</weight>
           <bold>true</bold>
          </font>
         </property>
@@ -1321,8 +1452,8 @@ QPushButton:pressed {
         </property>
         <property name="font">
          <font>
+          <family>Segoe UI</family>
           <pointsize>8</pointsize>
-          <weight>75</weight>
           <bold>true</bold>
          </font>
         </property>
@@ -1356,6 +1487,7 @@ QPushButton:pressed {
        <widget class="QLabel" name="label_time">
         <property name="font">
          <font>
+          <family>Segoe UI</family>
           <pointsize>8</pointsize>
          </font>
         </property>
@@ -1370,7 +1502,7 @@ QPushButton:pressed {
   </widget>
   <widget class="QStatusBar" name="statusbar">
    <property name="layoutDirection">
-    <enum>Qt::LeftToRight</enum>
+    <enum>Qt::LayoutDirection::LeftToRight</enum>
    </property>
   </widget>
  </widget>

@@ -362,6 +362,7 @@ class IB_Trading_APP(QMainWindow):
             confidence_level = analysis_data.get('confidence_level', 0.0)
             key_insights = analysis_data.get('key_insights', [])
             risk_assessment = analysis_data.get('risk_assessment', '')
+            alerts = analysis_data.get('alerts', [])
             
             # Determine AI bias based on analysis
             ai_bias = self._determine_ai_bias(price_range, analysis_summary, key_insights)
@@ -373,7 +374,7 @@ class IB_Trading_APP(QMainWindow):
             strategy_text = self._format_strategy_text(analysis_summary, key_insights, confidence_level)
             
             # Format alert text
-            alert_text = self._format_alert_text(risk_assessment, key_insights)
+            alert_text = self._format_alert_text(risk_assessment, alerts)
             
             # Update UI elements
             if hasattr(self.ui, 'label_ai_bias_value'):
@@ -468,7 +469,7 @@ class IB_Trading_APP(QMainWindow):
             
             # Add analysis summary (truncated if too long)
             if analysis_summary:
-                summary_text = analysis_summary[:200] + "..." if len(analysis_summary) > 200 else analysis_summary
+                summary_text = analysis_summary
                 strategy_parts.append(f"Analysis: {summary_text}")
             
             # Add key insights
@@ -482,7 +483,7 @@ class IB_Trading_APP(QMainWindow):
             logger.error(f"Error formatting strategy text: {e}")
             return "Strategy analysis unavailable"
     
-    def _format_alert_text(self, risk_assessment: str, key_insights: List[str]) -> str:
+    def _format_alert_text(self, risk_assessment: str, alerts: List[str]) -> str:
         """Format alert text for display"""
         try:
             alert_parts = []
@@ -491,18 +492,19 @@ class IB_Trading_APP(QMainWindow):
             if risk_assessment:
                 alert_parts.append(f"Risk Assessment:\n{risk_assessment}")
             
-            # Add any high-priority insights as alerts
+            # Add any high-priority alerts as alerts
             high_priority_keywords = ['warning', 'caution', 'risk', 'danger', 'alert', 'critical']
-            high_priority_insights = []
+            high_priority_alerts = []
+
+
+            for alert in alerts:
+                alert_lower = alert.lower()
+                # if any(keyword in alert_lower for keyword in high_priority_keywords):
+                high_priority_alerts.append(f"⚠️ {alert}")
             
-            for insight in key_insights:
-                insight_lower = insight.lower()
-                if any(keyword in insight_lower for keyword in high_priority_keywords):
-                    high_priority_insights.append(f"⚠️ {insight}")
-            
-            if high_priority_insights:
-                alert_parts.append("Alerts:\n" + "\n".join(high_priority_insights[:2]))  # Limit to 2 alerts
-            
+            if high_priority_alerts:
+                alert_parts.append("Alerts:\n" + "\n".join(high_priority_alerts))
+                logger.info(f"Generated Alerts: {alert_parts}")
             if not alert_parts:
                 alert_parts.append("No immediate alerts")
             
