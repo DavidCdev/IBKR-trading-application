@@ -10,7 +10,7 @@
         "max_reconnect_delay": 300
     },
     "trading": {
-        "underlying_symbol": "IBKR",
+        "underlying_symbol": "SPY",
         "risk_levels": [
             {
                 "loss_threshold": "0",
@@ -71,6 +71,6 @@
         "cache_duration_minutes": 15
     },
     "account": {
-        "high_water_mark": 998085.73
+        "high_water_mark": 998090.87
     }
 }

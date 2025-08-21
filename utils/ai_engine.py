@@ -37,6 +37,7 @@ class AIAnalysisResult:
     risk_assessment: str
     timestamp: datetime
     raw_response: Dict[str, Any]
+    alerts: List[str]
 
 class AI_Engine(QObject):
     """AI Prompt Manager with Gemini API integration"""
@@ -273,23 +274,39 @@ Historical Price Summary ({len(prices)} data points):
         return summary.strip()
 
     @staticmethod
-    def _construct_final_prompt(price_summary: str, current_price: float, user_prompt: str) -> str:
+    def _construct_final_prompt(price_summary: str, current_price: float, user_prompt: str, price_window: List) -> str:
         """Construct the final prompt for Gemini API"""
-        system_prompt = """You are an expert financial analyst specializing in options trading and market analysis. 
-Analyze the provided market data and respond with a structured JSON format containing:
+        system_prompt = """You are a senior quantitative analyst and options strategist. You will receive:
+
+A token-efficient summary of historical price action (from AI processor)
+Today's real-time price of the instrument (e.g., SPY, IBKR, QQQ, etc.)
+A user-defined market plan (e.g., directional bias, planned strategy, timeframes)
+Your task: Analyze the current market situation and return a JSON object with both strategic context and real-time actionable insights. ONLY generate alerts if current conditions justify it.
+
+In particular:
+
+Actionable alerts must be filtered to the current valid_price_range, OR a narrow buffer zone around the current price (e.g., ±1%).
+Do NOT output alerts based on support/resistance zones well above or below the current range unless the price is approaching them.
+If no alert-worthy signals appear at the moment, state clearly: "No actionable trade setup at this time."
+Insights and strategies may include signals like approaching technical levels, volatility-based setups, or breakout/breakdown confirmations.
+
+📤 Return your response in this exact JSON format:
 
 {
     "valid_price_range": {
-        "low": float,
-        "high": float
+        "low": <float>, ← AI-estimated actionable lower range (e.g., support from price structure or volatility)
+        "high": <float> ← upper actionable range
     },
-    "analysis_summary": "string",
-    "confidence_level": float (0.0-1.0),
-    "key_insights": ["string"],
-    "risk_assessment": "string"
+    "analysis_summary": "<string>", ← Succinct summary of what market is doing
+    "confidence_level": <float>, ← 0.0–1.0 representing your confidence in the current thesis
+    "key_insights": ["<string>", ...], ← General observations on trend, setups forming, option behavior
+    "alerts": ["<string>", ...], ← Clearly actionable ideas valid NOW, e.g.:
+        → "Approaching resistance zone – consider call spread entry"
+        → "Price confirmed breakout above key level"
+        → "Neutral chop – no action advised"
+    "risk_assessment": "<string>" ← Summary of risk conditions: Low / Medium / Elevated / High
 }
-
-Focus on identifying key support/resistance levels and potential price movements for options trading decisions."""
+"""
 
         final_prompt = f"""
 {system_prompt}
@@ -297,10 +314,17 @@ Focus on identifying key support/resistance levels and potential price movements
 MARKET DATA:
 {price_summary}
 
-CURRENT PRICE: ${current_price:.2f}
+REAL-TIME CURRENT PRICE: ${current_price:.2f}
 
-USER ANALYSIS REQUEST:
+USER PLAN:
 {user_prompt}
+
+Special Instructions:
+
+Limit alerts to conditions detectable or likely within the current actionable range: {price_window}
+Exclude any long-range observations that are not near current price
+Do not manufacture alerts if no valid signals based on price location / range volatility
+Thank you.
 
 Please provide your analysis in the specified JSON format.
 """
@@ -405,6 +429,7 @@ Please provide your analysis in the specified JSON format.
                 confidence_level=float(response.get('confidence_level', 0.5)),
                 key_insights=response.get('key_insights', []),
                 risk_assessment=response.get('risk_assessment', ''),
+                alerts=response.get('alerts', []),
                 timestamp=datetime.now(),
                 raw_response=response
             )
@@ -456,9 +481,17 @@ Please provide your analysis in the specified JSON format.
             
             # Generate price summary
             price_summary = self._generate_price_summary(historical_prices, inflection_points)
-            
+
+            buffer_pct = 0.015
+
+            buffer_amount = current_price * buffer_pct
+            price_window_low = round(current_price - buffer_amount, 2)
+            price_window_high = round(current_price + buffer_amount, 2)
+
+            price_window = [price_window_low, price_window_high]
+
             # Construct final prompt
-            final_prompt = self._construct_final_prompt(price_summary, current_price, user_prompt)
+            final_prompt = self._construct_final_prompt(price_summary, current_price, user_prompt, price_window)
             
             # Make API call
             logger.info("Initiating AI analysis...")
@@ -513,6 +546,7 @@ Please provide your analysis in the specified JSON format.
             'confidence_level': result.confidence_level,
             'key_insights': result.key_insights,
             'risk_assessment': result.risk_assessment,
+            'alerts': result.alerts,
             'timestamp': result.timestamp.isoformat(),
             'raw_response': result.raw_response
         }
