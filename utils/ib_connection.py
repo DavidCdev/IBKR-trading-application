@@ -113,12 +113,50 @@ class IBDataCollector:
             logger.error(f"Error refreshing for new symbol {symbol}: {e}")
 
     def _calculate_nearest_strike(self, price: float) -> int:
-        """Calculate the nearest strike price by rounding to the nearest whole number"""
-        return int(round(price))
+        """Calculate the nearest valid strike price for options trading"""
+        try:
+            if price <= 0:
+                return 0
+            
+            # For SPY and most liquid options, strikes are typically in $1 increments
+            # Round to nearest dollar
+            rounded_strike = round(price)
+            
+            # Ensure we have a valid strike (whole number)
+            valid_strike = int(rounded_strike)
+            
+            logger.info(f"Strike calculation: Price=${price:.2f} -> Rounded=${rounded_strike} -> Valid Strike={valid_strike}")
+            
+            return valid_strike
+            
+        except Exception as e:
+            logger.error(f"Error calculating strike price: {e}")
+            # Fallback to simple rounding
+            return int(round(price)) if price > 0 else 0
 
     def _should_update_strike(self, new_strike: int) -> bool:
         """Check if the strike price has changed and needs updating"""
         return new_strike != self._previous_strike and new_strike > 0
+    
+    def _validate_strike_availability(self, strike: int) -> bool:
+        """Validate if a strike price is available in the option chain"""
+        try:
+            # Basic validation
+            if not isinstance(strike, (int, float)) or strike <= 0:
+                logger.warning(f"Invalid strike price: {strike}")
+                return False
+            
+            # For now, assume strikes in $1 increments are valid
+            # In a more sophisticated implementation, you could check against actual available strikes
+            # from the option chain data
+            valid_strike = int(round(strike))
+            
+            logger.debug(f"Strike validation: {strike} -> {valid_strike} (assumed valid for liquid options)")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating strike availability: {e}")
+            return False
 
     def _should_switch_to_next_expiration(self) -> bool:
         """Check if it's time to switch from 0DTE to 1DTE contracts (12:00 PM EST)"""
@@ -790,10 +828,12 @@ class IBDataCollector:
             # Check if strike price needs updating
             if old_price != self.underlying_symbol_price and self.underlying_symbol_price > 0:
                 new_strike = self._calculate_nearest_strike(self.underlying_symbol_price)
-                if self._should_update_strike(new_strike):
+                if self._should_update_strike(new_strike) and self._validate_strike_availability(new_strike):
                     logger.info(f"Underlying price changed from ${old_price:.2f} to type: {ticker_type}  ${self.underlying_symbol_price:.2f}, new strike: {new_strike}")
                     # Schedule strike update
                     asyncio.create_task(self._switch_option_subscriptions(new_strike=new_strike))
+                elif not self._validate_strike_availability(new_strike):
+                    logger.warning(f"Calculated strike {new_strike} is not valid, keeping current strike {self.option_strike}")
 
                 # Emit signal for UI update if we have a data worker
                 if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'price_updated'):

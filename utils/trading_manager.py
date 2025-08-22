@@ -412,6 +412,15 @@ class TradingManager:
     def _create_option_contract(self, option_type: str, strike: float) -> Option:
         """Create an option contract"""
         try:
+            # Validate strike price
+            if not isinstance(strike, (int, float)) or strike <= 0:
+                raise ValueError(f"Invalid strike price: {strike}. Strike must be a positive number.")
+            
+            # Ensure strike is a valid option strike (whole number for most liquid options)
+            valid_strike = int(round(strike))
+            if valid_strike != strike:
+                logger.warning(f"Strike price adjusted from {strike} to {valid_strike} for valid option contract")
+            
             expiration = self._get_contract_expiration()
 
             contract = Option(
@@ -419,12 +428,12 @@ class TradingManager:
                 exchange="SMART",
                 currency="USD",
                 lastTradeDateOrContractMonth=expiration,  # e.g. '20250117'
-                strike=strike,
+                strike=valid_strike,
                 right='C' if option_type.upper() == 'CALL' else 'P',
                 multiplier="100"
             )
             
-            logger.info(f"Created {option_type} option contract: {self.underlying_symbol} {strike} {expiration}")
+            logger.info(f"Created {option_type} option contract: {self.underlying_symbol} {valid_strike} {expiration}")
             return contract
             
         except Exception as e:
