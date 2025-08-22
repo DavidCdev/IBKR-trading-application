@@ -383,8 +383,14 @@ class IBDataCollector:
         # self.ib.commissionReportEvent += self._on_commission_report
         #
         # Account events
-        # self.ib.accountSummaryEvent += self._on_account_summary_update
-        # self.ib.pnlEvent += self._on_pnl_update
+        self.ib.accountSummaryEvent += self.on_account_summary_update
+        self.ib.pnlEvent += self.on_pnl_update
+        
+        logger.info("Account event handlers registered successfully")
+        
+        # Test if the event handlers are properly attached
+        logger.info(f"Account summary event handler count: {len(self.ib.accountSummaryEvent)}")
+        logger.info(f"P&L event handler count: {len(self.ib.pnlEvent)}")
 
         logger.debug("IB event callbacks registered")
 
@@ -394,6 +400,9 @@ class IBDataCollector:
             logger.info("IB Connection established successfully")
             self._connected = True
             self.connection_attempts = 0
+            
+            # Set up account monitoring
+            await self._setup_account_monitoring()
             
             # Emit connection success event
             connection_data = {
@@ -412,6 +421,203 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error in connection success handler: {e}")
     
+    async def _setup_account_monitoring(self):
+        """Set up continuous account monitoring"""
+        try:
+            logger.info("Setting up account monitoring...")
+            
+            # Get managed accounts
+            managed_accounts = self.ib.managedAccounts()
+            if not managed_accounts:
+                logger.warning("No managed accounts found for monitoring")
+                return
+            
+            account = managed_accounts[0]  # Get first managed account
+            logger.info(f"Setting up monitoring for account: {account}")
+            
+            # Subscribe to P&L updates
+            try:
+                pnl = self.ib.reqPnL(account)
+                logger.info(f"P&L subscription set up: {pnl}")
+            except Exception as e:
+                logger.warning(f"Could not set up P&L subscription: {e}")
+            
+            # Subscribe to account summary updates and get initial value
+            try:
+                # Request initial account summary to trigger subscription and get current value
+                # Use the specific account for the request
+                account_summary = await self.ib.accountSummaryAsync(account)
+                if account_summary:
+                    logger.info(f"Initial account summary received: {len(account_summary)} items")
+                    # Process the initial account summary to set current account value
+                    for item in account_summary:
+                        if item.tag == 'NetLiquidation':
+                            initial_value = float(item.value)
+                            if initial_value > 0:
+                                self.account_liquidation = initial_value
+                                logger.info(f"Initial account liquidation value set to: {initial_value}")
+                                # Update trading manager with initial account value
+                                if hasattr(self, 'trading_manager'):
+                                    self.trading_manager.update_market_data(account_value=initial_value)
+                                    logger.info(f"Trading manager updated with initial account value: {initial_value}")
+                            break
+                logger.info("Account summary subscription set up successfully")
+                
+                # Also set up periodic account value refresh as a backup
+                self._setup_periodic_account_refresh(account)
+                
+            except Exception as e:
+                logger.warning(f"Could not set up account summary subscription: {e}")
+                
+            # Fallback: Try to get account value from account download
+            try:
+                logger.info("Attempting fallback account value retrieval...")
+                account_values = await self.ib.accountDownloadAsync(account)
+                if account_values:
+                    logger.info(f"Account download received: {len(account_values)} values")
+                    for item in account_values:
+                        if item.tag == 'NetLiquidation':
+                            fallback_value = float(item.value)
+                            if fallback_value > 0:
+                                self.account_liquidation = fallback_value
+                                logger.info(f"Fallback account liquidation value set to: {fallback_value}")
+                                # Update trading manager with fallback account value
+                                if hasattr(self, 'trading_manager'):
+                                    self.trading_manager.update_market_data(account_value=fallback_value)
+                                    logger.info(f"Trading manager updated with fallback account value: {fallback_value}")
+                            break
+            except Exception as fallback_e:
+                logger.warning(f"Fallback account value retrieval also failed: {fallback_e}")
+                
+            # Additional fallback: Try to manually request account summary
+            try:
+                logger.info("Attempting manual account summary request...")
+                manual_summary = await self.ib.accountSummaryAsync(account)
+                if manual_summary:
+                    logger.info(f"Manual account summary received: {len(manual_summary)} items")
+                    for item in manual_summary:
+                        if item.tag == 'NetLiquidation':
+                            manual_value = float(item.value)
+                            if manual_value > 0:
+                                self.account_liquidation = manual_value
+                                logger.info(f"Manual account liquidation value set to: {manual_value}")
+                                # Update trading manager with manual account value
+                                if hasattr(self, 'trading_manager'):
+                                    self.trading_manager.update_market_data(account_value=manual_value)
+                                    logger.info(f"Trading manager updated with manual account value: {manual_value}")
+                            break
+            except Exception as manual_e:
+                logger.warning(f"Manual account summary request also failed: {manual_e}")
+                
+        except Exception as e:
+            logger.error(f"Error setting up account monitoring: {e}")
+            
+    async def refresh_account_value(self):
+        """Manually refresh account value - can be called from UI if needed"""
+        try:
+            logger.info("Manual account value refresh requested...")
+            if not self.ib.isConnected():
+                logger.warning("Not connected to IB, cannot refresh account value")
+                return False
+                
+            managed_accounts = self.ib.managedAccounts()
+            if not managed_accounts:
+                logger.warning("No managed accounts found for refresh")
+                return False
+                
+            account = managed_accounts[0]
+            logger.info(f"Refreshing account value for: {account}")
+            
+            # Try account summary first
+            try:
+                account_summary = await self.ib.accountSummaryAsync(account)
+                if account_summary:
+                    for item in account_summary:
+                        if item.tag == 'NetLiquidation':
+                            refresh_value = float(item.value)
+                            if refresh_value > 0:
+                                self.account_liquidation = refresh_value
+                                logger.info(f"Account value refreshed to: {refresh_value}")
+                                # Update trading manager
+                                if hasattr(self, 'trading_manager'):
+                                    self.trading_manager.update_market_data(account_value=refresh_value)
+                                    logger.info(f"Trading manager updated with refreshed account value: {refresh_value}")
+                                return True
+            except Exception as e:
+                logger.warning(f"Account summary refresh failed: {e}")
+                
+            # Fallback to account download
+            try:
+                account_values = await self.ib.accountDownloadAsync(account)
+                if account_values:
+                    for item in account_values:
+                        if item.tag == 'NetLiquidation':
+                            refresh_value = float(item.value)
+                            if refresh_value > 0:
+                                self.account_liquidation = refresh_value
+                                logger.info(f"Account value refreshed via download to: {refresh_value}")
+                                # Update trading manager
+                                if hasattr(self, 'trading_manager'):
+                                    self.trading_manager.update_market_data(account_value=refresh_value)
+                                    logger.info(f"Trading manager updated with refreshed account value: {refresh_value}")
+                                return True
+            except Exception as e:
+                logger.warning(f"Account download refresh failed: {e}")
+                
+            logger.warning("All account value refresh methods failed")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error in manual account value refresh: {e}")
+            return False
+            
+    def _setup_periodic_account_refresh(self, account: str):
+        """Set up periodic account value refresh as a backup to real-time updates"""
+        try:
+            logger.info("Setting up periodic account value refresh...")
+            
+            # Start a background thread to periodically refresh account value
+            def periodic_refresh():
+                import time
+                while self.ib.isConnected():
+                    try:
+                        # Refresh every 30 seconds as a backup
+                        time.sleep(30)
+                        if not self.ib.isConnected():
+                            break
+                            
+                        # Use asyncio.run_coroutine_threadsafe to call the async method
+                        if hasattr(self, '_loop') and self._loop and self._loop.is_running():
+                            asyncio.run_coroutine_threadsafe(
+                                self._periodic_account_refresh(account),
+                                self._loop
+                            )
+                    except Exception as e:
+                        logger.warning(f"Error in periodic account refresh: {e}")
+                        time.sleep(5)  # Wait a bit before retrying
+                        
+            # Start the periodic refresh thread
+            import threading
+            refresh_thread = threading.Thread(target=periodic_refresh, daemon=True)
+            refresh_thread.start()
+            logger.info("Periodic account refresh thread started")
+            
+        except Exception as e:
+            logger.error(f"Error setting up periodic account refresh: {e}")
+            
+    async def _periodic_account_refresh(self, account: str):
+        """Periodic account value refresh - called from background thread"""
+        try:
+            # Only refresh if we don't have a valid account value
+            if self.account_liquidation <= 0:
+                logger.info("Periodic refresh: Account value is 0, attempting refresh...")
+                await self.refresh_account_value()
+            else:
+                logger.debug("Periodic refresh: Account value is valid, skipping refresh")
+                
+        except Exception as e:
+            logger.warning(f"Error in periodic account refresh: {e}")
+
     async def _on_disconnected(self):
         """Handle IB disconnection."""
         try:
@@ -1042,12 +1248,20 @@ class IBDataCollector:
             logger.error(f"Error getting active positions: {e}")
             return pd.DataFrame()
     # Define an event handler for P&L updates
-    def on_pnl_update(self, pnl_obj):
+    def on_pnl_update(self, pnl_obj, *args, **kwargs):
         print(f"P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
+        if args:
+            logger.info(f"P&L additional args: {args}")
+        if kwargs:
+            logger.info(f"P&L additional kwargs: {kwargs}")
         new_daily_pnl = pnl_obj.dailyPnL
         if new_daily_pnl != self.daily_pnl:
             self.daily_pnl = new_daily_pnl
-            daily_pnl_percent = 100 * self.daily_pnl / (self.account_liquidation - self.daily_pnl)
+            # Avoid division by zero
+            if self.account_liquidation > 0:
+                daily_pnl_percent = 100 * self.daily_pnl / (self.account_liquidation - self.daily_pnl)
+            else:
+                daily_pnl_percent = 0.0
             self.data_worker.daily_pnl_update.emit({
                 'daily_pnl_price': self.daily_pnl,
                 'daily_pnl_percent': daily_pnl_percent
@@ -1056,14 +1270,34 @@ class IBDataCollector:
             if hasattr(self, 'trading_manager'):
                 self.trading_manager.update_market_data(daily_pnl_percent=daily_pnl_percent)
 
-    def on_account_summary_update(self, account_summary):
+    def on_account_summary_update(self, account_summary, *args, **kwargs):
+        logger.info(f"Account summary update received: {len(account_summary) if account_summary else 0} items")
+        logger.info(f"Account summary type: {type(account_summary)}")
+        logger.info(f"Account summary content: {account_summary}")
+        if args:
+            logger.info(f"Additional args: {args}")
+        if kwargs:
+            logger.info(f"Additional kwargs: {kwargs}")
+        
+        # Handle case where account_summary might be None or empty
+        if not account_summary:
+            logger.warning("Empty account summary received")
+            return
+            
         new_account_liquidation = 0
         for item in account_summary:
+            logger.debug(f"Account item: {item.tag} = {item.value}")
             if item.tag == 'NetLiquidation':
-                new_account_liquidation = float(item.value)
+                try:
+                    new_account_liquidation = float(item.value)
+                    logger.info(f"Found NetLiquidation: {new_account_liquidation}")
+                except (ValueError, TypeError) as e:
+                    logger.error(f"Error converting NetLiquidation value '{item.value}' to float: {e}")
+                    continue
                 break
             
-        if new_account_liquidation != self.account_liquidation:
+        logger.info(f"Current account_liquidation: {self.account_liquidation}, New value: {new_account_liquidation}")
+        if new_account_liquidation > 0 and new_account_liquidation != self.account_liquidation:
             self.account_liquidation = new_account_liquidation
             starting_value = self.account_liquidation - self.daily_pnl
             # Treat high_water_mark as a value in currency units consistently
@@ -1097,6 +1331,11 @@ class IBDataCollector:
             # Update trading manager with account value
             if hasattr(self, 'trading_manager'):
                 self.trading_manager.update_market_data(account_value=self.account_liquidation)
+                logger.info(f"Trading manager updated with account value: {self.account_liquidation}")
+        elif new_account_liquidation <= 0:
+            logger.warning(f"Invalid account liquidation value received: {new_account_liquidation}")
+        else:
+            logger.debug("Account liquidation value unchanged")
 
 
     async def get_account_metrics(self) -> pd.DataFrame:
@@ -1125,8 +1364,7 @@ class IBDataCollector:
             try:
                 pnl = self.ib.reqPnL(account)
                 logger.info(f"P&L request submitted: {pnl}")
-                self.ib.pnlEvent += self.on_pnl_update
-                self.ib.accountSummaryEvent += self.on_account_summary_update
+                # Note: Event handlers are now set up in _setup_account_monitoring
             except Exception as e:
                 logger.warning(f"Error requesting P&L updates: {e}")
                 # Continue without P&L updates

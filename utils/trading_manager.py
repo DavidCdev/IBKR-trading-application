@@ -152,6 +152,7 @@ class TradingManager:
         if underlying_price is not None:
             self._underlying_price = underlying_price
         if account_value is not None:
+            logger.info(f"Trading manager updating account value: {self._account_value} -> {account_value}")
             self._account_value = account_value
         if daily_pnl_percent is not None:
             self._daily_pnl_percent = daily_pnl_percent
@@ -203,9 +204,13 @@ class TradingManager:
                 
                 if current_pnl_percent >= loss_threshold:
                     # Calculate trade limit as percentage of account value
-                    max_trade_value = (account_trade_limit / 100) * self._account_value
-                    logger.info(f"Tiered risk limit: PnL={current_pnl_percent}%, Threshold={loss_threshold}%, Limit={account_trade_limit}%, MaxValue=${max_trade_value:.2f}")
-                    return max_trade_value
+                    if self._account_value > 0:
+                        max_trade_value = (account_trade_limit / 100) * self._account_value
+                        logger.info(f"Tiered risk limit: PnL={current_pnl_percent}%, Threshold={loss_threshold}%, Limit={account_trade_limit}%, MaxValue=${max_trade_value:.2f}")
+                        return max_trade_value
+                    else:
+                        logger.warning(f"Account value is {self._account_value}, cannot calculate tiered risk limit")
+                        return 0.0
             
             # Default to GUI max trade value if no risk level matches
             with self._config_lock:
@@ -223,6 +228,11 @@ class TradingManager:
                 account_currency = (self.account_config or {}).get('currency', 'USD')
             currency_upper = str(account_currency).upper()
             pdt_minimum = self._pdt_minimum_cad if currency_upper == 'CAD' else self._pdt_minimum_usd
+            
+            # Check if account value is valid
+            if self._account_value <= 0:
+                logger.warning(f"Account value is {self._account_value}, cannot calculate PDT buffer")
+                return 0.0
             
             # Calculate available buffer
             available_buffer = self._account_value - pdt_minimum
