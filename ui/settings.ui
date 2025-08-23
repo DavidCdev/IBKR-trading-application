@@ -21,7 +21,7 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>1</number>
+      <number>2</number>
      </property>
      <widget class="QWidget" name="connectionTab">
       <attribute name="title">
@@ -413,6 +413,11 @@
            <widget class="QComboBox" name="mainLogLevelCombo">
             <item>
              <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
               <string>DEBUG</string>
              </property>
             </item>
@@ -423,7 +428,7 @@
             </item>
             <item>
              <property name="text">
-              <string>WARNING</string>
+              <string>WARN</string>
              </property>
             </item>
             <item>
@@ -433,20 +438,25 @@
             </item>
             <item>
              <property name="text">
-              <string>CRITICAL</string>
+              <string>FATAL</string>
              </property>
             </item>
            </widget>
           </item>
           <item row="1" column="0">
-           <widget class="QLabel" name="guiLabel">
+           <widget class="QLabel" name="ibConnectionLabel">
             <property name="text">
-             <string>Gui:</string>
+             <string>IB_CONNECTION:</string>
             </property>
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QComboBox" name="guiLogLevelCombo">
+           <widget class="QComboBox" name="ibConnectionLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
             <item>
              <property name="text">
               <string>DEBUG</string>
@@ -459,7 +469,7 @@
             </item>
             <item>
              <property name="text">
-              <string>WARNING</string>
+              <string>WARN</string>
              </property>
             </item>
             <item>
@@ -469,20 +479,25 @@
             </item>
             <item>
              <property name="text">
-              <string>CRITICAL</string>
+              <string>FATAL</string>
              </property>
             </item>
            </widget>
           </item>
           <item row="2" column="0">
-           <widget class="QLabel" name="eventBusLabel">
+           <widget class="QLabel" name="dataCollectorLabel">
             <property name="text">
-             <string>Event Bus:</string>
+             <string>DATA_COLLECTOR:</string>
             </property>
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QComboBox" name="eventBusLogLevelCombo">
+           <widget class="QComboBox" name="dataCollectorLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
             <item>
              <property name="text">
               <string>DEBUG</string>
@@ -495,7 +510,7 @@
             </item>
             <item>
              <property name="text">
-              <string>WARNING</string>
+              <string>WARN</string>
              </property>
             </item>
             <item>
@@ -505,20 +520,25 @@
             </item>
             <item>
              <property name="text">
-              <string>CRITICAL</string>
+              <string>FATAL</string>
              </property>
             </item>
            </widget>
           </item>
           <item row="3" column="0">
-           <widget class="QLabel" name="subscriptionManagerLabel">
+           <widget class="QLabel" name="configManagerLabel">
             <property name="text">
-             <string>Subscription Manager:</string>
+             <string>CONFIG_MANAGER:</string>
             </property>
            </widget>
           </item>
           <item row="3" column="1">
-           <widget class="QComboBox" name="subscriptionManagerLogLevelCombo">
+           <widget class="QComboBox" name="configManagerLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
             <item>
              <property name="text">
               <string>DEBUG</string>
@@ -531,7 +551,7 @@
             </item>
             <item>
              <property name="text">
-              <string>WARNING</string>
+              <string>WARN</string>
              </property>
             </item>
             <item>
@@ -541,7 +561,89 @@
             </item>
             <item>
              <property name="text">
-              <string>CRITICAL</string>
+              <string>FATAL</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="guiLabel">
+            <property name="text">
+             <string>GUI:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="guiLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>DEBUG</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>INFO</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>WARN</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>ERROR</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>FATAL</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="aiEngineLabel">
+            <property name="text">
+             <string>AI_ENGINE:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="aiEngineLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>DEBUG</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>INFO</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>WARN</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>ERROR</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>FATAL</string>
              </property>
             </item>
            </widget>
