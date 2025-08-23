@@ -46,18 +46,11 @@
         "master_debug": true,
         "modules": {
             "CONFIG_MANAGER": "Trace",
-            "DATA_MONITOR": "Info",
-            "ENHANCED_EVENT_MONITOR": "Info",
-            "ENHANCED_EVENT_MONITOR_GUI": "Info",
-            "ENHANCED_LOGGING": "Info",
-            "EVENT_BUS": "INFO",
-            "EVENT_MONITOR": "Info",
-            "EVENT_MONITOR_GUI": "Info",
+            "DATA_COLLECTOR": "INFO",
             "GUI": "DEBUG",
             "IB_CONNECTION": "Trace",
             "MAIN": "INFO",
-            "PERFORMANCE_OPTIMIZER": "Info",
-            "SUBSCRIPTION_MANAGER": "DEBUG"
+            "AI_ENGINE": "INFO"
         }
     },
     "ai_prompt": {

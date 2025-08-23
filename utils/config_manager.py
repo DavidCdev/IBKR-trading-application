@@ -78,18 +78,11 @@ class AppConfig:
                 "master_debug": True,
                 "modules": {
                     "CONFIG_MANAGER": "Trace",
-                    "DATA_MONITOR": "Info",
-                    "ENHANCED_EVENT_MONITOR": "Info",
-                    "ENHANCED_EVENT_MONITOR_GUI": "Info",
-                    "ENHANCED_LOGGING": "Info",
-                    "EVENT_BUS": "Trace",
-                    "EVENT_MONITOR": "Info",
-                    "EVENT_MONITOR_GUI": "Info",
-                    "GUI": "Trace",
+                    "DATA_COLLECTOR": "INFO",
+                    "GUI": "DEBUG",
                     "IB_CONNECTION": "Trace",
-                    "MAIN": "Trace",
-                    "PERFORMANCE_OPTIMIZER": "Info",
-                    "SUBSCRIPTION_MANAGER": "Trace"
+                    "MAIN": "INFO",
+                    "AI_ENGINE": "INFO"
                 }
             }
         if self.ai_prompt is None:

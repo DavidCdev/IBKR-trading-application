@@ -1011,7 +1011,7 @@ class TradingManager:
                 totalQuantity=quantity,
                 orderType="STP",
                 auxPrice=stop_loss_price,
-                tif="GTC"  # Good Till Cancelled
+                tif="GTC"
             )
             
             logger.info(f"Created stop loss order: {quantity} contracts at ${stop_loss_price:.2f}")

@@ -1068,7 +1068,7 @@ class IBDataCollector:
 
 
     def _on_update_calloption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
-        logger.info(f"Getting real-time Call Option Data in UI")
+        # logger.info(f"Getting real-time Call Option Data in UI")
         # logger.info(f"Call Option ticker: {option_ticker}")
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
@@ -1102,7 +1102,7 @@ class IBDataCollector:
 
 
     def _on_update_putoption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
-        logger.info(f"Getting real-time Puts Option Data in UI")
+        # logger.info(f"Getting real-time Puts Option Data in UI")
         # logger.info(f"Puts Option ticker: {option_ticker}")
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
