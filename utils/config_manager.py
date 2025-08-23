@@ -77,10 +77,10 @@ class AppConfig:
             self.debug = {
                 "master_debug": True,
                 "modules": {
-                    "CONFIG_MANAGER": "Trace",
+                    "CONFIG_MANAGER": "TRACE",
                     "DATA_COLLECTOR": "INFO",
                     "GUI": "DEBUG",
-                    "IB_CONNECTION": "Trace",
+                    "IB_CONNECTION": "TRACE",
                     "MAIN": "INFO",
                     "AI_ENGINE": "INFO"
                 }

@@ -602,11 +602,15 @@ class IB_Trading_APP(QMainWindow):
                 module_levels["MAIN"] = self.setting_ui.ui.mainLogLevelCombo.currentText()
             if hasattr(self.setting_ui.ui, 'guiLogLevelCombo'):
                 module_levels["GUI"] = self.setting_ui.ui.guiLogLevelCombo.currentText()
-            if hasattr(self.setting_ui.ui, 'eventBusLogLevelCombo'):
-                module_levels["EVENT_BUS"] = self.setting_ui.ui.eventBusLogLevelCombo.currentText()
-            if hasattr(self.setting_ui.ui, 'subscriptionManagerLogLevelCombo'):
-                module_levels["SUBSCRIPTION_MANAGER"] = self.setting_ui.ui.subscriptionManagerLogLevelCombo.currentText()
-            
+            if hasattr(self.setting_ui.ui, 'ibConnectionLogLevelCombo'):
+                module_levels["IB_CONNECTION"] = self.setting_ui.ui.ibConnectionLogLevelCombo.currentText()
+            if hasattr(self.setting_ui.ui, 'dataCollectorLogLevelCombo'):
+                module_levels["DATA_COLLECTOR"] = self.setting_ui.ui.dataCollectorLogLevelCombo.currentText()
+            if hasattr(self.setting_ui.ui, 'configManagerLogLevelCombo'):
+                module_levels["CONFIG_MANAGER"] = self.setting_ui.ui.configManagerLogLevelCombo.currentText()
+            if hasattr(self.setting_ui.ui, 'aiEngineLogLevelCombo'):
+                module_levels["AI_ENGINE"] = self.setting_ui.ui.aiEngineLogLevelCombo.currentText()
+
             self.config.debug["modules"].update(module_levels)
             
             # Save to file

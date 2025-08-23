@@ -85,10 +85,14 @@ class Settings_Form(QDialog):
                     self._set_combo_text(self.ui.mainLogLevelCombo, modules["MAIN"])
                 if "GUI" in modules:
                     self._set_combo_text(self.ui.guiLogLevelCombo, modules["GUI"])
-                if "EVENT_BUS" in modules:
-                    self._set_combo_text(self.ui.eventBusLogLevelCombo, modules["EVENT_BUS"])
-                if "SUBSCRIPTION_MANAGER" in modules:
-                    self._set_combo_text(self.ui.subscriptionManagerLogLevelCombo, modules["SUBSCRIPTION_MANAGER"])
+                if "IB_CONNECTION" in modules:
+                    self._set_combo_text(self.ui.ibConnectionLogLevelCombo, modules["IB_CONNECTION"])
+                if "DATA_COLLECTOR" in modules:
+                    self._set_combo_text(self.ui.dataCollectorLogLevelCombo, modules["DATA_COLLECTOR"])
+                if "CONFIG_MANAGER" in modules:
+                    self._set_combo_text(self.ui.configManagerLogLevelCombo, modules["CONFIG_MANAGER"])
+                if "AI_ENGINE" in modules:
+                    self._set_combo_text(self.ui.aiEngineLogLevelCombo, modules["AI_ENGINE"])
                     
         except Exception as e:
             logger.error(f"Error loading config values into UI: {e}")
@@ -96,14 +100,14 @@ class Settings_Form(QDialog):
     def _set_combo_text(self, combo, text):
         """Helper method to set combo box text"""
         try:
-            # Map common log level names
+            # Map common log level names to new standard levels
             level_mapping = {
-                "Trace": "DEBUG",
+                "Trace": "TRACE",
                 "Info": "INFO", 
                 "Debug": "DEBUG",
-                "Warning": "WARNING",
+                "Warning": "WARN",
                 "Error": "ERROR",
-                "Critical": "CRITICAL"
+                "Critical": "FATAL"
             }
             
             # Use mapping if available, otherwise use text as-is
