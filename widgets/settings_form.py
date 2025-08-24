@@ -84,8 +84,8 @@ class Settings_Form(QDialog):
                 modules = self.config.debug.get("modules", {})
                 
                 # Set combo box values
-                if "MAIN" in modules:
-                    self._set_combo_text(self.ui.mainLogLevelCombo, modules["MAIN"])
+                if "TRADING_MANAGER" in modules:
+                    self._set_combo_text(self.ui.tradingManagerLogLevelCombo, modules["TRADING_MANAGER"])
                 if "GUI" in modules:
                     self._set_combo_text(self.ui.guiLogLevelCombo, modules["GUI"])
                 if "IB_CONNECTION" in modules:
@@ -302,9 +302,9 @@ class Settings_Form(QDialog):
         """Connect log level combo boxes to update handlers"""
         try:
             # Connect each combo box to the update function
-            if hasattr(self.ui, 'mainLogLevelCombo'):
-                self.ui.mainLogLevelCombo.currentTextChanged.connect(
-                    lambda text: self._on_log_level_changed("MAIN", text)
+            if hasattr(self.ui, 'tradingManagerLogLevelCombo'):
+                self.ui.tradingManagerLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("TRADING_MANAGER", text)
                 )
             
             if hasattr(self.ui, 'guiLogLevelCombo'):

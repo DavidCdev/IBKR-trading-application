@@ -402,97 +402,15 @@
           <string>Module Log Levels</string>
          </property>
          <layout class="QFormLayout" name="moduleLogLevelsLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="mainLabel">
-            <property name="text">
-             <string>Main:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="mainLogLevelCombo">
-            <item>
-             <property name="text">
-              <string>TRACE</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>DEBUG</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>INFO</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>WARN</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>ERROR</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>FATAL</string>
-             </property>
-            </item>
-           </widget>
-          </item>
           <item row="1" column="0">
-           <widget class="QLabel" name="ibConnectionLabel">
+           <widget class="QLabel" name="tradingManagerLabel">
             <property name="text">
-             <string>IB_CONNECTION:</string>
+             <string>TRADING_MANAGER:</string>
             </property>
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QComboBox" name="ibConnectionLogLevelCombo">
-            <item>
-             <property name="text">
-              <string>TRACE</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>DEBUG</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>INFO</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>WARN</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>ERROR</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>FATAL</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="dataCollectorLabel">
-            <property name="text">
-             <string>DATA_COLLECTOR:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="dataCollectorLogLevelCombo">
+           <widget class="QComboBox" name="tradingManagerLogLevelCombo">
             <item>
              <property name="text">
               <string>TRACE</string>
@@ -526,14 +444,14 @@
            </widget>
           </item>
           <item row="3" column="0">
-           <widget class="QLabel" name="configManagerLabel">
+           <widget class="QLabel" name="dataCollectorLabel">
             <property name="text">
-             <string>CONFIG_MANAGER:</string>
+             <string>DATA_COLLECTOR:</string>
             </property>
            </widget>
           </item>
           <item row="3" column="1">
-           <widget class="QComboBox" name="configManagerLogLevelCombo">
+           <widget class="QComboBox" name="dataCollectorLogLevelCombo">
             <item>
              <property name="text">
               <string>TRACE</string>
@@ -567,14 +485,14 @@
            </widget>
           </item>
           <item row="4" column="0">
-           <widget class="QLabel" name="guiLabel">
+           <widget class="QLabel" name="configManagerLabel">
             <property name="text">
-             <string>GUI:</string>
+             <string>CONFIG_MANAGER:</string>
             </property>
            </widget>
           </item>
           <item row="4" column="1">
-           <widget class="QComboBox" name="guiLogLevelCombo">
+           <widget class="QComboBox" name="configManagerLogLevelCombo">
             <item>
              <property name="text">
               <string>TRACE</string>
@@ -608,14 +526,96 @@
            </widget>
           </item>
           <item row="5" column="0">
+           <widget class="QLabel" name="guiLabel">
+            <property name="text">
+             <string>GUI:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QComboBox" name="guiLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>DEBUG</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>INFO</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>WARN</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>ERROR</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>FATAL</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="6" column="0">
            <widget class="QLabel" name="aiEngineLabel">
             <property name="text">
              <string>AI_ENGINE:</string>
             </property>
            </widget>
           </item>
-          <item row="5" column="1">
+          <item row="6" column="1">
            <widget class="QComboBox" name="aiEngineLogLevelCombo">
+            <item>
+             <property name="text">
+              <string>TRACE</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>DEBUG</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>INFO</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>WARN</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>ERROR</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>FATAL</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="ibConnectionLabel">
+            <property name="text">
+             <string>IB_CONNECTION:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="ibConnectionLogLevelCombo">
             <item>
              <property name="text">
               <string>TRACE</string>

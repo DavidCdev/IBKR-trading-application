@@ -45,17 +45,15 @@
     "debug": {
         "master_debug": true,
         "modules": {
-            "CONFIG_MANAGER": "WARN",
-            "DATA_COLLECTOR": "WARN",
-            "GUI": "WARN",
-            "IB_CONNECTION": "WARN",
+            "CONFIG_MANAGER": "TRACE",
+            "DATA_COLLECTOR": "TRACE",
+            "GUI": "TRACE",
+            "IB_CONNECTION": "TRACE",
             "TRADING_MANAGER": "ERROR",
             "SETTINGS": "ERROR",
             "LOGGER_MANAGER": "ERROR",
-            "MAIN": "WARN",
-            "AI_PROMPT": "WARN",
-            "HOTKEY_MANAGER": "INFO",
-            "AI_ENGINE": "WARN"
+            "MAIN": "TRACE",
+            "AI_ENGINE": "TRACE"
         }
     },
     "ai_prompt": {
