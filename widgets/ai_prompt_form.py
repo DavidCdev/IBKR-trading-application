@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit
 from PyQt6.QtCore import QTimer
 from utils.config_manager import AppConfig
 from ui.ai_prompt_gui import Ui_AiPromptPanel
-from utils.smart_logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger("AI_PROMPT")
 

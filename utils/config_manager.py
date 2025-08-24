@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Any
-from .smart_logger import get_logger
+from .logger import get_logger
 
 logger = get_logger("CONFIG_MANAGER")
 
@@ -158,5 +158,22 @@ class AppConfig:
             }
             with open(config_path, 'w') as f:
                 json.dump(config_dict, f, indent=4)
+            
+            # Notify logger manager of configuration changes
+            self._notify_logger_manager()
+            
         except Exception as e:
             logger.error(f"Failed to save config to {config_path}: {e}")
+    
+    def _notify_logger_manager(self):
+        """Notify the logger manager of configuration changes"""
+        try:
+            # Use a delayed import to avoid circular dependencies
+            import importlib
+            logger_module = importlib.import_module('.logger', package='utils')
+            logger_module.refresh_logger_configuration(self)
+            logger.info("Logger configuration updated after config save")
+        except ImportError:
+            logger.warning("Logger module not available for configuration update")
+        except Exception as e:
+            logger.error(f"Error updating logger configuration: {e}")

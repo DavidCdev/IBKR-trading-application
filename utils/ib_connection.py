@@ -6,7 +6,7 @@ from datetime import datetime, date, timedelta, time
 import pytz
 from threading import Thread, Event
 import time
-from .smart_logger import get_logger, log_connection_event, log_error_with_context
+from .logger import get_logger, log_connection_event, log_error_with_context
 from .performance_monitor import monitor_function, monitor_async_function
 from .trading_manager import TradingManager
 from collections import defaultdict, deque

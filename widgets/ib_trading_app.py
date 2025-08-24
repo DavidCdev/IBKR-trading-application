@@ -9,7 +9,7 @@ from utils.hotkey_manager import HotkeyManager
 
 from typing import Dict, Any, Union, List
 from datetime import datetime
-from utils.smart_logger import get_logger
+from utils.logger import get_logger
 
 logger = get_logger("GUI")
 

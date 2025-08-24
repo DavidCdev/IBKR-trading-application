@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QObject, pyqtSignal, QTimer
 import google.generativeai as genai
 from utils.config_manager import AppConfig
-from utils.smart_logger import get_logger
+from utils.logger import get_logger
 from utils.performance_monitor import monitor_function
 
 logger = get_logger("AI_ENGINE")

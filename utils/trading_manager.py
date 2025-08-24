@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pytz
 from threading import Thread, Event, Lock
 import time
-from .smart_logger import get_logger
+from .logger import get_logger
 
 logger = get_logger("TRADING_MANAGER")
 

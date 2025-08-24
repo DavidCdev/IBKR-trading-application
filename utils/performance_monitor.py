@@ -2,7 +2,7 @@ import time
 import functools
 import threading
 from typing import Callable, Any, Optional
-from .smart_logger import get_logger, log_performance
+from .logger import get_logger, log_performance
 
 
 class PerformanceMonitor:

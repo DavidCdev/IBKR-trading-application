@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QDialog
 from PyQt6 import QtWidgets
 from utils.config_manager import AppConfig
 from ui.settings_gui import Ui_PreferencesDialog
-from utils.smart_logger import get_logger
+from utils.logger import get_logger, update_log_levels, get_available_modules, get_all_log_levels
 from datetime import datetime
 
 logger = get_logger("SETTINGS")
@@ -36,6 +36,9 @@ class Settings_Form(QDialog):
         
         # Add initial log message
         self.log_connection_event("Connection log initialized", "Info")
+        
+        # Connect log level combo boxes to update function
+        self._connect_log_level_handlers()
             
     def load_config_values(self):
         """Load configuration values into the UI"""
@@ -294,3 +297,64 @@ class Settings_Form(QDialog):
             logger.info(f"Settings form: Button enabled: {self.ui.connectButton.isEnabled()}")
         else:
             logger.warning("Settings form: connectionStatusLabel not found in UI")
+    
+    def _connect_log_level_handlers(self):
+        """Connect log level combo boxes to update handlers"""
+        try:
+            # Connect each combo box to the update function
+            if hasattr(self.ui, 'mainLogLevelCombo'):
+                self.ui.mainLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("MAIN", text)
+                )
+            
+            if hasattr(self.ui, 'guiLogLevelCombo'):
+                self.ui.guiLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("GUI", text)
+                )
+            
+            if hasattr(self.ui, 'ibConnectionLogLevelCombo'):
+                self.ui.ibConnectionLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("IB_CONNECTION", text)
+                )
+            
+            if hasattr(self.ui, 'dataCollectorLogLevelCombo'):
+                self.ui.dataCollectorLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("DATA_COLLECTOR", text)
+                )
+            
+            if hasattr(self.ui, 'configManagerLogLevelCombo'):
+                self.ui.configManagerLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("CONFIG_MANAGER", text)
+                )
+            
+            if hasattr(self.ui, 'aiEngineLogLevelCombo'):
+                self.ui.aiEngineLogLevelCombo.currentTextChanged.connect(
+                    lambda text: self._on_log_level_changed("AI_ENGINE", text)
+                )
+                
+            logger.info("Log level handlers connected successfully")
+            
+        except Exception as e:
+            logger.error(f"Error connecting log level handlers: {e}")
+    
+    def _on_log_level_changed(self, module_name: str, new_level: str):
+        """Handle log level changes from GUI"""
+        try:
+            logger.info(f"Log level changed for {module_name}: {new_level}")
+            
+            # Update the logger immediately
+            update_log_levels({module_name: new_level})
+            
+            # Update the config object
+            if self.config and self.config.debug:
+                if "modules" not in self.config.debug:
+                    self.config.debug["modules"] = {}
+                self.config.debug["modules"][module_name] = new_level
+                
+                # Save the updated configuration
+                self.config.save_to_file()
+                
+                logger.info(f"Configuration updated and saved for {module_name}: {new_level}")
+            
+        except Exception as e:
+            logger.error(f"Error updating log level for {module_name}: {e}")

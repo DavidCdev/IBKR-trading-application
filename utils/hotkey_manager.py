@@ -4,7 +4,7 @@ from typing import Callable, Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal, Qt
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtGui import QKeySequence
-from .smart_logger import get_logger
+from .logger import get_logger
 
 logger = get_logger("HOTKEY_MANAGER")
 
