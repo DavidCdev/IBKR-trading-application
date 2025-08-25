@@ -62,8 +62,16 @@ Notes:
 
 - **Master Debug**: `config.debug.master_debug` (default `True`)
 - **Per-module log levels** (`config.debug.modules`):
-  - `MAIN`, `GUI`, `EVENT_BUS`, `SUBSCRIPTION_MANAGER`
-  - Combos map friendly names to standard levels: Info/Debug/Warning/Error/Critical
+  - **Auto-Discovered Modules**: The system automatically discovers 47+ Python modules and provides individual log level controls
+  - **Common Modules**: `MAIN`, `GUI`, `EVENT_BUS`, `SUBSCRIPTION_MANAGER`, `IB_CONNECTION`, `DATA_COLLECTOR`, `TRADING_MANAGER`, `AI_ENGINE`
+  - **Real-Time Updates**: Changes apply immediately without application restart
+  - **Combos map friendly names** to standard levels: Trace/Debug/Info/Warning/Error/Critical
+
+#### Logging System Features
+- **Module Auto-Discovery**: Automatically scans and discovers Python modules from the codebase
+- **Real-Time Configuration**: Change log levels without restarting the application
+- **Centralized Management**: Single point of control for all logging across the application
+- **Automatic Persistence**: All log level changes are automatically saved to `config.json`
 
 ---
 
@@ -80,6 +88,8 @@ Notes:
   - `DataCollectorWorker.disconnect_from_ib()` on disconnect, which cleanly stops subscriptions and emits status signals
 
 - The main window and the dialog both listen to worker signals and update status labels and logs accordingly.
+
+- **Log Level Changes**: All log level modifications are applied immediately and persisted to disk automatically.
 
 ---
 
@@ -104,20 +114,24 @@ Notes:
 2. Adjust Connection fields as needed. Click Connect to initiate a session; the status label and log will update.
 3. Set Trading fields. Edit Risk Levels rows as needed (values are strings; blanks are allowed for `profit_gain`).
 4. Toggle Debug options if desired.
-5. Click Save in the main window context (wired to `_save_setting_form()`), or close the dialog after connecting; configuration persists to `config.json`.
+5. **Configure Logging**: Use the per-module log level dropdowns to control logging verbosity for each component.
+6. Click Save in the main window context (wired to `_save_setting_form()`), or close the dialog after connecting; configuration persists to `config.json`.
 
 Tip: Changing the underlying symbol immediately refreshes labels in the main UI and clears symbol-dependent fields until new data arrives.
+
+**Log Level Control**: Each discovered module has its own log level dropdown. Changes apply immediately and are saved automatically. Use this to control debugging verbosity for specific components without affecting others.
 
 ---
 
 ## Troubleshooting
 
-- **Connect button stays on “Connecting…”**: Verify TWS/IB Gateway is running, API is enabled, and the port/client ID match your TWS/Gateway configuration.
+- **Connect button stays on "Connecting…"**: Verify TWS/IB Gateway is running, API is enabled, and the port/client ID match your TWS/Gateway configuration.
 - **Disconnect takes a while**: The dialog disables the button and polls for completion; it will re-enable once the underlying API reports `isConnected() == False`.
 - **No option or price data**: Ensure `underlying_symbol` is set and your IB account has the necessary market data subscriptions.
 - **Settings not saved**: Check write permissions for `config.json` in the project root.
 - **UI file missing errors**: Ensure `ui/settings_gui.py` exists; regenerate from `.ui` if needed.
 - **Auto-reconnect after manual disconnect**: Manual disconnect sets a flag to skip auto-reconnect. Click Connect again to clear that flag and resume.
+- **Log levels not applying**: Ensure the logging system is properly initialized. Check that `master_debug` is enabled and the module exists in the discovered modules list.
 
 ---
 
@@ -134,3 +148,4 @@ Tip: Changing the underlying symbol immediately refreshes labels in the main UI 
 - IB connection internals: `docs/IB connection.md`
 - Data collection and signals: `docs/Data Collector README.md`
 - Hotkeys and trading shortcuts: `docs/HotKey Manager README.md`
+- Logging system: `docs/LOGGING_SYSTEM.md`

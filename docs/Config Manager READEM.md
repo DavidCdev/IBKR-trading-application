@@ -39,7 +39,7 @@ A small, self-contained configuration layer for the app. It provides sensible de
 
 - **debug**: global/module log levels
   - `master_debug` (bool) default `True`
-  - `modules` (object str->str) default per-module levels (see defaults below)
+  - `modules` (object str->str) default per-module levels with **auto-discovered modules**
 
 - **ai_prompt**: AI engine prompt and polling behavior
   - `prompt` (str)
@@ -97,19 +97,22 @@ These read from `connection` so existing code continues to work:
   "debug": {
     "master_debug": true,
     "modules": {
-      "CONFIG_MANAGER": "Trace",
-      "DATA_MONITOR": "Info",
-      "ENHANCED_EVENT_MONITOR": "Info",
-      "ENHANCED_EVENT_MONITOR_GUI": "Info",
-      "ENHANCED_LOGGING": "Info",
-      "EVENT_BUS": "Trace",
-      "EVENT_MONITOR": "Info",
-      "EVENT_MONITOR_GUI": "Info",
-      "GUI": "Trace",
-      "IB_CONNECTION": "Trace",
-      "MAIN": "Trace",
-      "PERFORMANCE_OPTIMIZER": "Info",
-      "SUBSCRIPTION_MANAGER": "Trace"
+      "CONFIG_MANAGER": "TRACE",
+      "DATA_MONITOR": "INFO",
+      "ENHANCED_EVENT_MONITOR": "INFO",
+      "ENHANCED_EVENT_MONITOR_GUI": "INFO",
+      "ENHANCED_LOGGING": "INFO",
+      "EVENT_BUS": "TRACE",
+      "EVENT_MONITOR": "INFO",
+      "EVENT_MONITOR_GUI": "INFO",
+      "GUI": "TRACE",
+      "IB_CONNECTION": "TRACE",
+      "MAIN": "TRACE",
+      "PERFORMANCE_OPTIMIZER": "INFO",
+      "SUBSCRIPTION_MANAGER": "TRACE",
+      "DATA_COLLECTOR": "INFO",
+      "TRADING_MANAGER": "INFO",
+      "AI_ENGINE": "INFO"
     }
   },
   "ai_prompt": {
@@ -128,6 +131,23 @@ These read from `connection` so existing code continues to work:
 }
 ```
 
+## Logging System Integration
+
+### Auto-Discovered Modules
+The Config Manager now integrates with a centralized logging system that automatically discovers Python modules in the codebase. The `debug.modules` section is dynamically populated with discovered modules, providing individual log level control for each component.
+
+### Log Level Options
+Each module can be configured with one of these log levels:
+- **TRACE**: Most verbose debugging (equivalent to Python's DEBUG)
+- **DEBUG**: General debugging information
+- **INFO**: General information messages
+- **WARN**: Warning messages
+- **ERROR**: Error messages
+- **FATAL**: Critical errors
+
+### Real-Time Updates
+Log level changes are applied immediately without requiring application restart. The system automatically persists all changes to `config.json`.
+
 ### Usage
 
 Load if present, otherwise create with defaults:
@@ -141,7 +161,7 @@ print(config.ib_host, config.ib_port)
 Modify values and persist to disk:
 ```python
 config.trading["underlying_symbol"] = "SPY"
-config.debug["modules"]["MAIN"] = "Info"
+config.debug["modules"]["MAIN"] = "INFO"
 config.save_to_file("config.json")
 ```
 
@@ -156,10 +176,17 @@ if config.performance["market_data_throttling"]:
 - Missing sections/keys are filled with defaults in memory and will be written on the next `save_to_file`.
 
 ### Logging and errors
-- Uses `smart_logger.get_logger("CONFIG_MANAGER")` for messages.
+- Uses the centralized logging system via `utils.logger.get_logger("CONFIG_MANAGER")` for messages.
 - Load errors: logs a warning and falls back to defaults.
 - Save errors: logs an error and leaves the previous file intact.
 
 ### Tips
 - Keep secrets like `gemini_api_key` safe; consider external secret management if needed.
 - You can keep `config.json` under version control with sanitized values, or add it to `.gitignore` for local-only overrides.
+- The logging system automatically discovers new modules as they're added to the codebase.
+- Use the Settings GUI to easily configure log levels for all discovered modules.
+
+## Related Documentation
+- Logging system: `docs/LOGGING_SYSTEM.md`
+- Settings GUI: `docs/Setting GUI.md`
+- Data collection: `docs/Data Collector README.md`

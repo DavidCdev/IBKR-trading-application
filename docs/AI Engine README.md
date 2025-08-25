@@ -15,6 +15,7 @@ The AI Engine (`utils/ai_engine.py`) integrates Google Gemini with your trading 
 - **Smart caching**: Reuses the last analysis unless the prompt changes, price exits the last valid range, or cache expires.
 - **Historical context**: Pulls price history and computes simple high/low inflection points.
 - **PyQt6 signals**: UI-friendly updates via `analysis_ready`, `analysis_error`, `polling_status`, `cache_status`.
+- **Centralized logging**: Comprehensive logging system integration for debugging and monitoring.
 
 ### Installation
 Install the required packages (minimal for the AI Engine itself):
@@ -51,6 +52,32 @@ Example:
 Notes:
 - **Do not commit secrets**: Keep `gemini_api_key` private.
 - `underlying_symbol` controls which symbol is analyzed for history; defaults to `SPY` inside the engine if not provided.
+
+### Logging System Integration
+
+The AI Engine now uses the centralized logging system for comprehensive logging across all operations:
+
+#### Module Logging
+- **Module Name**: `AI_ENGINE` (auto-discovered by the logging system)
+- **Log Levels**: Configurable via Settings GUI (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
+- **Real-Time Updates**: Log levels can be changed without restarting the application
+
+#### Logging Features
+- **Analysis Events**: Detailed logging of analysis requests, responses, and processing
+- **API Interactions**: Logging of Gemini API calls, responses, and error handling
+- **Cache Management**: Logging of cache hits, misses, and invalidation decisions
+- **Performance Monitoring**: Built-in performance logging for analysis operations
+
+#### Usage Example
+```python
+from utils.logger import get_logger
+
+logger = get_logger("AI_ENGINE")
+logger.info("Starting market analysis")
+logger.debug(f"Analysis parameters: {symbol}, {days} days")
+logger.warning(f"Cache miss, performing fresh analysis")
+logger.error(f"Analysis failed: {error}")
+```
 
 ### Signals
 `AI_Engine` is a `QObject` and emits:
@@ -155,8 +182,19 @@ You can also access the raw parsed response via the `raw_response` field in the 
 - Ensure the app provides a valid current price; otherwise the engine will fail with "No valid current price available".
 - If Gemini returns non-JSON or markdown-wrapped JSON, the engine auto-strips code fences and logs parse errors.
 - Use `get_ai_status()` and `get_config_status()` for quick diagnostics.
-- Logs are emitted via `utils.smart_logger.get_logger("AI_ENGINE")`.
+- Logs are emitted via the centralized logging system via `utils.logger.get_logger("AI_ENGINE")`.
 
 ### Security
 - Keep your `gemini_api_key` secure and out of version control.
 - Consider using environment injection or a secrets manager to populate `config.json` at runtime.
+
+### Performance Considerations
+- **Logging Overhead**: Minimal performance impact from comprehensive logging
+- **Cache Efficiency**: Smart caching reduces unnecessary API calls
+- **Background Processing**: Polling runs in background thread
+- **Memory Management**: Efficient handling of historical data and analysis results
+
+### Related Documentation
+- Logging system: `docs/LOGGING_SYSTEM.md`
+- Configuration management: `docs/Config Manager READEM.md`
+- Data collection: `docs/Data Collector README.md`

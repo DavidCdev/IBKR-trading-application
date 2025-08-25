@@ -22,7 +22,7 @@ The IB Connection module provides a comprehensive interface for connecting to In
 1. **IBDataCollector**: Main class handling all IB interactions
 2. **TradingManager**: Manages trading operations and strategies
 3. **Performance Monitoring**: Built-in performance tracking
-4. **Smart Logger**: Comprehensive logging system
+4. **Centralized Logging**: Comprehensive logging system integration
 
 ### Connection Management
 
@@ -32,7 +32,7 @@ The module supports both TWS and IB Gateway connections with configurable parame
 # Basic connection
 collector = IBDataCollector(
     host='127.0.0.1',
-    port=7497,  # 7497 for TWS, 4001 for IB Gateway
+    port=7497,  # 7497 for TWS, 4001 for Gateway
     clientId=1,
     timeout=30
 )
@@ -116,6 +116,31 @@ Gets comprehensive trade statistics and performance metrics.
 async def collect_all_data() -> Optional[Dict[str, Any]]
 ```
 Collects all market data, positions, and account information.
+
+## Logging System Integration
+
+The IB Connection module now uses the centralized logging system for comprehensive logging across all operations:
+
+### Module Logging
+- **Module Name**: `IB_CONNECTION` (auto-discovered by the logging system)
+- **Log Levels**: Configurable via Settings GUI (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
+- **Real-Time Updates**: Log levels can be changed without restarting the application
+
+### Logging Features
+- **Connection Events**: Detailed logging of connection attempts, successes, and failures
+- **Market Data**: Logging of price updates, option data, and FX rate changes
+- **Error Handling**: Comprehensive error logging with context and stack traces
+- **Performance Monitoring**: Built-in performance logging for API operations
+
+### Usage Example
+```python
+from utils.logger import get_logger
+
+logger = get_logger("IB_CONNECTION")
+logger.info("Connecting to IB TWS")
+logger.debug(f"Connection parameters: {host}:{port}")
+logger.error(f"Connection failed: {error}")
+```
 
 ## Dynamic Monitoring
 
@@ -353,6 +378,11 @@ The module supports various events for UI integration:
    - Use appropriate sleep intervals
    - Monitor memory usage
 
+5. **Logging**
+   - Use appropriate log levels for different operations
+   - Log connection events and errors with context
+   - Monitor performance metrics through logging
+
 ## Troubleshooting
 
 ### Common Issues
@@ -372,6 +402,11 @@ The module supports various events for UI integration:
    - Check for memory leaks
    - Verify thread safety
 
+4. **Logging Issues**
+   - Verify the logging system is properly initialized
+   - Check that `IB_CONNECTION` module is configured in debug settings
+   - Ensure appropriate log levels are set for troubleshooting
+
 ### Debug Information
 
 ```python
@@ -383,6 +418,11 @@ exp_status = collector.get_expiration_status()
 
 # Check monitoring status
 monitor_status = collector.get_dynamic_monitoring_status()
+
+# Check logging configuration
+from utils.logger import get_logger
+logger = get_logger("IB_CONNECTION")
+logger.debug("Current logging level active")
 ```
 
 ## Dependencies
@@ -392,6 +432,7 @@ monitor_status = collector.get_dynamic_monitoring_status()
 - `pytz`: Timezone handling
 - `asyncio`: Asynchronous operations
 - `threading`: Background monitoring
+- `utils.logger`: Centralized logging system
 
 ## Version Compatibility
 

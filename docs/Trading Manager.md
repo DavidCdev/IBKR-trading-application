@@ -53,6 +53,32 @@ The system supports instant order execution through global hotkeys:
 - **Manual Switching**: User-controlled expiration changes
 - **Available Expirations**: Integration with data collector for real-time expiration availability
 
+## Logging System Integration
+
+The Trading Manager now uses the centralized logging system for comprehensive logging across all trading operations:
+
+### Module Logging
+- **Module Name**: `TRADING_MANAGER` (auto-discovered by the logging system)
+- **Log Levels**: Configurable via Settings GUI (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
+- **Real-Time Updates**: Log levels can be changed without restarting the application
+
+### Logging Features
+- **Order Events**: Detailed logging of order placement, modifications, and cancellations
+- **Position Management**: Logging of position updates, P&L calculations, and risk assessments
+- **Risk Management**: Comprehensive logging of risk level calculations and bracket order management
+- **Performance Monitoring**: Built-in performance logging for trading operations
+
+### Usage Example
+```python
+from utils.logger import get_logger
+
+logger = get_logger("TRADING_MANAGER")
+logger.info("Placing BUY order for CALL options")
+logger.debug(f"Order parameters: {quantity} contracts at {price}")
+logger.warning(f"Risk level adjusted: {risk_level}")
+logger.error(f"Order placement failed: {error}")
+```
+
 ## Configuration
 
 ### Trading Configuration
@@ -349,23 +375,29 @@ The system includes comprehensive error handling:
 8. **Update available expirations** when data changes
 9. **Monitor bracket order status** for risk management
 10. **Use proper error handling** for all operations
+11. **Configure appropriate log levels** for debugging and monitoring
+12. **Monitor performance metrics** through logging system
 
 ## Troubleshooting
 
 ### Common Issues
+
 - **Order Rejection**: Check account permissions and margin requirements
 - **Expiration Issues**: Verify available expirations and market hours
 - **Connection Problems**: Ensure TWS/Gateway is running and connected
 - **Position Tracking**: Verify order fill event handling
 - **Chase Logic**: Check background thread status and order monitoring
 - **Bracket Orders**: Verify risk level configuration and order placement
+- **Logging Issues**: Verify the logging system is properly initialized and `TRADING_MANAGER` module is configured
 
 ### Debug Information
+
 - All operations are logged with detailed information
 - Use `get_risk_management_status()` for system health checks
 - Monitor bracket order status for risk management issues
 - Check chase order monitoring thread status
 - Verify expiration selection logic and available dates
+- Check logging configuration and module status
 
 ### System Health Checks
 ```python
@@ -383,6 +415,11 @@ brackets = trading_manager.get_bracket_orders()
 
 # Get last action message
 last_message = trading_manager.get_last_action_message()
+
+# Check logging configuration
+from utils.logger import get_logger
+logger = get_logger("TRADING_MANAGER")
+logger.debug("Trading manager logging active")
 ```
 
 ## Dependencies
@@ -393,6 +430,7 @@ last_message = trading_manager.get_last_action_message()
 - `threading`: Thread management
 - `datetime`: Date and time operations
 - `time`: Time-based operations for chase logic
+- `utils.logger`: Centralized logging system
 
 ## Performance Considerations
 
@@ -401,6 +439,7 @@ last_message = trading_manager.get_last_action_message()
 - **Memory Management**: Automatic cleanup of completed orders and positions
 - **Async Operations**: Non-blocking order placement and management
 - **Resource Pooling**: Efficient reuse of contract and order objects
+- **Logging Overhead**: Minimal performance impact from comprehensive logging
 
 ## Future Enhancements
 
@@ -409,4 +448,5 @@ last_message = trading_manager.get_last_action_message()
 - **Multi-Asset Support**: Support for multiple underlying assets
 - **Advanced Algorithms**: More sophisticated order execution algorithms
 - **Real-time Monitoring**: Enhanced real-time position and risk monitoring
+- **Log Analytics**: Advanced log analysis and performance insights
 

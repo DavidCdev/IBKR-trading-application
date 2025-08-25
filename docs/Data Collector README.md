@@ -66,7 +66,7 @@ Wraps `ib_async.IB` and owns:
 - Option chain fetching and dynamic subscriptions for selected strike/expiration
 - Account metrics (NetLiquidation, PnL, HighWaterMark tracking) and events
 - Active positions with PnL calculations
-- Today’s executions + trade statistics (wins/losses, profit factor)
+- Today's executions + trade statistics (wins/losses, profit factor)
 - Historical data retrieval (used by AI engine)
 
 Important behaviors:
@@ -106,7 +106,7 @@ Trading (`config.trading`):
 
 Performance (`config.performance`): tuning flags (memory, throttling, validation)
 
-Debug (`config.debug`): logger levels per module
+Debug (`config.debug`): logger levels per module with **auto-discovered modules**
 
 AI Prompt (`config.ai_prompt`): only relevant if using `AI_Engine`
 
@@ -121,6 +121,33 @@ Derived convenience properties:
 Persistence helpers:
 - `AppConfig.load_from_file(path='config.json')`
 - `AppConfig.save_to_file(path='config.json')`
+
+---
+
+## Logging System Integration
+
+The Data Collector now uses the centralized logging system for comprehensive logging across all operations:
+
+### Module Logging
+- **Module Name**: `DATA_COLLECTOR` (auto-discovered by the logging system)
+- **Log Levels**: Configurable via Settings GUI (TRACE, DEBUG, INFO, WARN, ERROR, FATAL)
+- **Real-Time Updates**: Log levels can be changed without restarting the application
+
+### Logging Features
+- **Connection Events**: Detailed logging of connection attempts, successes, and failures
+- **Data Collection**: Logging of data collection cycles and market data updates
+- **Error Handling**: Comprehensive error logging with context and stack traces
+- **Performance Monitoring**: Built-in performance logging for data collection operations
+
+### Usage Example
+```python
+from utils.logger import get_logger
+
+logger = get_logger("DATA_COLLECTOR")
+logger.info("Starting data collection")
+logger.debug(f"Connecting to {host}:{port}")
+logger.error(f"Connection failed: {error}")
+```
 
 ---
 
@@ -201,7 +228,7 @@ thread.start()
 
 Notes:
 - `start_collection()` runs an `asyncio` loop; call it after moving to a `QThread`.
-- Use `connect_to_ib()` for manual connect attempts; it’s safe to call while the loop manages the actual connection.
+- Use `connect_to_ib()` for manual connect attempts; it's safe to call while the loop manages the actual connection.
 - Call `cleanup()` before application shutdown to cancel subscriptions and stop monitoring threads.
 
 ---
@@ -246,11 +273,12 @@ Ensure your TWS/IB Gateway is running and API is enabled on `host:port` with the
 ## Troubleshooting
 
 - Connection times out: confirm TWS/Gateway is running, API enabled, correct `host/port`, and that the client ID is not conflicting
-- Auto-reconnect not happening: verify `disconnect_from_ib()` wasn’t called (manual-disconnect flag set). Use `reset_manual_disconnect_flag()` or `connect_to_ib()`
+- Auto-reconnect not happening: verify `disconnect_from_ib()` wasn't called (manual-disconnect flag set). Use `reset_manual_disconnect_flag()` or `connect_to_ib()`
 - No option data: ensure an underlying symbol is configured and that the account has proper market data subscriptions
 - No FX data: IB may require specific FX permissions/subscriptions
 - HWM not persisting: check write permissions to `config.json`
 - UI freezes: ensure data collection runs in a separate `QThread` and heavy work stays off the GUI thread
+- Logging issues: verify the logging system is properly initialized and `DATA_COLLECTOR` module is configured in the debug settings
 
 ---
 
@@ -258,6 +286,7 @@ Ensure your TWS/IB Gateway is running and API is enabled on `host:port` with the
 
 - `utils/trading_manager.py`: Receives market/account data to place/manage orders, apply risk tiers, chase logic, and bracket orders
 - `utils/ai_engine.py`: Uses historical data and current price for AI-driven analysis (optional)
+- `utils/logger.py`: Centralized logging system for comprehensive application logging
 
 ---
 

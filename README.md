@@ -17,10 +17,11 @@ A comprehensive Python-based trading application for Interactive Brokers (IBKR) 
 - **Event Monitoring**: Comprehensive event tracking and logging system
 - **Configuration Management**: JSON-based configuration with runtime updates
 - **Thread-Safe Architecture**: Non-blocking UI with separate data collection threads
+- **Centralized Logging System**: Comprehensive logging with real-time configuration and module auto-discovery
 
 ### User Interface
 - **Modern PyQt6 GUI**: Clean, responsive interface with real-time updates
-- **Settings Panel**: Easy configuration management
+- **Settings Panel**: Easy configuration management with per-module logging controls
 - **AI Prompt Interface**: Interactive AI assistance
 - **Connection Status**: Real-time connection monitoring
 - **Data Visualization**: Live charts and data displays
@@ -102,6 +103,23 @@ The application uses `config.json` for configuration. Key settings include:
 }
 ```
 
+### Logging Configuration
+```json
+{
+    "debug": {
+        "master_debug": true,
+        "modules": {
+            "MAIN": "INFO",
+            "GUI": "DEBUG",
+            "IB_CONNECTION": "TRACE",
+            "DATA_COLLECTOR": "INFO",
+            "TRADING_MANAGER": "INFO",
+            "AI_ENGINE": "INFO"
+        }
+    }
+}
+```
+
 ## 🚀 Usage
 
 ### Starting the Application
@@ -131,9 +149,18 @@ The application automatically:
 
 ### Manual Controls
 
-- **Settings Panel**: Access via the settings button to modify configuration
+- **Settings Panel**: Access via the settings button to modify configuration and logging levels
 - **AI Assistant**: Use the AI prompt interface for market analysis
 - **Connection Management**: Monitor and control IBKR connection status
+
+### Logging System
+
+The application features a comprehensive centralized logging system:
+- **Module Auto-Discovery**: Automatically discovers 47+ Python modules
+- **Real-Time Configuration**: Change log levels without restarting the application
+- **GUI Integration**: Control logging verbosity through the settings interface
+- **Performance Monitoring**: Built-in performance and trade event logging
+- **Log Rotation**: Automatic log file rotation with configurable limits
 
 ## 📁 Project Structure
 
@@ -150,14 +177,20 @@ IBKR/
 │   ├── ib_connection.py   # IBKR API connection
 │   ├── data_collector.py  # Market data collection
 │   ├── config_manager.py  # Configuration management
-│   └── ai_engine.py       # AI analysis engine
+│   ├── ai_engine.py       # AI analysis engine
+│   └── logger.py          # Centralized logging system
 ├── src/                   # Additional source files
 │   ├── gui.py            # GUI components
 │   ├── event_bus.py      # Event management
 │   └── data_monitor.py   # Data monitoring
 ├── ui/                    # UI definition files
 ├── tests/                 # Test suite
-└── docs/                  # Documentation
+├── docs/                  # Comprehensive documentation
+│   ├── LOGGING_SYSTEM.md  # Logging system documentation
+│   ├── Setting GUI.md     # Settings interface documentation
+│   ├── Trading Manager.md # Trading system documentation
+│   └── [other docs]      # Additional component documentation
+└── logs/                  # Application logs (auto-generated)
 ```
 
 ## 🔧 Key Components
@@ -180,6 +213,12 @@ IBKR/
 - **Connection pooling** for efficient resource usage
 - **Background processing** for non-blocking operations
 
+### Logging System
+- **Centralized management** of all application logging
+- **Real-time configuration** via GUI without restarts
+- **Module auto-discovery** for automatic logger setup
+- **Performance monitoring** with built-in metrics collection
+
 ## 🐛 Troubleshooting
 
 ### Common Issues
@@ -199,13 +238,33 @@ IBKR/
    - Enable market data throttling
    - Monitor system resources
 
+4. **Logging Issues**
+   - Verify logging system is properly initialized
+   - Check module configuration in debug settings
+   - Ensure appropriate log levels are set
+
 ### Logging
 
-The application generates detailed logs in:
+The application generates detailed logs in the `logs/` directory:
 - `trading_app.log` - Main application logs
-- `ib_data_collector.log` - Data collection logs
+- `errors.log` - Error-only logs
+- `debug.log` - Debug information (if enabled)
+- `performance.log` - Performance metrics
 
-Enable debug logging in `config.json` for detailed troubleshooting.
+Enable debug logging in `config.json` for detailed troubleshooting. Use the Settings GUI to adjust log levels for individual modules in real-time.
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the `docs/` folder:
+
+- **Logging System**: `docs/LOGGING_SYSTEM.md` - Complete logging system guide
+- **Settings GUI**: `docs/Setting GUI.md` - Configuration interface documentation
+- **Trading Manager**: `docs/Trading Manager.md` - Trading system documentation
+- **Data Collector**: `docs/Data Collector README.md` - Data collection system
+- **IB Connection**: `docs/IB connection.md` - Connection management
+- **AI Engine**: `docs/AI Engine README.md` - AI analysis system
+- **Configuration**: `docs/Config Manager READEM.md` - Configuration management
+- **Update Summary**: `docs/DOCUMENTATION_UPDATE_SUMMARY.md` - Recent changes overview
 
 ## 🤝 Contributing
 
@@ -228,6 +287,7 @@ This software is for educational and research purposes only. Trading involves su
 For issues and questions:
 - Check the troubleshooting section
 - Review the logs for error details
+- Consult the comprehensive documentation in `docs/`
 - Open an issue on the repository
 
 ---
