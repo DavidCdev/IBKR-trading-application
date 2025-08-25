@@ -9,3 +9,5 @@ __pycache__/
 logs
 *.log
 tests
+.zencoder
+/tests/

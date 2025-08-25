@@ -48,7 +48,7 @@
             "CONFIG_MANAGER": "TRACE",
             "DATA_COLLECTOR": "TRACE",
             "GUI": "TRACE",
-            "IB_CONNECTION": "TRACE",
+            "IB_CONNECTION": "WARN",
             "TRADING_MANAGER": "ERROR",
             "SETTINGS": "ERROR",
             "LOGGER_MANAGER": "ERROR",
