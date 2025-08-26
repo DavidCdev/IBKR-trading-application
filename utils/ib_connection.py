@@ -997,7 +997,6 @@ class IBDataCollector:
                 }
                 self._cached_option_contracts[cache_key] = contracts_cache[cache_key]
 
-                print(f"Call qualified: {call_qualified}")
                 # Process CALL option
                 if call_qualified and call_qualified[0]:
                     call_option_data = {
@@ -1066,7 +1065,6 @@ class IBDataCollector:
             'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
             'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
         }
-        # print(f"Calls option data: \n{tmp_data}")
         # Ensure this update corresponds to current underlying/strike/expiration
         try:
             if symbol_ctx and symbol_ctx != self.underlying_symbol:
@@ -1117,7 +1115,6 @@ class IBDataCollector:
             'Vega': getattr(option_ticker.modelGreeks, 'vega', 0),
             'Implied_Volatility': getattr(option_ticker.modelGreeks, 'impliedVol', 0) * 100
         }
-        # print(f"Puts option data: \n{tmp_data}")
         # Ensure this update corresponds to current underlying/strike/expiration
         try:
             if symbol_ctx and symbol_ctx != self.underlying_symbol:
@@ -1189,9 +1186,6 @@ class IBDataCollector:
             # If not an option or forex, fallback to USD
             currency = 'USD'
 
-        # Log for debugging
-        # print(f"Current Price is {current_price} and Average price is {avg_cost}")
-
         # If we still don't have a price, skip
         if current_price is None:
             logger.warning(f"Could not get price for {contract_symbol}, skipping position")
@@ -1234,9 +1228,9 @@ class IBDataCollector:
         if position.contract.symbol == self.underlying_symbol:
             try:
                 # Store the first matching position for real-time updates
-                if not self.pos:
-                    self.pos = position
-                    self.pos_type = getattr(self.pos.contract, 'right', None)
+                # if not self.pos:
+                self.pos = position
+                self.pos_type = getattr(self.pos.contract, 'right', None)
 
                 logger.info(f"Handled Position: {self.pos}")
                 pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
@@ -1299,7 +1293,7 @@ class IBDataCollector:
             return pd.DataFrame()
     # Define an event handler for P&L updates
     def on_pnl_update(self, pnl_obj, *args, **kwargs):
-        print(f"P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
+        logger.info(f"Account P&L Update: Unrealized: ${pnl_obj.unrealizedPnL:.2f}, Realized: ${pnl_obj.realizedPnL:.2f}, Daily: ${pnl_obj.dailyPnL:.2f}")
         if args:
             logger.info(f"P&L additional args: {args}")
         if kwargs:
@@ -1321,13 +1315,13 @@ class IBDataCollector:
                 self.trading_manager.update_market_data(daily_pnl_percent=daily_pnl_percent)
 
     def on_account_summary_update(self, account_summary, *args, **kwargs):
-        logger.info(f"Account summary update received: {len(account_summary) if account_summary else 0} items")
-        logger.info(f"Account summary type: {type(account_summary)}")
-        logger.info(f"Account summary content: {account_summary}")
+        logger.debug(f"Account summary update received: {len(account_summary) if account_summary else 0} items")
+        logger.debug(f"Account summary type: {type(account_summary)}")
+        logger.debug(f"Account summary content: {account_summary}")
         if args:
-            logger.info(f"Additional args: {args}")
+            logger.debug(f"Additional args: {args}")
         if kwargs:
-            logger.info(f"Additional kwargs: {kwargs}")
+            logger.debug(f"Additional kwargs: {kwargs}")
         
         # Handle case where account_summary might be None or empty
         if not account_summary:
@@ -1620,7 +1614,7 @@ class IBDataCollector:
                     'sell_time': time_filled
                 })
 
-                print(f"Closed Trade: {match_qty}x {symbol_key} P&L = {pnl:.2f}")
+                logger.info(f"Closed Trade: {match_qty}x {symbol_key} P&L = {pnl:.2f}")
 
                 # Adjust remaining qtys
                 opener['qty'] -= match_qty
@@ -2056,14 +2050,14 @@ class IBDataCollector:
             # Create a Stock contract for the symbol
             qualified_contracts = self.underlying_symbol_qualified
             contract = qualified_contracts[0]
-            print(f"Contract: {contract}")
+            logger.debug(f"Contract: {contract}")
             start_date = datetime.now() - timedelta(days=30)
             end_date = datetime.now()
 
             # Format dates for IB API (YYYYMMDD HH:mm:ss)
             start_str = start_date.strftime('%Y%m%d %H:%M:%S')
             end_str = end_date.strftime('%Y%m%d %H:%M:%S')
-            print(f"Start date: {start_str}, End date: {end_str}")
+            logger.debug(f"Start date: {start_str}, End date: {end_str}")
             # Request historical data
             # Using 1 day bars for daily data
             bars = await self.ib.reqHistoricalDataAsync(
@@ -2077,9 +2071,9 @@ class IBDataCollector:
                 False,  # Keep up to date after bar
                 []  # Chart options
             )
-            print(f"Bars: {bars}")
+            logger.debug(f"Bars: {bars}")
             if not bars:
-                print(f"No historical data returned for {contract.symbol}")
+                logger.warning(f"No historical data returned for {contract.symbol}")
                 exit()
 
             # Convert bars to list of dictionaries
@@ -2094,7 +2088,7 @@ class IBDataCollector:
                     'volume': bar.volume
                 })
 
-            print(f"Retrieved {len(historical_data)} historical data points for {contract.symbol}")
+            logger.info(f"Retrieved {len(historical_data)} historical data points for {contract.symbol}")
 
             return historical_data
 
