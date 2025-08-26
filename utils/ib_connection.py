@@ -850,25 +850,25 @@ class IBDataCollector:
                 if hasattr(self, 'trading_manager'):
                     self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
 
-                # Recalculate active positions PnL in real-time based on latest underlying price
-                if self.pos and self.underlying_symbol_price > 0:
-                    try:
-                        # Get current positions and recalculate PnL
-                        positions = self.ib.positions()
-                        for position in positions:
-                            if position.contract and getattr(position.contract, 'symbol', None) == (symbol or self.underlying_symbol):
-                                # Use synchronous PnL calculation
-                                pnl_result = self._calculate_position_pnl_sync(position, self.underlying_symbol_price)
-                                if pnl_result and hasattr(self, 'data_worker') and hasattr(self.data_worker, 'active_contracts_pnl_refreshed'):
-                                    self.data_worker.active_contracts_pnl_refreshed.emit({
-                                        'pnl_percent': pnl_result['pnl_percent'],
-                                        'pnl_dollar': pnl_result['pnl_dollar'],
-                                        'symbol': pnl_result['symbol'],
-                                        'position_size': pnl_result['position_size']
-                                    })
-                                break
-                    except Exception as pnl_err:
-                        logger.warning(f"Error recalculating PnL: {pnl_err}")
+                # # Recalculate active positions PnL in real-time based on latest underlying price
+                # if self.pos and self.underlying_symbol_price > 0:
+                #     try:
+                #         # Get current positions and recalculate PnL
+                #         positions = self.ib.positions()
+                #         for position in positions:
+                #             if position.contract and getattr(position.contract, 'symbol', None) == (symbol or self.underlying_symbol):
+                #                 # Use synchronous PnL calculation
+                #                 pnl_result = self._calculate_position_pnl_sync(position, self.underlying_symbol_price)
+                #                 if pnl_result and hasattr(self, 'data_worker') and hasattr(self.data_worker, 'active_contracts_pnl_refreshed'):
+                #                     self.data_worker.active_contracts_pnl_refreshed.emit({
+                #                         'pnl_percent': pnl_result['pnl_percent'],
+                #                         'pnl_dollar': pnl_result['pnl_dollar'],
+                #                         'symbol': pnl_result['symbol'],
+                #                         'position_size': pnl_result['position_size']
+                #                     })
+                #                 break
+                #     except Exception as pnl_err:
+                #         logger.warning(f"Error recalculating PnL: {pnl_err}")
                     
         except Exception as e:
             logger.error(f"Error in price update callback: {e}")
@@ -1075,7 +1075,10 @@ class IBDataCollector:
         # logger.info(f"Call Option ticker: {option_ticker}")
         self.option_c_mark = (option_ticker.bid + option_ticker.ask) / 2
         if self.pos:
-            self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+            pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+
+            if pnl_results:
+                self.data_worker.active_contracts_pnl_refreshed.emit(pnl_results)
         
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
@@ -1199,7 +1202,7 @@ class IBDataCollector:
             logger.error(f"Error in synchronous PnL calculation: {e}")
             return None
 
-    async def calculate_pnl_detailed(self, pos, option_c_mark, option_p_mark):
+    def calculate_pnl_detailed(self, pos, option_c_mark, option_p_mark):
         """
         Calculate detailed PnL for a given position, handling options, stocks, and forex.
         Returns a list with a single dict of PnL details.
@@ -1299,7 +1302,7 @@ class IBDataCollector:
                             self.pos = position
                             
                         # Accumulate results for matching positions using the symbol-specific price
-                        pnl_results = await self.calculate_pnl_detailed(position, self.option_c_mark, self.option_p_mark)
+                        pnl_results = self.calculate_pnl_detailed(position, self.option_c_mark, self.option_p_mark)
                         pnl_detailed.extend(pnl_results)
 
                     except Exception as e:
