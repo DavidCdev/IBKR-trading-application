@@ -31,7 +31,7 @@
                 "profit_gain": ""
             }
         ],
-        "max_trade_value": 660.0,
+        "max_trade_value": 360.0,
         "trade_delta": 0.05,
         "runner": 1
     },
@@ -48,7 +48,7 @@
             "CONFIG_MANAGER": "TRACE",
             "DATA_COLLECTOR": "TRACE",
             "GUI": "TRACE",
-            "IB_CONNECTION": "WARN",
+            "IB_CONNECTION": "DEBUG",
             "TRADING_MANAGER": "ERROR",
             "SETTINGS": "ERROR",
             "LOGGER_MANAGER": "ERROR",

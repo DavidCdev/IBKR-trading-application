@@ -39,6 +39,9 @@ class IBDataCollector:
         self.pos = None
         self.closed_trades = None
         
+        self.option_p_mark = 0
+        self.option_c_mark = 0
+        
         # Dynamic strike price and expiration monitoring
         self._previous_strike = 0
         self._current_expiration = None
@@ -1070,6 +1073,10 @@ class IBDataCollector:
     def _on_update_calloption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
         # logger.info(f"Getting real-time Call Option Data in UI")
         # logger.info(f"Call Option ticker: {option_ticker}")
+        self.option_c_mark = (option_ticker.bid + option_ticker.ask) / 2
+        if self.pos:
+            self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+        
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
             'Ask': option_ticker.ask if option_ticker.ask else 0,
@@ -1104,6 +1111,12 @@ class IBDataCollector:
     def _on_update_putoption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
         # logger.info(f"Getting real-time Puts Option Data in UI")
         # logger.info(f"Puts Option ticker: {option_ticker}")
+        self.option_p_mark = (option_ticker.bid + option_ticker.ask) / 2
+        if self.pos:
+            pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+            if pnl_results:
+                self.data_worker.active_contracts_pnl_refreshed.emit(pnl_results)
+            
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
             'Ask': option_ticker.ask if option_ticker.ask else 0,
@@ -1186,65 +1199,78 @@ class IBDataCollector:
             logger.error(f"Error in synchronous PnL calculation: {e}")
             return None
 
-    async def calculate_pnl_detailed(self, pos, underlying_symbol_price):
+    async def calculate_pnl_detailed(self, pos, option_c_mark, option_p_mark):
+        """
+        Calculate detailed PnL for a given position, handling options, stocks, and forex.
+        Returns a list with a single dict of PnL details.
+        """
         self.pos = pos
         results = []
-        pnl_dollar = 0
-        pnl_percent = 0
-        currency = ''
-        current_price = underlying_symbol_price
-        
+
         # Determine if position is long or short
         is_long = pos.position > 0
-        position_size = abs(pos.position)  # Use absolute value for calculations
-        
-        if 'USDCAD' in str(pos.contract):
+        position_size = abs(pos.position)
+
+        # Determine current price based on contract type
+        contract_str = str(pos.contract)
+        contract_symbol = getattr(pos.contract, 'symbol', None)
+        contract_right = getattr(pos.contract, 'right', None)
+        avg_cost = getattr(pos, 'avgCost', 0)
+
+        current_price = None
+        currency = None
+
+        # Option contracts
+        if contract_right == 'C':
+            current_price = option_c_mark * 100
+            currency = 'USD'
+        elif contract_right == 'P':
+            current_price = option_p_mark * 100
+            currency = 'USD'
+        # Forex
+        elif 'USDCAD' in contract_str:
             current_price = self.fx_ratio
-            # Forex - same logic for long/short
-            if is_long:
-                pnl_dollar = position_size * (current_price - pos.avgCost)
-                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
-            else:  # is_short
-                pnl_dollar = position_size * (pos.avgCost - current_price)
-                pnl_percent = ((pos.avgCost - current_price) / pos.avgCost) * 100
             currency = 'CAD'
-
-        elif pos.contract.symbol == 'IBKR':
-            # Option
-            if current_price is None:
-                logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
-                return results
-            if is_long:
-                pnl_dollar = position_size * (current_price - pos.avgCost)
-                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
-            else:  # is_short
-                pnl_dollar = position_size * (pos.avgCost - current_price)
-                pnl_percent = ((pos.avgCost - current_price) / pos.avgCost) * 100
+        # Stocks or unknown
+        else:
+            # If not an option or forex, fallback to USD
             currency = 'USD'
 
-        elif pos.contract.symbol == 'SPY':
-            # Stock
-            if current_price is None:
-                logger.warning(f"Could not get price for {pos.contract.symbol}, skipping position")
-                return results
+        # Log for debugging
+        print(f"Current Price is {current_price} and Average price is {avg_cost}")
+
+        # If we still don't have a price, skip
+        if current_price is None:
+            logger.warning(f"Could not get price for {contract_symbol}, skipping position")
+            return results
+
+        # Calculate PnL
+        try:
             if is_long:
-                pnl_dollar = position_size * (current_price - pos.avgCost)
-                pnl_percent = ((current_price - pos.avgCost) / pos.avgCost) * 100
-            else:  # is_short
-                pnl_dollar = position_size * (pos.avgCost - current_price)
-                pnl_percent = ((pos.avgCost - current_price) / pos.avgCost) * 100
-            currency = 'USD'
+                price_diff = current_price - avg_cost
+                pnl_dollar = position_size * price_diff
+                pnl_percent = (price_diff / avg_cost) * 100 if avg_cost else 0
+            else:
+                price_diff = avg_cost - current_price
+                pnl_dollar = position_size * price_diff
+                pnl_percent = (price_diff / avg_cost) * 100 if avg_cost else 0
+        except ZeroDivisionError:
+            pnl_dollar = 0
+            pnl_percent = 0
+
+        # Symbol resolution
+        symbol = getattr(pos.contract, 'localSymbol', None) or contract_symbol or 'USDCAD'
 
         results.append({
-            'symbol': pos.contract.localSymbol if hasattr(pos.contract, 'localSymbol') else 'USDCAD',
+            'symbol': symbol,
             'position_size': pos.position,
             'position_type': 'LONG' if is_long else 'SHORT',
-            'avg_cost': pos.avgCost,
+            'avg_cost': avg_cost,
             'current_price': current_price,
             'pnl_dollar': round(pnl_dollar, 2),
             'pnl_percent': round(pnl_percent, 2),
             'currency': currency,
-            'contract': pos.contract  # Include the contract object for trading
+            'contract': pos.contract
         })
 
         return results
@@ -1273,7 +1299,7 @@ class IBDataCollector:
                             self.pos = position
                             
                         # Accumulate results for matching positions using the symbol-specific price
-                        pnl_results = await self.calculate_pnl_detailed(position, current_price)
+                        pnl_results = await self.calculate_pnl_detailed(position, self.option_c_mark, self.option_p_mark)
                         pnl_detailed.extend(pnl_results)
 
                     except Exception as e:
@@ -2296,3 +2322,4 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting expiration status: {e}")
             return {'error': str(e)}
+        
