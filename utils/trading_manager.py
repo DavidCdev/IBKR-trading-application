@@ -541,6 +541,44 @@ class TradingManager:
             logger.error(f"Error creating adaptive order: {e}")
             raise
     
+    def _ensure_contract_routable(self, contract):
+        """Ensure contract has routing fields set (exchange/currency/multiplier) required by IB."""
+        try:
+            if not contract:
+                return contract
+            # Exchange
+            try:
+                exch = getattr(contract, 'exchange', None)
+                if not exch:
+                    setattr(contract, 'exchange', 'SMART')
+            except Exception:
+                try:
+                    setattr(contract, 'exchange', 'SMART')
+                except Exception:
+                    pass
+            # Currency
+            try:
+                curr = getattr(contract, 'currency', None)
+                if not curr:
+                    setattr(contract, 'currency', 'USD')
+            except Exception:
+                try:
+                    setattr(contract, 'currency', 'USD')
+                except Exception:
+                    pass
+            # Multiplier for options
+            try:
+                sec_type = getattr(contract, 'secType', '').upper()
+                if sec_type == 'OPT':
+                    mult = getattr(contract, 'multiplier', None)
+                    if not mult:
+                        setattr(contract, 'multiplier', '100')
+            except Exception:
+                pass
+        except Exception as ensure_err:
+            logger.warning(f"Could not ensure contract routability: {ensure_err}")
+        return contract
+
     async def _cleanup_failed_order(self, order_id: int, symbol: str):
         """Clean up failed order and pending position"""
         try:
@@ -795,7 +833,8 @@ class TradingManager:
                             logger.error(f"Failed to create stock contract for {symbol}")
                             return False
                 
-                # Submit limit order
+                # Ensure routing fields are set and submit limit order
+                contract = self._ensure_contract_routable(contract)
                 logger.info(f"Submitting limit order: {sell_quantity} contracts at ${limit_price:.2f}")
                 trade = self.ib.placeOrder(contract, order)
                 
@@ -839,7 +878,8 @@ class TradingManager:
                             logger.error(f"Failed to create stock contract for {symbol}")
                             return False
                 
-                # Submit market order
+                # Ensure routing fields are set and submit market order
+                contract = self._ensure_contract_routable(contract)
                 logger.info(f"Submitting market order: {sell_quantity} contracts")
                 trade = self.ib.placeOrder(contract, order)
                 

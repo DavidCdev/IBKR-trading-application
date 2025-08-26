@@ -128,7 +128,7 @@ class IBDataCollector:
             # Ensure we have a valid strike (whole number)
             valid_strike = int(rounded_strike)
             
-            logger.info(f"Strike calculation: Price=${price:.2f} -> Rounded=${rounded_strike} -> Valid Strike={valid_strike}")
+            # logger.info(f"Strike calculation: Price=${price:.2f} -> Rounded=${rounded_strike} -> Valid Strike={valid_strike}")
             
             return valid_strike
             
@@ -1076,10 +1076,16 @@ class IBDataCollector:
         self.option_c_mark = (option_ticker.bid + option_ticker.ask) / 2
         if self.pos:
             pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
-
             if pnl_results:
-                self.data_worker.active_contracts_pnl_refreshed.emit(pnl_results)
-        
+                payload = pnl_results[0] if isinstance(pnl_results, list) else pnl_results
+                
+                # Only emit if PnL results have changed
+                if not hasattr(self, '_last_put_pnl_payload') or self._last_put_pnl_payload != payload:
+                    self._last_put_pnl_payload = payload
+                    self.data_worker.active_contracts_pnl_refreshed.emit(payload)
+                else:
+                    logger.debug("Put option PnL results unchanged, skipping emit")
+            
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
             'Ask': option_ticker.ask if option_ticker.ask else 0,
@@ -1118,7 +1124,14 @@ class IBDataCollector:
         if self.pos:
             pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
             if pnl_results:
-                self.data_worker.active_contracts_pnl_refreshed.emit(pnl_results)
+                payload = pnl_results[0] if isinstance(pnl_results, list) else pnl_results
+                
+                # Only emit if PnL results have changed
+                if not hasattr(self, '_last_put_pnl_payload') or self._last_put_pnl_payload != payload:
+                    self._last_put_pnl_payload = payload
+                    self.data_worker.active_contracts_pnl_refreshed.emit(payload)
+                else:
+                    logger.debug("Put option PnL results unchanged, skipping emit")
             
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
@@ -1240,7 +1253,7 @@ class IBDataCollector:
             currency = 'USD'
 
         # Log for debugging
-        print(f"Current Price is {current_price} and Average price is {avg_cost}")
+        # print(f"Current Price is {current_price} and Average price is {avg_cost}")
 
         # If we still don't have a price, skip
         if current_price is None:
@@ -1278,11 +1291,40 @@ class IBDataCollector:
 
         return results
 
+    def _handle_position_event(self, position):
+        """Handle position event and update active position data"""
+        logger.info(f"Received position update for {position}")
+        if position.contract.symbol == self.underlying_symbol:
+            try:
+                # Store the first matching position for real-time updates
+                if not self.pos:
+                    self.pos = position
+                logger.info(f"Position: {self.pos}")
+                pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+                
+                if pnl_results:
+                    payload = pnl_results[0] if isinstance(pnl_results, list) and pnl_results else pnl_results
+                    
+                    # Only emit if PnL results have changed
+                    if not hasattr(self, '_last_pnl_payload') or self._last_pnl_payload != payload:
+                        self._last_pnl_payload = payload
+                        self.data_worker.active_contracts_pnl_refreshed.emit(payload)
+                        logger.info(f"Active contracts PnL refreshed: {payload}")
+                    else:
+                        logger.debug("PnL results unchanged, skipping emit")
+
+
+            except Exception as e:
+                logger.warning(f"Error processing position: {e}")
+                
+
+
     async def get_active_positions(self, underlying_symbol) -> pd.DataFrame:
         """Get active positions with improved error handling"""
         try:
+
             positions = self.ib.positions()
-            
+
             if not positions:
                 logger.info("No active positions found")
                 return pd.DataFrame()
@@ -1310,6 +1352,8 @@ class IBDataCollector:
                         continue
             
             df = pd.DataFrame(pnl_detailed)
+            self.ib.positionEvent += self._handle_position_event
+            
 
             return df
                 

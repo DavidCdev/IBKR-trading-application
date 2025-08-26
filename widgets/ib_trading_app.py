@@ -894,10 +894,16 @@ class IB_Trading_APP(QMainWindow):
                 logger.info("Updating Active Contract Data in UI")
                 active_contract_data = data['active_contract'].iloc[0]
                 logger.info(f"Active contract data: {active_contract_data}")
-                self.ui.label_symbol_value.setText(f"{active_contract_data.get('symbol', '---')}")
-                self.ui.label_quantity_value.setText(f"{active_contract_data.get('position_size', '---')}")
-                self.ui.label_pl_dollar_value.setText(format_currency(active_contract_data.get('pnl_dollar', 0)))
-                self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
+                if active_contract_data['position_size'] == 0:
+                    self.ui.label_symbol_value.setText(f"---")
+                    self.ui.label_quantity_value.setText(f"---")
+                    self.ui.label_pl_dollar_value.setText(f"---")
+                    self.ui.label_pl_percent_value.setText(f"---")
+                else: 
+                    self.ui.label_symbol_value.setText(f"{active_contract_data.get('symbol', '---')}")
+                    self.ui.label_quantity_value.setText(f"{active_contract_data.get('position_size', '---')}")
+                    self.ui.label_pl_dollar_value.setText(format_currency(active_contract_data.get('pnl_dollar', 0)))
+                    self.ui.label_pl_percent_value.setText(f"{active_contract_data.get('pnl_percent', '---')}%")
 
             # Update option information data
             if data.get('options') is not None and not data['options'].empty:
@@ -1054,9 +1060,18 @@ class IB_Trading_APP(QMainWindow):
             
     def update_active_contracts_pnl(self, active_contracts_pnl: Dict[str, Any]):
         try:
-            logger.info(f"Updating active contracts PNL: {active_contracts_pnl}")
-            self.ui.label_pl_percent_value.setText(f"{active_contracts_pnl['pnl_percent']:.2f}%")
-            self.ui.label_pl_dollar_value.setText(format_currency(active_contracts_pnl['pnl_dollar']))
+            if active_contracts_pnl['position_size'] == 0:
+                logger.info(f"No active contracts PNL found")
+                self.ui.label_pl_percent_value.setText(f"---")
+                self.ui.label_pl_dollar_value.setText(f"---")
+                self.ui.label_quantity_value.setText(f"---")
+                self.ui.label_symbol_value.setText(f"---")
+            else:
+                logger.info(f"Updating active contracts PNL: {active_contracts_pnl}")
+                self.ui.label_pl_percent_value.setText(f"{active_contracts_pnl['pnl_percent']:.2f}%")
+                self.ui.label_pl_dollar_value.setText(format_currency(active_contracts_pnl['pnl_dollar']))
+                self.ui.label_quantity_value.setText(f"{active_contracts_pnl['position_size']}")
+                self.ui.label_symbol_value.setText(f"{active_contracts_pnl['symbol']}")
         except Exception as e:
             logger.error(f"Error updating active contracts PNL: {e}")
 
