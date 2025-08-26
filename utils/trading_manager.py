@@ -139,7 +139,27 @@ class TradingManager:
             )
         except Exception as e:
             logger.error(f"Error updating trading config: {e}")
-
+    
+    def _clear_closed_positions(self):
+        """Clear any positions with size 0 (closed positions) from active positions"""
+        try:
+            with self._position_lock:
+                positions_to_remove = []
+                for symbol, pos in self._active_positions.items():
+                    if pos.get('position_size', 0) == 0:
+                        positions_to_remove.append(symbol)
+                        logger.info(f"Clearing closed position: {symbol}")
+                
+                # Remove closed positions
+                for symbol in positions_to_remove:
+                    self._active_positions.pop(symbol, None)
+                
+                if positions_to_remove:
+                    logger.info(f"Cleared {len(positions_to_remove)} closed positions")
+                    
+        except Exception as e:
+            logger.error(f"Error clearing closed positions: {e}")
+    
     def update_market_data(self, call_option: Dict[str, Any] = None, 
                           put_option: Dict[str, Any] = None,
                           underlying_price: float = None,
@@ -608,7 +628,11 @@ class TradingManager:
                 return False
             
             # Check for existing positions (one active position rule)
+            # Clear any positions with size 0 (closed positions) first
+            self._clear_closed_positions()
+            
             with self._position_lock:
+                # Now check if there are any active positions with size > 0
                 if self._active_positions:
                     logger.warning("One active position rule: Cannot place new order while position exists")
                     self._last_action_message = "Cannot BUY: an active position already exists. Close or sell the current position first."
@@ -1318,6 +1342,9 @@ class TradingManager:
     def get_risk_management_status(self) -> Dict[str, Any]:
         """Get current risk management status"""
         try:
+            # Clear any positions with size 0 (closed positions) first
+            self._clear_closed_positions()
+            
             current_risk_level = self._get_current_risk_level()
             active_brackets = len(self._bracket_orders)
             
@@ -1588,6 +1615,9 @@ class TradingManager:
     def can_place_new_order(self, option_price: float, quantity: int) -> Dict[str, Any]:
         """Check if placing a new order would exceed current risk limits"""
         try:
+            # Clear any positions with size 0 (closed positions) first
+            self._clear_closed_positions()
+            
             # Calculate the new order's trade value
             # CRITICAL FIX: Options have a multiplier of 100, so cost per contract = option_price * 100
             cost_per_contract = option_price * 100
@@ -1653,6 +1683,9 @@ class TradingManager:
     def get_current_risk_exposure(self) -> Dict[str, Any]:
         """Get detailed current risk exposure information"""
         try:
+            # Clear any positions with size 0 (closed positions) first
+            self._clear_closed_positions()
+            
             # Calculate current total exposure
             total_exposure = 0
             position_details = []
@@ -1975,7 +2008,11 @@ class TradingManager:
                 }
             
             # Check for existing positions (one active position rule)
+            # Clear any positions with size 0 (closed positions) first
+            self._clear_closed_positions()
+            
             with self._position_lock:
+                # Now check if there are any active positions with size > 0
                 if self._active_positions:
                     return {
                         'valid': False,
@@ -2103,6 +2140,9 @@ class TradingManager:
             capacity_info = self.calculate_max_affordable_quantity(option_price)
             
             # Check position rule
+            # Clear any positions with size 0 (closed positions) first
+            self._clear_closed_positions()
+            
             with self._position_lock:
                 has_existing_position = len(self._active_positions) > 0
             

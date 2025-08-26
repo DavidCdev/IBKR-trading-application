@@ -37,6 +37,7 @@ class IBDataCollector:
         self.option_strike = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
         self.pos = None
+        self.pos_type = ""
         self.closed_trades = None
         
         self.option_p_mark = 0
@@ -850,26 +851,6 @@ class IBDataCollector:
                 if hasattr(self, 'trading_manager'):
                     self.trading_manager.update_market_data(underlying_price=self.underlying_symbol_price)
 
-                # # Recalculate active positions PnL in real-time based on latest underlying price
-                # if self.pos and self.underlying_symbol_price > 0:
-                #     try:
-                #         # Get current positions and recalculate PnL
-                #         positions = self.ib.positions()
-                #         for position in positions:
-                #             if position.contract and getattr(position.contract, 'symbol', None) == (symbol or self.underlying_symbol):
-                #                 # Use synchronous PnL calculation
-                #                 pnl_result = self._calculate_position_pnl_sync(position, self.underlying_symbol_price)
-                #                 if pnl_result and hasattr(self, 'data_worker') and hasattr(self.data_worker, 'active_contracts_pnl_refreshed'):
-                #                     self.data_worker.active_contracts_pnl_refreshed.emit({
-                #                         'pnl_percent': pnl_result['pnl_percent'],
-                #                         'pnl_dollar': pnl_result['pnl_dollar'],
-                #                         'symbol': pnl_result['symbol'],
-                #                         'position_size': pnl_result['position_size']
-                #                     })
-                #                 break
-                #     except Exception as pnl_err:
-                #         logger.warning(f"Error recalculating PnL: {pnl_err}")
-                    
         except Exception as e:
             logger.error(f"Error in price update callback: {e}")
 
@@ -1072,20 +1053,7 @@ class IBDataCollector:
 
     def _on_update_calloption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
         # logger.info(f"Getting real-time Call Option Data in UI")
-        # logger.info(f"Call Option ticker: {option_ticker}")
-        self.option_c_mark = (option_ticker.bid + option_ticker.ask) / 2
-        if self.pos:
-            pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
-            if pnl_results:
-                payload = pnl_results[0] if isinstance(pnl_results, list) else pnl_results
-                
-                # Only emit if PnL results have changed
-                if not hasattr(self, '_last_put_pnl_payload') or self._last_put_pnl_payload != payload:
-                    self._last_put_pnl_payload = payload
-                    self.data_worker.active_contracts_pnl_refreshed.emit(payload)
-                else:
-                    logger.debug("Put option PnL results unchanged, skipping emit")
-            
+
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
             'Ask': option_ticker.ask if option_ticker.ask else 0,
@@ -1110,6 +1078,21 @@ class IBDataCollector:
         except Exception:
             pass
 
+        self.option_c_mark = (option_ticker.bid + option_ticker.ask) / 2
+        if self.pos_type == 'C':
+            logger.info("Update PNL in Call option Update")
+
+            pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+            if pnl_results:
+                payload = pnl_results[0] if isinstance(pnl_results, list) else pnl_results
+
+                # Only emit if PnL results have changed
+                if not hasattr(self, '_last_put_pnl_payload') or self._last_put_pnl_payload != payload:
+                    self._last_put_pnl_payload = payload
+                    self.data_worker.active_contracts_pnl_refreshed.emit(payload)
+                else:
+                    logger.debug("Put option PnL results unchanged, skipping emit")
+
         self.data_worker.calls_option_updated.emit(tmp_data)
         
         # Update trading manager with call option data
@@ -1120,18 +1103,7 @@ class IBDataCollector:
     def _on_update_putoption(self, option_ticker, symbol_ctx=None, strike_ctx=None, expiration_ctx=None):
         # logger.info(f"Getting real-time Puts Option Data in UI")
         # logger.info(f"Puts Option ticker: {option_ticker}")
-        self.option_p_mark = (option_ticker.bid + option_ticker.ask) / 2
-        if self.pos:
-            pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
-            if pnl_results:
-                payload = pnl_results[0] if isinstance(pnl_results, list) else pnl_results
-                
-                # Only emit if PnL results have changed
-                if not hasattr(self, '_last_put_pnl_payload') or self._last_put_pnl_payload != payload:
-                    self._last_put_pnl_payload = payload
-                    self.data_worker.active_contracts_pnl_refreshed.emit(payload)
-                else:
-                    logger.debug("Put option PnL results unchanged, skipping emit")
+
             
         tmp_data = {
             'Bid': option_ticker.bid if option_ticker.bid else 0,
@@ -1157,63 +1129,25 @@ class IBDataCollector:
         except Exception:
             pass
 
+        self.option_p_mark = (option_ticker.bid + option_ticker.ask) / 2
+        if self.pos_type == 'P':
+            logger.info("Update PNL in Put option Update")
+            pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
+            if pnl_results:
+                payload = pnl_results[0] if isinstance(pnl_results, list) else pnl_results
+
+                # Only emit if PnL results have changed
+                if not hasattr(self, '_last_put_pnl_payload') or self._last_put_pnl_payload != payload:
+                    self._last_put_pnl_payload = payload
+                    self.data_worker.active_contracts_pnl_refreshed.emit(payload)
+                else:
+                    logger.debug("Put option PnL results unchanged, skipping emit")
+
         self.data_worker.puts_option_updated.emit(tmp_data)
         
         # Update trading manager with put option data
         if hasattr(self, 'trading_manager'):
             self.trading_manager.update_market_data(put_option=tmp_data)
-
-    def _calculate_position_pnl_sync(self, pos, underlying_symbol_price):
-        """Synchronous PnL calculation for real-time updates"""
-        try:
-            if not pos or not pos.contract:
-                return None
-
-            current_price = underlying_symbol_price
-
-            is_long = pos.position > 0
-            position_size = abs(pos.position)
-
-            contract_str = str(pos.contract)
-            contract_symbol = getattr(pos.contract, 'symbol', None)
-
-            if 'USDCAD' in contract_str:
-                current_price = self.fx_ratio
-                currency = 'CAD'
-            elif contract_symbol in ('IBKR', 'SPY'):
-                currency = 'USD'
-            else:
-                logger.warning(f"Unknown contract type for {contract_str}, skipping position")
-                return None
-
-            if current_price is None:
-                logger.warning(f"Could not get price for {contract_symbol}, skipping position")
-                return None
-
-            price_diff = current_price - pos.avgCost if is_long else pos.avgCost - current_price
-            try:
-                pnl_percent = (price_diff / pos.avgCost) * 100 if pos.avgCost else 0
-            except ZeroDivisionError:
-                pnl_percent = 0
-
-            pnl_dollar = position_size * price_diff
-
-            symbol = getattr(pos.contract, 'localSymbol', None) or contract_symbol
-
-            return {
-                'symbol': symbol,
-                'position_size': pos.position,
-                'position_type': 'LONG' if is_long else 'SHORT',
-                'avg_cost': pos.avgCost,
-                'current_price': current_price,
-                'pnl_dollar': round(pnl_dollar, 2),
-                'pnl_percent': round(pnl_percent, 2),
-                'currency': currency
-            }
-
-        except Exception as e:
-            logger.error(f"Error in synchronous PnL calculation: {e}")
-            return None
 
     def calculate_pnl_detailed(self, pos, option_c_mark, option_p_mark):
         """
@@ -1221,6 +1155,9 @@ class IBDataCollector:
         Returns a list with a single dict of PnL details.
         """
         self.pos = pos
+        self.pos_type = getattr(self.pos.contract, 'right', None)
+
+        logger.info(f"Position: {pos}, Option_C_mark: {option_c_mark}, Option_P_mark: {option_p_mark}")
         results = []
 
         # Determine if position is long or short
@@ -1299,7 +1236,9 @@ class IBDataCollector:
                 # Store the first matching position for real-time updates
                 if not self.pos:
                     self.pos = position
-                logger.info(f"Position: {self.pos}")
+                    self.pos_type = getattr(self.pos.contract, 'right', None)
+
+                logger.info(f"Handled Position: {self.pos}")
                 pnl_results = self.calculate_pnl_detailed(self.pos, self.option_c_mark, self.option_p_mark)
                 
                 if pnl_results:
@@ -1331,10 +1270,6 @@ class IBDataCollector:
             
             pnl_detailed = []
 
-            # Resolve the current price for the requested underlying symbol at calculation time
-            # This avoids using a stale global price from a previously selected symbol
-            current_price = await self.get_underlying_symbol_price(underlying_symbol)
-
             for position in positions:
                 logger.info(f"Position: {position}")
                 if position.contract.symbol == underlying_symbol:
@@ -1342,8 +1277,10 @@ class IBDataCollector:
                         # Store the first matching position for real-time updates
                         if not self.pos:
                             self.pos = position
+                            self.pos_type = getattr(self.pos.contract, 'right', None)
                             
                         # Accumulate results for matching positions using the symbol-specific price
+                        logger.info("PNL update in Get active position")
                         pnl_results = self.calculate_pnl_detailed(position, self.option_c_mark, self.option_p_mark)
                         pnl_detailed.extend(pnl_results)
 
