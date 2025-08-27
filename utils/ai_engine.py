@@ -555,17 +555,6 @@ Please provide your analysis in the specified JSON format.
         """Check if AI analysis is available (API key configured)"""
         return self.gemini_client is not None
     
-    def get_ai_status(self) -> Dict[str, Any]:
-        """Get AI engine status information"""
-        return {
-            'ai_available': self.is_ai_available(),
-            'api_key_configured': bool(self.config.ai_prompt.get("gemini_api_key", "").strip()),
-            'polling_enabled': self.config.ai_prompt.get("enable_auto_polling", True),
-            'polling_interval': self.config.ai_prompt.get("polling_interval_minutes", 10),
-            'last_analysis_time': self.last_poll_time.isoformat() if self.last_poll_time else None,
-            'cache_duration': self.config.ai_prompt.get("cache_duration_minutes", 15)
-        }
-    
     def force_refresh(self):
         """Force a refresh of AI analysis, bypassing cache"""
         logger.info("Force refresh requested")
@@ -588,36 +577,6 @@ Please provide your analysis in the specified JSON format.
         analysis_thread = threading.Thread(target=run_analysis, daemon=True)
         analysis_thread.start()
     
-    def update_config(self, new_config: AppConfig):
-        """Update configuration and restart polling if needed"""
-        old_polling_enabled = self.config.ai_prompt.get("enable_auto_polling", True)
-        new_polling_enabled = new_config.ai_prompt.get("enable_auto_polling", True)
-        
-        self.config = new_config
-        
-        # Restart polling if settings changed
-        if old_polling_enabled != new_polling_enabled:
-            if new_polling_enabled:
-                self._start_polling()
-            else:
-                self._stop_polling()
-        
-        # Reinitialize Gemini API if API key changed
-        old_api_key = self.config.ai_prompt.get("gemini_api_key", "")
-        new_api_key = new_config.ai_prompt.get("gemini_api_key", "")
-        if old_api_key != new_api_key:
-            logger.info(f"API key changed, reinitializing Gemini API...")
-            self._setup_gemini_api()
-    
-    def reinitialize_api(self):
-        """Manually reinitialize the Gemini API client"""
-        logger.info("Manually reinitializing Gemini API client...")
-        self._setup_gemini_api()
-        if self.is_ai_available():
-            logger.info("Gemini API client reinitialized successfully")
-        else:
-            logger.warning("Failed to reinitialize Gemini API client")
-    
     def get_config_status(self) -> Dict[str, Any]:
         """Get detailed configuration status for debugging"""
         return {
@@ -628,22 +587,6 @@ Please provide your analysis in the specified JSON format.
             'gemini_client_initialized': self.gemini_client is not None,
             'polling_enabled': self.config.ai_prompt.get("enable_auto_polling", True),
             'polling_interval': self.config.ai_prompt.get("polling_interval_minutes", 10)
-        }
-    
-    def get_last_analysis(self) -> Optional[Dict[str, Any]]:
-        """Get the last analysis result as a dictionary"""
-        if self.last_analysis:
-            return self._analysis_result_to_dict(self.last_analysis)
-        return None
-    
-    def get_cache_status(self) -> Dict[str, Any]:
-        """Get current cache status"""
-        return {
-            'has_cached_analysis': self.last_analysis is not None,
-            'last_poll_time': self.last_poll_time.isoformat() if self.last_poll_time else None,
-            'is_polling': self.is_polling,
-            'polling_enabled': self.config.ai_prompt.get("enable_auto_polling", True),
-            'cache_duration_minutes': self.config.ai_prompt.get("cache_duration_minutes", 15)
         }
     
     def cleanup(self):
@@ -662,20 +605,3 @@ Please provide your analysis in the specified JSON format.
         else:
             logger.warning("AI engine refresh completed but API is not available")
     
-    def get_ai_prompt(self):
-        """Get the current AI prompt (backward compatibility)"""
-        return self.config.ai_prompt.get("prompt", "")
-    
-    def get_ai_context(self):
-        """Get the current AI context (backward compatibility)"""
-        return self.config.ai_prompt.get("context", "")
-    
-    def set_ai_prompt(self, prompt: str):
-        """Set the AI prompt (backward compatibility)"""
-        self.config.ai_prompt["prompt"] = prompt
-        self.config.save_to_file()
-    
-    def set_ai_context(self, context: str):
-        """Set the AI context (backward compatibility)"""
-        self.config.ai_prompt["context"] = context
-        self.config.save_to_file()

@@ -1,9 +1,6 @@
-import sys
 import platform
-from typing import Callable, Dict, Any
 from PyQt6.QtCore import QObject, pyqtSignal, Qt
-from PyQt6.QtWidgets import QApplication, QMessageBox
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtWidgets import QMessageBox
 from .logger import get_logger
 
 logger = get_logger("HOTKEY_MANAGER")
@@ -320,7 +317,8 @@ class HotkeyManager(QObject):
             logger.error(f"Error in keyPressEvent: {e}")
             event.ignore()
     
-    def _is_hotkey_combination(self, key, modifiers, hotkey_string):
+    @staticmethod
+    def _is_hotkey_combination(key, modifiers, hotkey_string):
         """Check if the key combination matches the hotkey string"""
         try:
             # Parse the hotkey string (e.g., "Ctrl+Alt+P")
@@ -350,12 +348,3 @@ class HotkeyManager(QObject):
         except Exception as e:
             logger.error(f"Error checking hotkey combination: {e}")
             return False
-    
-    def get_hotkey_info(self) -> Dict[str, str]:
-        """Get information about configured hotkeys"""
-        return {
-            "buy_call": f"{self.modifier_key}+Alt+C",
-            "buy_put": f"{self.modifier_key}+Alt+P", 
-            "sell_position": f"{self.modifier_key}+Alt+X",
-            "panic_button": f"{self.modifier_key}+Alt+F"
-        }

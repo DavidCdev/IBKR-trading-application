@@ -336,9 +336,7 @@ class IB_Trading_APP(QMainWindow):
             price_range = analysis_data.get('valid_price_range', {})
             analysis_summary = analysis_data.get('analysis_summary', '')
             confidence_level = analysis_data.get('confidence_level', 0.0)
-            key_insights = analysis_data.get('key_insights', [])
-            risk_assessment = analysis_data.get('risk_assessment', '')
-            
+
             # Update UI with analysis results
             logger.info(f"AI Analysis - Price Range: {format_currency(price_range.get('low', 0))} - {format_currency(price_range.get('high', 0))}")
             logger.info(f"AI Analysis - Confidence: {confidence_level:.2f}")
@@ -443,7 +441,8 @@ class IB_Trading_APP(QMainWindow):
             logger.error(f"Error determining AI bias: {e}")
             return "Neutral"
     
-    def _format_key_levels(self, price_range: Dict[str, float]) -> str:
+    @staticmethod
+    def _format_key_levels(price_range: Dict[str, float]) -> str:
         """Format key price levels for display"""
         try:
             low_price = price_range.get('low', 0)
@@ -458,7 +457,8 @@ class IB_Trading_APP(QMainWindow):
             logger.error(f"Error formatting key levels: {e}")
             return "N/A"
     
-    def _format_strategy_text(self, analysis_summary: str, key_insights: List[str], confidence_level: float) -> str:
+    @staticmethod
+    def _format_strategy_text(analysis_summary: str, key_insights: List[str], confidence_level: float) -> str:
         """Format strategy text for display"""
         try:
             strategy_parts = []
@@ -483,7 +483,8 @@ class IB_Trading_APP(QMainWindow):
             logger.error(f"Error formatting strategy text: {e}")
             return "Strategy analysis unavailable"
     
-    def _format_alert_text(self, risk_assessment: str, alerts: List[str]) -> str:
+    @staticmethod
+    def _format_alert_text(risk_assessment: str, alerts: List[str]) -> str:
         """Format alert text for display"""
         try:
             alert_parts = []
@@ -498,8 +499,6 @@ class IB_Trading_APP(QMainWindow):
 
 
             for alert in alerts:
-                alert_lower = alert.lower()
-                # if any(keyword in alert_lower for keyword in high_priority_keywords):
                 high_priority_alerts.append(f"⚠️ {alert}")
             
             if high_priority_alerts:

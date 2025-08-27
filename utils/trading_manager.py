@@ -17,6 +17,7 @@ class TradingManager:
     """
     
     def __init__(self, ib_connection: IB, trading_config: Dict[str, Any], account_config: Dict[str, Any]):
+        self._local_available_expirations = None
         self.ib = ib_connection
         self.trading_config = trading_config
         self.account_config = account_config
@@ -139,45 +140,7 @@ class TradingManager:
             )
         except Exception as e:
             logger.error(f"Error updating trading config: {e}")
-    
-    def _clear_closed_positions(self):
-        """Clear any positions with size 0 (closed positions) from active positions"""
-        try:
-            with self._position_lock:
-                positions_to_remove = []
-                for symbol, pos in self._active_positions.items():
-                    # Handle different position data formats
-                    position_size = 0
-                    
-                    if isinstance(pos, dict):
-                        # Position data from DataFrame (from IB connection)
-                        position_size = pos.get('position_size', 0)
-                    elif hasattr(pos, 'position'):
-                        # Direct IB position object
-                        position_size = getattr(pos, 'position', 0)
-                    elif hasattr(pos, 'qty'):
-                        # Alternative position attribute
-                        position_size = getattr(pos, 'qty', 0)
-                    
-                    # Convert to number and check if 0
-                    try:
-                        position_size = float(position_size) if position_size is not None else 0
-                    except (ValueError, TypeError):
-                        position_size = 0
-                    
-                    if position_size == 0:
-                        positions_to_remove.append(symbol)
-                        logger.info(f"Clearing closed position: {symbol} (size: {position_size})")
-                
-                # Remove closed positions
-                for symbol in positions_to_remove:
-                    self._active_positions.pop(symbol, None)
-                
-                if positions_to_remove:
-                    logger.info(f"Cleared {len(positions_to_remove)} closed positions")
-                    
-        except Exception as e:
-            logger.error(f"Error clearing closed positions: {e}")
+
     
     def update_market_data(self, call_option: Dict[str, Any] = None, 
                           put_option: Dict[str, Any] = None,
@@ -485,7 +448,8 @@ class TradingManager:
             logger.error(f"Error in smart expiration selection: {e}")
             return self._get_fallback_expiration(est_now)
     
-    def _get_fallback_expiration(self, est_now: datetime) -> str:
+    @staticmethod
+    def _get_fallback_expiration(est_now: datetime) -> str:
         """Fallback expiration logic when no available expirations are known"""
         try:
             # Original logic as fallback
@@ -541,7 +505,8 @@ class TradingManager:
             logger.error(f"Error creating option contract: {e}")
             raise
 
-    def _create_stock_contract(self, symbol: str):
+    @staticmethod
+    def _create_stock_contract(symbol: str):
         """Create a stock contract for the given symbol"""
         try:
             from ib_async import Stock
@@ -552,7 +517,8 @@ class TradingManager:
             logger.error(f"Error creating stock contract for {symbol}: {e}")
             return None
     
-    def _create_adaptive_order(self, action: str, quantity: int, price: float = None) -> Order:
+    @staticmethod
+    def _create_adaptive_order(action: str, quantity: int, price: float = None) -> Order:
         """Create an order using Interactive Brokers' Adaptive Algo (IBALGO)"""
         try:
             if action.upper() == "BUY":
@@ -600,7 +566,8 @@ class TradingManager:
             logger.error(f"Error creating adaptive order: {e}")
             raise
     
-    def _ensure_contract_routable(self, contract):
+    @staticmethod
+    def _ensure_contract_routable(contract):
         """Ensure contract has routing fields set (exchange/currency/multiplier) required by IB."""
         try:
             if not contract:
@@ -790,7 +757,6 @@ class TradingManager:
                         contract_symbol = getattr(contract_obj, 'symbol', None)
                         pos_symbol_str = str(pos.get('symbol', '')) if isinstance(pos, dict) else ''
                         # Match by contract symbol when available, else by symbol string prefix
-                        matches_underlying = False
                         if contract_symbol:
                             matches_underlying = (contract_symbol == self.underlying_symbol)
                         else:
@@ -909,9 +875,6 @@ class TradingManager:
                 self._last_action_message = f"SELL submitted (chase): {sell_quantity} contracts at ${limit_price:.2f}."
                 return True
             else:
-                # Direct market order
-                order = self._create_adaptive_order("SELL", sell_quantity)
-                
                 # Create contract
                 contract = position.get('contract')
                 logger.info(f"Position contract: {contract}, type: {type(contract)}")
@@ -920,10 +883,7 @@ class TradingManager:
                 if not contract or not hasattr(contract, 'symbol'):
                     logger.warning("Invalid contract object from position, attempting to recreate")
                     if "CALL" in symbol.upper() or "PUT" in symbol.upper():
-                        # Option contract
-                        strike = pricing_data.get("Strike", self._underlying_price)
-                        option_type = "CALL" if "CALL" in symbol.upper() else "PUT"
-                        contract = self._create_option_contract(option_type, strike)
+                        pass
                     else:
                         # Stock contract - create stock contract
                         contract = self._create_stock_contract(symbol)
@@ -932,10 +892,8 @@ class TradingManager:
                             return False
                 
                 # Ensure routing fields are set and submit market order
-                contract = self._ensure_contract_routable(contract)
                 logger.info(f"Submitting market order: {sell_quantity} contracts")
-                trade = self.ib.placeOrder(contract, order)
-                
+
                 logger.info(f"SELL order submitted: {sell_quantity} contracts at market")
                 self._last_action_message = f"SELL submitted: {sell_quantity} contracts at market."
                 return True
@@ -1058,8 +1016,7 @@ class TradingManager:
             
             # Create and submit market order
             market_order = self._create_adaptive_order("SELL", remaining_quantity)
-            trade = self.ib.placeOrder(chase_data['contract'], market_order)
-            
+
             logger.info(f"Converted to market order: {remaining_quantity} contracts")
             self._last_action_message = (
                 f"SELL order converted to MARKET after 10s: {remaining_quantity} contracts (order {order_id})."
@@ -1079,6 +1036,7 @@ class TradingManager:
     
     async def _place_bracket_orders(self, parent_order_id: int, contract, quantity: int, entry_price: float, option_type: str):
         """Place bracket orders (stop loss and take profit) for risk management"""
+        global stop_loss_price, take_profit_price
         try:
             # Get current risk level based on daily P&L
             current_risk_level = self._get_current_risk_level()
@@ -1102,10 +1060,10 @@ class TradingManager:
             
             # Build orders (do not transmit yet) so we can set OCA if needed
             if stop_loss_percent:
-                stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent), option_type)
+                stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent))
                 stop_loss_order = self._create_stop_loss_order(quantity, stop_loss_price)
             if profit_gain_percent:
-                take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent), option_type)
+                take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent))
                 take_profit_order = self._create_take_profit_order(quantity, take_profit_price)
             
             # If both exist, set OCA group so that one cancels the other at broker side
@@ -1147,7 +1105,7 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error placing bracket orders: {e}")
     
-    def _get_current_risk_level(self) -> Dict[str, Any]:
+    def _get_current_risk_level(self) -> Any | None:
         """Get the current risk level based on daily P&L"""
         try:
             current_pnl_percent = abs(self._daily_pnl_percent)
@@ -1172,7 +1130,8 @@ class TradingManager:
             logger.error(f"Error getting current risk level: {e}")
             return None
     
-    def _calculate_stop_loss_price(self, entry_price: float, stop_loss_percent: float, option_type: str) -> float:
+    @staticmethod
+    def _calculate_stop_loss_price(entry_price: float, stop_loss_percent: float) -> float:
         """Calculate stop loss price based on entry price and percentage"""
         try:
             # For options, stop loss is a percentage decrease from entry price
@@ -1188,7 +1147,8 @@ class TradingManager:
             logger.error(f"Error calculating stop loss price: {e}")
             return entry_price * 0.8  # Default to 20% loss
     
-    def _calculate_take_profit_price(self, entry_price: float, profit_gain_percent: float, option_type: str) -> float:
+    @staticmethod
+    def _calculate_take_profit_price(entry_price: float, profit_gain_percent: float) -> float:
         """Calculate take profit price based on entry price and percentage"""
         try:
             # For options, take profit is a percentage increase from entry price
@@ -1201,7 +1161,8 @@ class TradingManager:
             logger.error(f"Error calculating take profit price: {e}")
             return entry_price * 1.2  # Default to 20% gain
     
-    def _create_stop_loss_order(self, quantity: int, stop_loss_price: float) -> Order:
+    @staticmethod
+    def _create_stop_loss_order(quantity: int, stop_loss_price: float) -> Order:
         """Create a stop loss order"""
         try:
             order = Order(
@@ -1219,7 +1180,8 @@ class TradingManager:
             logger.error(f"Error creating stop loss order: {e}")
             raise
     
-    def _create_take_profit_order(self, quantity: int, take_profit_price: float) -> Order:
+    @staticmethod
+    def _create_take_profit_order(quantity: int, take_profit_price: float) -> Order:
         """Create a take profit order"""
         try:
             order = Order(
@@ -1297,119 +1259,8 @@ class TradingManager:
                 
         except Exception as e:
             logger.error(f"Error updating position: {e}")
-    
-    def get_active_positions(self) -> Dict[str, Any]:
-        """Get current active positions"""
-        with self._position_lock:
-            # Clear any closed positions before returning
-            self._clear_closed_positions()
-            return self._active_positions.copy()
-    
-    def get_open_orders(self) -> Dict[str, Any]:
-        """Get current open orders"""
-        with self._order_lock:
-            return self._open_orders.copy()
-    
-    def get_bracket_orders(self) -> Dict[str, Any]:
-        """Get current bracket orders"""
-        with self._bracket_lock:
-            return self._bracket_orders.copy()
-    
-    def get_risk_management_status(self) -> Dict[str, Any]:
-        """Get current risk management status"""
-        try:
-            # Clear any positions with size 0 (closed positions) first
-            self._clear_closed_positions()
-            
-            current_risk_level = self._get_current_risk_level()
-            active_brackets = len(self._bracket_orders)
-            
-            # Calculate current risk exposure
-            total_position_value = 0
-            active_positions = []
-            with self._position_lock:
-                for symbol, pos in self._active_positions.items():
-                    if pos.get('status') == 'active':  # Only count filled positions
-                        # CRITICAL FIX: Options have a multiplier of 100, so cost per contract = entry_price * 100
-                        cost_per_contract = pos.get('entry_price', 0) * 100
-                        position_value = pos.get('position_size', 0) * cost_per_contract
-                        total_position_value += position_value
-                        active_positions.append({
-                            'symbol': symbol,
-                            'size': pos.get('position_size', 0),
-                            'entry_price': pos.get('entry_price', 0),
-                            'value': position_value,
-                            'status': pos.get('status', 'unknown')
-                        })
-            
-            # Get current risk limits
-            gui_limit = self.max_trade_value
-            tiered_limit = self._calculate_tiered_risk_limit()
-            pdt_limit = self._calculate_pdt_buffer()
-            limiting_factor = min(gui_limit, tiered_limit, pdt_limit)
-            
-            return {
-                'current_risk_level': current_risk_level,
-                'active_bracket_orders': active_brackets,
-                'daily_pnl_percent': self._daily_pnl_percent,
-                'account_value': self._account_value,
-                'risk_limits': {
-                    'gui_max_trade_value': gui_limit,
-                    'tiered_risk_limit': tiered_limit,
-                    'pdt_buffer_limit': pdt_limit,
-                    'limiting_factor': limiting_factor
-                },
-                'current_exposure': {
-                    'total_position_value': total_position_value,
-                    'active_positions': active_positions,
-                    'available_risk_capacity': max(0, limiting_factor - total_position_value)
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting risk management status: {e}")
-            return {'error': str(e)}
-    
-    def handle_order_fill(self, order_id: int, filled_quantity: int, fill_price: float):
-        """Handle order fill events and manage bracket orders accordingly"""
-        try:
-            logger.info(f"Order fill event: Order {order_id}, Quantity {filled_quantity}, Price ${fill_price:.2f}")
-            
-            # Check if this is a bracket order fill
-            with self._bracket_lock:
-                for parent_id, bracket_data in self._bracket_orders.items():
-                    if bracket_data.get('stop_loss_id') == order_id:
-                        logger.info(f"Stop loss order {order_id} filled - cancelling take profit order")
-                        self._cancel_remaining_bracket_order(parent_id, 'take_profit_id')
-                        return
-                    elif bracket_data.get('take_profit_id') == order_id:
-                        logger.info(f"Take profit order {order_id} filled - cancelling stop loss order")
-                        self._cancel_remaining_bracket_order(parent_id, 'stop_loss_id')
-                        return
-            
-            # Check if this is a primary order fill
-            with self._order_lock:
-                if order_id in self._open_orders:
-                    order_data = self._open_orders[order_id]
-                    if order_data['type'] == 'BUY':
-                        logger.info(f"Primary BUY order {order_id} filled - position opened")
-                        # The bracket orders are already in place from when the order was submitted
-                        # Just update the position tracking
-                        self._update_position_from_fill(order_data, filled_quantity, fill_price)
-                    elif order_data['type'] == 'SELL':
-                        logger.info(f"Primary SELL order {order_id} filled - position closed")
-                        # Cancel any remaining bracket orders
-                        asyncio.run(self._cancel_bracket_orders(order_id))
-                        # Clear any chase tracking for this order if present
-                        if order_id in self._chase_orders:
-                            self._chase_orders.pop(order_id, None)
-                        
-                        # Clear the closed position from active positions
-                        self._clear_closed_positions()
-            
-        except Exception as e:
-            logger.error(f"Error handling order fill: {e}")
-    
+
+
     def _cancel_remaining_bracket_order(self, parent_id: int, order_type: str):
         """Cancel the remaining bracket order when one is filled"""
         try:
@@ -1622,8 +1473,9 @@ class TradingManager:
                 'error': str(e)
             }
     
-    def _generate_user_friendly_message(self, max_quantity: int, option_price: float, 
-                                      limiting_constraint: str, available_margin: float) -> str:
+    @staticmethod
+    def _generate_user_friendly_message(max_quantity: int, option_price: float,
+                                        limiting_constraint: str, available_margin: float) -> str:
         """Generate a user-friendly message about the trading capacity"""
         try:
             if max_quantity <= 0:

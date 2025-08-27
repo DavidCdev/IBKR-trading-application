@@ -19,7 +19,8 @@ class IBDataCollector:
     Improved IB Data Collector with better error handling and resource management
     """
     
-    def __init__(self, host='127.0.0.1', port=7497, clientId=1, timeout=30, trading_config=None, account_config=None):
+    def __init__(self, host='127.0.0.1', port=7497, client_id=1, timeout=30, trading_config=None, account_config=None):
+        self._available_expirations = None
         self.underlying_symbol_qualified = None
         self.ib = IB()
         self.trading_config = trading_config
@@ -27,7 +28,7 @@ class IBDataCollector:
         self.underlying_symbol = trading_config.get('underlying_symbol')
         self.host = host
         self.port = port
-        self.clientId = clientId
+        self.clientId = client_id
         self.timeout = timeout
         self.spy_price = 0
         self.underlying_symbol_price = 0
@@ -39,6 +40,7 @@ class IBDataCollector:
         self.pos = None
         self.pos_type = ""
         self.closed_trades = None
+        self._last_pnl_payload = None
         
         self.option_p_mark = 0
         self.option_c_mark = 0
@@ -119,7 +121,8 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error refreshing for new symbol {symbol}: {e}")
 
-    def _calculate_nearest_strike(self, price: float) -> int:
+    @staticmethod
+    def _calculate_nearest_strike(price: float) -> int:
         """Calculate the nearest valid strike price for options trading"""
         try:
             if price <= 0:
@@ -145,7 +148,8 @@ class IBDataCollector:
         """Check if the strike price has changed and needs updating"""
         return new_strike != self._previous_strike and new_strike > 0
     
-    def _validate_strike_availability(self, strike: int) -> bool:
+    @staticmethod
+    def _validate_strike_availability(strike: int) -> bool:
         """Validate if a strike price is available in the option chain"""
         try:
             # Basic validation
@@ -271,115 +275,6 @@ class IBDataCollector:
             logger.error(f"Error checking for better expiration: {e}")
             return False
 
-    def _get_next_expiration(self, current_expiration: str) -> Optional[str]:
-        """Get the next available expiration after the current one with smart selection"""
-        try:
-            if not hasattr(self, '_available_expirations') or not self._available_expirations:
-                return None
-            
-            if not current_expiration:
-                # No current expiration, return first available
-                return self._available_expirations[0] if self._available_expirations else None
-            
-            est_now = datetime.now(self._est_timezone)
-            current_date = est_now.date()
-            current_time = est_now.time()
-            
-            # Parse current expiration
-            try:
-                if ' ' in current_expiration:
-                    current_exp_str = current_expiration.split()[0]
-                else:
-                    current_exp_str = current_expiration
-                current_exp_date = datetime.strptime(current_exp_str, "%Y%m%d").date()
-            except Exception as e:
-                logger.warning(f"Could not parse current expiration {current_expiration}: {e}")
-                # Fallback to simple next in list
-                expirations = sorted(self._available_expirations)
-                try:
-                    current_index = expirations.index(current_expiration)
-                    if current_index + 1 < len(expirations):
-                        return expirations[current_index + 1]
-                except ValueError:
-                    pass
-                return expirations[0] if expirations else None
-            
-            # Determine target date based on current time
-            if current_time.hour < 12:
-                # Before noon - prefer today (0DTE)
-                target_date = current_date
-            else:
-                # After noon - prefer next business day (1DTE)
-                target_date = current_date + timedelta(days=1)
-                # Skip weekends
-                while target_date.weekday() >= 5:  # Saturday = 5, Sunday = 6
-                    target_date += timedelta(days=1)
-            
-            logger.info(f"Looking for next expiration. Current: {current_expiration}, Target date: {target_date}")
-            
-            # Strategy 1: Find exact target date if available
-            for exp_str in self._available_expirations:
-                try:
-                    if ' ' in exp_str:
-                        exp_str_clean = exp_str.split()[0]
-                    else:
-                        exp_str_clean = exp_str
-                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
-                    
-                    if exp_date == target_date:
-                        logger.info(f"Found exact target expiration: {exp_str}")
-                        return exp_str
-                        
-                except Exception as e:
-                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
-                    continue
-            
-            # Strategy 2: Find nearest available expiration to target date
-            best_exp = None
-            min_days_diff = float('inf')
-            
-            for exp_str in self._available_expirations:
-                try:
-                    if ' ' in exp_str:
-                        exp_str_clean = exp_str.split()[0]
-                    else:
-                        exp_str_clean = exp_str
-                    exp_date = datetime.strptime(exp_str_clean, "%Y%m%d").date()
-                    
-                    # Only consider future expirations
-                    if exp_date > current_exp_date:
-                        days_diff = abs((exp_date - target_date).days)
-                        if days_diff < min_days_diff:
-                            min_days_diff = days_diff
-                            best_exp = exp_str
-                            
-                except Exception as e:
-                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
-                    continue
-            
-            if best_exp:
-                logger.info(f"Selected best available expiration: {best_exp} (days diff from target: {min_days_diff})")
-                return best_exp
-            
-            # Strategy 3: Find next chronological expiration
-            expirations = sorted(self._available_expirations)
-            try:
-                current_index = expirations.index(current_expiration)
-                if current_index + 1 < len(expirations):
-                    next_exp = expirations[current_index + 1]
-                    logger.info(f"Using next chronological expiration: {next_exp}")
-                    return next_exp
-            except ValueError:
-                pass
-            
-            # Strategy 4: Fallback to first available expiration
-            logger.warning("No suitable next expiration found, using first available")
-            return self._available_expirations[0] if self._available_expirations else None
-                
-        except Exception as e:
-            logger.warning(f"Error getting next expiration: {e}")
-            return None
-
     def _get_expiration_type(self, expiration: str) -> str:
         """Get the expiration type (0DTE, 1DTE, etc.)"""
         try:
@@ -420,13 +315,7 @@ class IBDataCollector:
         # Core connection events
         self.ib.connectedEvent += self._on_connected
         self.ib.disconnectedEvent += self._on_disconnected
-        # self.ib.errorEvent += self._on_error
 
-        # Trading events
-        # self.ib.orderStatusEvent += self._on_order_status_update
-        # self.ib.execDetailsEvent += self._on_exec_details
-        # self.ib.commissionReportEvent += self._on_commission_report
-        #
         # Account events
         self.ib.accountSummaryEvent += self.on_account_summary_update
         self.ib.pnlEvent += self.on_pnl_update
@@ -509,7 +398,7 @@ class IBDataCollector:
                 logger.info("Account summary subscription set up successfully")
                 
                 # Also set up periodic account value refresh as a backup
-                self._setup_periodic_account_refresh(account)
+                self._setup_periodic_account_refresh()
                 
             except Exception as e:
                 logger.warning(f"Could not set up account summary subscription: {e}")
@@ -517,7 +406,7 @@ class IBDataCollector:
             # Fallback: Try to get account value from account download
             try:
                 logger.info("Attempting fallback account value retrieval...")
-                account_values = await self.ib.accountDownloadAsync(account)
+                account_values = await self.ib.accountSummaryAsync(account)
                 if account_values:
                     logger.info(f"Account download received: {len(account_values)} values")
                     for item in account_values:
@@ -593,7 +482,7 @@ class IBDataCollector:
                 
             # Fallback to account download
             try:
-                account_values = await self.ib.accountDownloadAsync(account)
+                account_values = await self.ib.accountSummaryAsync(account)
                 if account_values:
                     for item in account_values:
                         if item.tag == 'NetLiquidation':
@@ -616,7 +505,7 @@ class IBDataCollector:
             logger.error(f"Error in manual account value refresh: {e}")
             return False
             
-    def _setup_periodic_account_refresh(self, account: str):
+    def _setup_periodic_account_refresh(self):
         """Set up periodic account value refresh as a backup to real-time updates"""
         try:
             logger.info("Setting up periodic account value refresh...")
@@ -634,7 +523,7 @@ class IBDataCollector:
                         # Use asyncio.run_coroutine_threadsafe to call the async method
                         if hasattr(self, '_loop') and self._loop and self._loop.is_running():
                             asyncio.run_coroutine_threadsafe(
-                                self._periodic_account_refresh(account),
+                                self._periodic_account_refresh(),
                                 self._loop
                             )
                     except Exception as e:
@@ -650,7 +539,7 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error setting up periodic account refresh: {e}")
             
-    async def _periodic_account_refresh(self, account: str):
+    async def _periodic_account_refresh(self):
         """Periodic account value refresh - called from background thread"""
         try:
             # Only refresh if we don't have a valid account value
@@ -813,7 +702,6 @@ class IBDataCollector:
             if symbol is not None and symbol != self.underlying_symbol:
                 return
             old_price = self.underlying_symbol_price
-            ticker_type = ""
             if ticker.last and ticker.last > 0:
                 self.underlying_symbol_price = float(ticker.last)
                 ticker_type = "last"
@@ -1171,7 +1059,6 @@ class IBDataCollector:
         avg_cost = getattr(pos, 'avgCost', 0)
 
         current_price = None
-        currency = None
 
         # Option contracts
         if contract_right == 'C':
@@ -1504,7 +1391,8 @@ class IBDataCollector:
 
         return trades
 
-    async def match_trades_and_calculate_pnl(self, trades):
+    @staticmethod
+    async def match_trades_and_calculate_pnl(trades):
         open_positions = defaultdict(deque)  # {contract key: deque of fills}
         closed_trades = []
 
@@ -1751,7 +1639,8 @@ class IBDataCollector:
             logger.error(f"Error getting trade statistics: {e}")
             return self._create_empty_stats()
     
-    def _create_empty_stats(self) -> pd.DataFrame:
+    @staticmethod
+    def _create_empty_stats() -> pd.DataFrame:
         """Create empty statistics DataFrame"""
         return pd.DataFrame([{
             'Win_Rate': 0,
@@ -1899,7 +1788,6 @@ class IBDataCollector:
             for option_type, contract in contracts.items():
                 if contract:
                     try:
-                        ticker = self.ib.reqMktData(contract)
                         self._active_subscriptions.add(contract)
                         logger.info(f"Subscribed to cached {option_type} option: {contract}")
                     except Exception as e:
@@ -2057,25 +1945,6 @@ class IBDataCollector:
             logger.error(f"Error getting monitoring status: {e}")
             return {}
 
-    def log_dynamic_monitoring_status(self):
-        """Log the current status of dynamic monitoring"""
-        try:
-            status = self.get_dynamic_monitoring_status()
-            logger.info("=== Dynamic Monitoring Status ===")
-            logger.info(f"Monitoring Active: {status.get('monitoring_active', False)}")
-            logger.info(f"Current Strike: {status.get('current_strike', 'N/A')}")
-            logger.info(f"Previous Strike: {status.get('previous_strike', 'N/A')}")
-            logger.info(f"Current Expiration: {status.get('current_expiration', 'N/A')}")
-            logger.info(f"Expiration Type: {status.get('current_expiration_type', 'N/A')}")
-            logger.info(f"Underlying Price: ${status.get('underlying_price', 0):.2f}")
-            logger.info(f"Available Expirations: {len(status.get('available_expirations', []))}")
-            logger.info(f"Cached Contracts: {status.get('cached_contracts_count', 0)}")
-            logger.info(f"Active Subscriptions: {status.get('active_subscriptions_count', 0)}")
-            logger.info(f"Monitor Thread Alive: {status.get('monitor_thread_alive', False)}")
-            logger.info("================================")
-        except Exception as e:
-            logger.error(f"Error logging monitoring status: {e}")
-
 
     async def get_historical_data(self, symbol: str, start_date: datetime, end_date: datetime) -> List[Dict[str, Any]]:
         """Get historical price data for a symbol from IB"""
@@ -2105,7 +1974,7 @@ class IBDataCollector:
                 f"{int((end_date - start_date).days)} D",  # Duration
                 "1 day",  # Bar size
                 "TRADES",  # What to show
-                1,  # Use RTH
+                True,  # Use RTH
                 1,  # Format date
                 False,  # Keep up to date after bar
                 []  # Chart options
