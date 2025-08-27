@@ -22,7 +22,7 @@ class DataCollectorWorker(QObject):
     account_summary_update = pyqtSignal(dict)
     trading_config_updated = pyqtSignal(dict)  # Signal for trading configuration updates
     active_contracts_pnl_refreshed = pyqtSignal(dict)
-    closed_trades_update = pyqtSignal(list)
+    closed_trades_update = pyqtSignal(dict)
 
     def __init__(self, config: AppConfig):
         super().__init__()
@@ -30,7 +30,7 @@ class DataCollectorWorker(QObject):
         self.collector = IBDataCollector(
             host=config.ib_host,
             port=config.ib_port,
-            clientId=config.ib_client_id,
+            client_id=config.ib_client_id,
             trading_config=config.trading,
             account_config = config.account
         )

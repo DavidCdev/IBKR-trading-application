@@ -1164,11 +1164,14 @@ class IBDataCollector:
                         if not self.pos:
                             self.pos = position
                             self.pos_type = getattr(self.pos.contract, 'right', None)
-                            
+
                         # Accumulate results for matching positions using the symbol-specific price
                         logger.info("PNL update in Get active position")
                         pnl_results = self.calculate_pnl_detailed(position, self.option_c_mark, self.option_p_mark)
                         pnl_detailed.extend(pnl_results)
+
+                        if hasattr(self.trading_manager, 'update_active_contract_items'):
+                            self.trading_manager.update_active_contract_items(self.pos)
 
                     except Exception as e:
                         logger.warning(f"Error processing position: {e}")
@@ -1570,7 +1573,7 @@ class IBDataCollector:
             'Average_Loss': sum(losses) / len(losses) if losses else 0,
             'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
         }
-        
+        logger.info(f"Closed trades stats before dataworker:{stats}")
         self.data_worker.closed_trades_update.emit(stats)
         
     async def get_trade_statistics(self) -> pd.DataFrame:
