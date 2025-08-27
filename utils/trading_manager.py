@@ -146,9 +146,28 @@ class TradingManager:
             with self._position_lock:
                 positions_to_remove = []
                 for symbol, pos in self._active_positions.items():
-                    if pos.get('position_size', 0) == 0:
+                    # Handle different position data formats
+                    position_size = 0
+                    
+                    if isinstance(pos, dict):
+                        # Position data from DataFrame (from IB connection)
+                        position_size = pos.get('position_size', 0)
+                    elif hasattr(pos, 'position'):
+                        # Direct IB position object
+                        position_size = getattr(pos, 'position', 0)
+                    elif hasattr(pos, 'qty'):
+                        # Alternative position attribute
+                        position_size = getattr(pos, 'qty', 0)
+                    
+                    # Convert to number and check if 0
+                    try:
+                        position_size = float(position_size) if position_size is not None else 0
+                    except (ValueError, TypeError):
+                        position_size = 0
+                    
+                    if position_size == 0:
                         positions_to_remove.append(symbol)
-                        logger.info(f"Clearing closed position: {symbol}")
+                        logger.info(f"Clearing closed position: {symbol} (size: {position_size})")
                 
                 # Remove closed positions
                 for symbol in positions_to_remove:
@@ -330,6 +349,26 @@ class TradingManager:
             # Final fallback to next day
             tomorrow = datetime.now(self._est_timezone).date() + timedelta(days=1)
             return tomorrow.strftime("%Y%m%d")
+    
+    def update_active_contract_items(self, position):
+        self._active_positions = {}
+        symbol = getattr(position.contract, 'localSymbol', None)
+        if position.position > 0:
+            position_type = 'LONG'
+        else:
+            position_type = 'SHORT'
+        
+        if position.position != 0:
+            self._active_positions[symbol] = {
+                'symbol': symbol,
+                'position_type': position_type,
+                'position_size': abs(position.position),
+                'entry_price': getattr(position, 'avgCost', 0),
+                'contract': position.contract,
+                'entry_time': datetime.now(),
+            }
+
+        logger.info(f"Active Contract Updated with {self._active_positions}")
     
     def update_available_expirations(self, expirations: List[str]):
         """Update available expirations in the trading manager"""
@@ -629,8 +668,8 @@ class TradingManager:
             
             # Check for existing positions (one active position rule)
             # Clear any positions with size 0 (closed positions) first
-            self._clear_closed_positions()
-            
+
+            logger.info(f"_Active Position after clear: {self._active_positions}")
             with self._position_lock:
                 # Now check if there are any active positions with size > 0
                 if self._active_positions:
@@ -705,18 +744,6 @@ class TradingManager:
                 
                 # IMMEDIATELY add to active positions as pending (will be confirmed on fill)
                 symbol = f"{self.underlying_symbol} {option_type}"
-                with self._position_lock:
-                    self._active_positions[symbol] = {
-                        'symbol': symbol,
-                        'position_type': option_type,
-                        'position_size': quantity,
-                        'entry_price': option_price,
-                        'contract': contract,
-                        'entry_time': datetime.now(),
-                        'pnl_percent': 0.0,
-                        'status': 'pending',  # Mark as pending until fill confirmation
-                        'order_id': trade.order.orderId
-                    }
                 
                 logger.info(f"Position immediately tracked as pending: {symbol}, {quantity} contracts")
                 
@@ -746,6 +773,8 @@ class TradingManager:
     async def place_sell_order(self, use_chase_logic: bool = True) -> bool:
         """Place a SELL order for any open position using chase logic if specified"""
         try:
+            logger.info(f"_Active Position after clear: {self._active_positions}")
+
             # Get current positions
             with self._position_lock:
                 if not self._active_positions:
@@ -1253,27 +1282,27 @@ class TradingManager:
         try:
             with self._position_lock:
                 symbol = position_data.get('symbol')
-                if symbol:
-                    self._active_positions[symbol] = position_data
-                    logger.info(f"Position updated: {symbol}")
-                else:
+                if not symbol:
                     logger.warning("Position data missing symbol")
+                    return
+                
+                # Check if position quantity is 0 (closed position)
+                position_size = position_data.get('position_size', 0)
+                if position_size == 0:
+                    # Remove closed position from active positions
+                    if symbol in self._active_positions:
+                        del self._active_positions[symbol]
+                        logger.info(f"Closed position removed: {symbol}")
+                    return
+                
         except Exception as e:
             logger.error(f"Error updating position: {e}")
-    
-    def clear_position(self, symbol: str):
-        """Clear a position"""
-        try:
-            with self._position_lock:
-                if symbol in self._active_positions:
-                    del self._active_positions[symbol]
-                    logger.info(f"Position cleared: {symbol}")
-        except Exception as e:
-            logger.error(f"Error clearing position: {e}")
     
     def get_active_positions(self) -> Dict[str, Any]:
         """Get current active positions"""
         with self._position_lock:
+            # Clear any closed positions before returning
+            self._clear_closed_positions()
             return self._active_positions.copy()
     
     def get_open_orders(self) -> Dict[str, Any]:
@@ -1285,59 +1314,6 @@ class TradingManager:
         """Get current bracket orders"""
         with self._bracket_lock:
             return self._bracket_orders.copy()
-    
-    def validate_risk_constraints(self, option_price: float, quantity: int) -> Dict[str, Any]:
-        """Validate that an order respects all risk management constraints"""
-        try:
-            # Calculate all risk limits
-            gui_limit = self.max_trade_value
-            tiered_limit = self._calculate_tiered_risk_limit()
-            pdt_limit = self._calculate_pdt_buffer()
-            
-            # Calculate actual trade value (options have multiplier of 100)
-            cost_per_contract = option_price * 100
-            actual_trade_value = quantity * cost_per_contract
-            
-            # Determine the limiting factor
-            limiting_factor = min(gui_limit, tiered_limit, pdt_limit)
-            
-            # Check if trade value exceeds any limit
-            exceeds_limit = actual_trade_value > limiting_factor
-            
-            validation_result = {
-                'valid': not exceeds_limit,
-                'actual_trade_value': actual_trade_value,
-                'cost_per_contract': cost_per_contract,
-                'limits': {
-                    'gui_max_trade_value': gui_limit,
-                    'tiered_risk_limit': tiered_limit,
-                    'pdt_buffer_limit': pdt_limit,
-                    'limiting_factor': limiting_factor
-                },
-                'exceeds_limit': exceeds_limit,
-                'excess_amount': max(0, actual_trade_value - limiting_factor) if exceeds_limit else 0,
-                'risk_margin': max(0, limiting_factor - actual_trade_value) if not exceeds_limit else 0
-            }
-            
-            if exceeds_limit:
-                logger.warning(f"Risk constraint validation failed: ${actual_trade_value:.2f} > ${limiting_factor:.2f}")
-            else:
-                logger.info(f"Risk constraint validation passed: ${actual_trade_value:.2f} <= ${limiting_factor:.2f}")
-            
-            return validation_result
-            
-        except Exception as e:
-            logger.error(f"Error validating risk constraints: {e}")
-            return {
-                'valid': False,
-                'error': str(e),
-                'actual_trade_value': 0,
-                'cost_per_contract': 0,
-                'limits': {},
-                'exceeds_limit': True,
-                'excess_amount': float('inf'),
-                'risk_margin': 0
-            }
     
     def get_risk_management_status(self) -> Dict[str, Any]:
         """Get current risk management status"""
@@ -1427,6 +1403,9 @@ class TradingManager:
                         # Clear any chase tracking for this order if present
                         if order_id in self._chase_orders:
                             self._chase_orders.pop(order_id, None)
+                        
+                        # Clear the closed position from active positions
+                        self._clear_closed_positions()
             
         except Exception as e:
             logger.error(f"Error handling order fill: {e}")
@@ -1559,187 +1538,8 @@ class TradingManager:
             
         except Exception as e:
             logger.error(f"Error adjusting bracket order quantity: {e}")
-    
-    def handle_runner_logic(self, position_symbol: str, sell_quantity: int):
-        """Handle runner logic when selling profitable positions"""
-        try:
-            with self._position_lock:
-                if position_symbol not in self._active_positions:
-                    return
-                
-                position = self._active_positions[position_symbol]
-                current_quantity = position.get('position_size', 0)
-                
-                if current_quantity <= 0:
-                    return
-                
-                # Calculate runner quantity
-                runner_quantity = min(self.runner, current_quantity)
-                sell_quantity = min(sell_quantity, current_quantity - runner_quantity)
-                
-                if sell_quantity > 0:
-                    logger.info(f"Runner logic: Selling {sell_quantity} of {current_quantity} contracts, keeping {runner_quantity} as runner")
-                    
-                    # Update position size
-                    position['position_size'] = current_quantity - sell_quantity
-                    
-                    # Adjust bracket orders for remaining quantity
-                    asyncio.run(self._adjust_bracket_order_quantity_for_position(position_symbol, position['position_size']))
-                    
-                    return sell_quantity
-                else:
-                    logger.info("Runner logic: No contracts to sell, keeping all as runner")
-                    return 0
-            
-        except Exception as e:
-            logger.error(f"Error handling runner logic: {e}")
-            return 0
-    
-    async def _adjust_bracket_order_quantity_for_position(self, position_symbol: str, new_quantity: int):
-        """Adjust bracket orders for a specific position"""
-        try:
-            # Find the parent order for this position
-            with self._order_lock:
-                parent_order_id = None
-                for order_id, order_data in self._open_orders.items():
-                    if order_data['type'] == 'BUY' and order_data['option_type'] in position_symbol:
-                        parent_order_id = order_id
-                        break
-            
-            if parent_order_id:
-                await self._adjust_bracket_order_quantity(parent_order_id, new_quantity)
-            
-        except Exception as e:
-            logger.error(f"Error adjusting bracket orders for position: {e}")
-    
-    def can_place_new_order(self, option_price: float, quantity: int) -> Dict[str, Any]:
-        """Check if placing a new order would exceed current risk limits"""
-        try:
-            # Clear any positions with size 0 (closed positions) first
-            self._clear_closed_positions()
-            
-            # Calculate the new order's trade value
-            # CRITICAL FIX: Options have a multiplier of 100, so cost per contract = option_price * 100
-            cost_per_contract = option_price * 100
-            new_order_value = quantity * cost_per_contract
-            
-            # Get current risk limits
-            gui_limit = self.max_trade_value
-            tiered_limit = self._calculate_tiered_risk_limit()
-            pdt_limit = self._calculate_pdt_buffer()
-            limiting_factor = min(gui_limit, tiered_limit, pdt_limit)
-            
-            # Calculate current total exposure (only active positions)
-            current_exposure = 0
-            with self._position_lock:
-                for pos in self._active_positions.values():
-                    if pos.get('status') == 'active':  # Only count filled positions
-                        position_value = pos.get('position_size', 0) * pos.get('entry_price', 0)
-                        current_exposure += position_value
-            
-            # Calculate total exposure after new order
-            total_exposure_after_order = current_exposure + new_order_value
-            
-            # Check if this would exceed any limit
-            exceeds_limit = total_exposure_after_order > limiting_factor
-            
-            result = {
-                'can_place': not exceeds_limit,
-                'current_exposure': current_exposure,
-                'new_order_value': new_order_value,
-                'total_exposure_after_order': total_exposure_after_order,
-                'risk_limits': {
-                    'gui_max_trade_value': gui_limit,
-                    'tiered_risk_limit': tiered_limit,
-                    'pdt_buffer_limit': pdt_limit,
-                    'limiting_factor': limiting_factor
-                },
-                'exceeds_limit': exceeds_limit,
-                'excess_amount': max(0, total_exposure_after_order - limiting_factor) if exceeds_limit else 0,
-                'available_capacity': max(0, limiting_factor - current_exposure)
-            }
-            
-            if exceeds_limit:
-                logger.warning(f"New order would exceed risk limits: ${total_exposure_after_order:.2f} > ${limiting_factor:.2f}")
-            else:
-                logger.info(f"New order within risk limits: ${total_exposure_after_order:.2f} <= ${limiting_factor:.2f}")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error checking if can place new order: {e}")
-            return {
-                'can_place': False,
-                'error': str(e),
-                'current_exposure': 0,
-                'new_order_value': 0,
-                'total_exposure_after_order': 0,
-                'risk_limits': {},
-                'exceeds_limit': True,
-                'excess_amount': float('inf'),
-                'available_capacity': 0
-            }
-    
-    def get_current_risk_exposure(self) -> Dict[str, Any]:
-        """Get detailed current risk exposure information"""
-        try:
-            # Clear any positions with size 0 (closed positions) first
-            self._clear_closed_positions()
-            
-            # Calculate current total exposure
-            total_exposure = 0
-            position_details = []
-            
-            with self._position_lock:
-                for symbol, pos in self._active_positions.items():
-                    if pos.get('status') == 'active':  # Only count filled positions
-                        # CRITICAL FIX: Options have a multiplier of 100, so cost per contract = entry_price * 100
-                        cost_per_contract = pos.get('entry_price', 0) * 100
-                        position_value = pos.get('position_size', 0) * cost_per_contract
-                        total_exposure += position_value
-                        position_details.append({
-                            'symbol': symbol,
-                            'type': pos.get('position_type', 'UNKNOWN'),
-                            'size': pos.get('position_size', 0),
-                            'entry_price': pos.get('entry_price', 0),
-                            'cost_per_contract': cost_per_contract,
-                            'value': position_value,
-                            'entry_time': pos.get('entry_time'),
-                            'status': pos.get('status', 'unknown')
-                        })
-            
-            # Get risk limits
-            gui_limit = self.max_trade_value
-            tiered_limit = self._calculate_tiered_risk_limit()
-            pdt_limit = self._calculate_pdt_buffer()
-            limiting_factor = min(gui_limit, tiered_limit, pdt_limit)
-            
-            # Calculate risk metrics
-            risk_utilization = (total_exposure / limiting_factor * 100) if limiting_factor > 0 else 0
-            available_capacity = max(0, limiting_factor - total_exposure)
-            
-            return {
-                'total_exposure': total_exposure,
-                'risk_limits': {
-                    'gui_max_trade_value': gui_limit,
-                    'tiered_risk_limit': tiered_limit,
-                    'pdt_buffer_limit': pdt_limit,
-                    'limiting_factor': limiting_factor
-                },
-                'risk_metrics': {
-                    'utilization_percent': risk_utilization,
-                    'available_capacity': available_capacity,
-                    'exposure_ratio': total_exposure / limiting_factor if limiting_factor > 0 else 0
-                },
-                'positions': position_details,
-                'account_value': self._account_value,
-                'daily_pnl_percent': self._daily_pnl_percent
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting current risk exposure: {e}")
-            return {'error': str(e)}
-    
+
+
     def calculate_max_affordable_quantity(self, option_price: float) -> Dict[str, Any]:
         """
         Calculate the maximum number of contracts that can be purchased at the given price
@@ -1849,82 +1649,6 @@ class TradingManager:
             logger.error(f"Error generating user friendly message: {e}")
             return "Unable to calculate trading capacity."
     
-    def get_trading_capacity_summary(self) -> Dict[str, Any]:
-        """
-        Get a comprehensive summary of current trading capacity and constraints.
-        Useful for GUI display and user information.
-        """
-        try:
-            # Get current option prices
-            call_price = self._current_call_option.get("Ask", 0) if self._current_call_option else 0
-            put_price = self._current_put_option.get("Ask", 0) if self._current_put_option else 0
-            
-            # Calculate capacity for each option type
-            call_capacity = self.calculate_max_affordable_quantity(call_price) if call_price > 0 else None
-            put_capacity = self.calculate_max_affordable_quantity(put_price) if put_price > 0 else None
-            
-            # Get current risk exposure
-            current_exposure = self.get_current_risk_exposure()
-            
-            # Get account information
-            account_info = {
-                'account_value': self._account_value,
-                'daily_pnl_percent': self._daily_pnl_percent,
-                'currency': (self.account_config or {}).get('currency', 'USD')
-            }
-            
-            return {
-                'call_option_capacity': call_capacity,
-                'put_option_capacity': put_capacity,
-                'current_exposure': current_exposure,
-                'account_info': account_info,
-                'timestamp': datetime.now().isoformat(),
-                'summary_message': self._generate_capacity_summary_message(call_capacity, put_capacity)
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting trading capacity summary: {e}")
-            return {'error': str(e)}
-    
-    def _generate_capacity_summary_message(self, call_capacity: Dict[str, Any], 
-                                         put_capacity: Dict[str, Any]) -> str:
-        """Generate a summary message about overall trading capacity"""
-        try:
-            if not call_capacity and not put_capacity:
-                return "No option data available for capacity calculation."
-            
-            messages = []
-            
-            if call_capacity and call_capacity.get('can_afford'):
-                call_qty = call_capacity['max_quantity']
-                call_price = call_capacity['option_price']
-                messages.append(f"Call: {call_qty} contracts at ${call_price:.2f}")
-            
-            if put_capacity and put_capacity.get('can_afford'):
-                put_qty = put_capacity['max_quantity']
-                put_price = put_capacity['option_price']
-                messages.append(f"Put: {put_qty} contracts at ${put_price:.2f}")
-            
-            if not messages:
-                return "Cannot afford any contracts at current prices."
-            
-            return " | ".join(messages)
-            
-        except Exception as e:
-            logger.error(f"Error generating capacity summary message: {e}")
-            return "Unable to generate capacity summary."
-    
-    def cleanup(self):
-        """Cleanup resources"""
-        try:
-            self._stop_chase.set()
-            if self._chase_thread and self._chase_thread.is_alive():
-                self._chase_thread.join(timeout=5)
-            
-            logger.info("Trading Manager cleanup completed")
-        except Exception as e:
-            logger.error(f"Error during trading manager cleanup: {e}")
-
     def get_last_action_message(self) -> str:
         """Return the last user-facing action message for UI notifications"""
         try:
@@ -1980,218 +1704,3 @@ class TradingManager:
             logger.error(f"Error in trading manager get_expiration_status: {e}")
             return {'error': str(e)}
     
-    def validate_order_before_placement(self, option_type: str, quantity: int = None, 
-                                      option_price: float = None) -> Dict[str, Any]:
-        """
-        Validate order parameters before placement to provide user feedback.
-        This method helps users understand what they can and cannot do before submitting orders.
-        """
-        try:
-            # Get current option data if not provided
-            if not option_price:
-                option_data = self._current_call_option if option_type.upper() == "CALL" else self._current_put_option
-                if not option_data:
-                    return {
-                        'valid': False,
-                        'error': f"No {option_type} option data available",
-                        'can_proceed': False,
-                        'suggestions': ['Wait for market data to load', 'Check option subscription']
-                    }
-                option_price = option_data.get("Ask", 0)
-            
-            if option_price <= 0:
-                return {
-                    'valid': False,
-                    'error': f"Invalid {option_type} option price: ${option_price:.2f}",
-                    'can_proceed': False,
-                    'suggestions': ['Wait for valid market data', 'Check option pricing']
-                }
-            
-            # Check for existing positions (one active position rule)
-            # Clear any positions with size 0 (closed positions) first
-            self._clear_closed_positions()
-            
-            with self._position_lock:
-                # Now check if there are any active positions with size > 0
-                if self._active_positions:
-                    return {
-                        'valid': False,
-                        'error': 'One active position rule: Cannot place new order while position exists',
-                        'can_proceed': False,
-                        'suggestions': ['Close or sell the current position first'],
-                        'existing_positions': list(self._active_positions.keys())
-                    }
-            
-            # Calculate maximum affordable quantity
-            capacity_info = self.calculate_max_affordable_quantity(option_price)
-            
-            if not capacity_info.get('can_afford'):
-                return {
-                    'valid': False,
-                    'error': capacity_info.get('error', 'Cannot afford any contracts'),
-                    'can_proceed': False,
-                    'suggestions': [
-                        'Reduce max trade value in settings',
-                        'Wait for better pricing',
-                        'Check account value and PDT requirements'
-                    ],
-                    'capacity_info': capacity_info
-                }
-            
-            # If quantity is specified, validate it
-            if quantity is not None:
-                if quantity <= 0:
-                    return {
-                        'valid': False,
-                        'error': f'Invalid quantity: {quantity}',
-                        'can_proceed': False,
-                        'suggestions': ['Quantity must be greater than 0']
-                    }
-                
-                # Check if specified quantity exceeds capacity
-                if quantity > capacity_info['max_quantity']:
-                    return {
-                        'valid': False,
-                        'error': f'Quantity {quantity} exceeds maximum capacity {capacity_info["max_quantity"]}',
-                        'can_proceed': False,
-                        'suggestions': [
-                            f'Reduce quantity to {capacity_info["max_quantity"]} or less',
-                            'Wait for better pricing to increase capacity'
-                        ],
-                        'capacity_info': capacity_info,
-                        'requested_quantity': quantity
-                    }
-                
-                # Validate the specific quantity
-                actual_trade_value = quantity * option_price
-                validation_result = self.validate_risk_constraints(option_price, quantity)
-                
-                if not validation_result.get('valid'):
-                    return {
-                        'valid': False,
-                        'error': f'Risk validation failed: ${actual_trade_value:.2f} exceeds limits',
-                        'can_proceed': False,
-                        'suggestions': [
-                            'Reduce quantity to stay within risk limits',
-                            'Check current risk exposure'
-                        ],
-                        'validation_result': validation_result,
-                        'requested_quantity': quantity
-                    }
-                
-                # All validations passed for specific quantity
-                return {
-                    'valid': True,
-                    'can_proceed': True,
-                    'message': f'Order validation passed: {quantity} contracts at ${option_price:.2f}',
-                    'trade_value': actual_trade_value,
-                    'capacity_info': capacity_info,
-                    'requested_quantity': quantity
-                }
-            
-            # No specific quantity - provide capacity information
-            return {
-                'valid': True,
-                'can_proceed': True,
-                'message': f'Order validation passed: Can place up to {capacity_info["max_quantity"]} contracts',
-                'capacity_info': capacity_info,
-                'suggestions': [
-                    f'Maximum quantity: {capacity_info["max_quantity"]} contracts',
-                    f'Total cost: ${capacity_info["actual_trade_value"]:.2f}',
-                    f'Limited by: {capacity_info["limiting_constraint"]}'
-                ]
-            }
-            
-        except Exception as e:
-            logger.error(f"Error validating order before placement: {e}")
-            return {
-                'valid': False,
-                'error': f'Validation error: {str(e)}',
-                'can_proceed': False,
-                'suggestions': ['Contact support if this error persists']
-            }
-    
-    def get_order_placement_summary(self, option_type: str) -> Dict[str, Any]:
-        """
-        Get a comprehensive summary for order placement, including capacity, validation, and user guidance.
-        This is the main method for GUI display before order placement.
-        """
-        try:
-            # Get option data
-            option_data = self._current_call_option if option_type.upper() == "CALL" else self._current_put_option
-            if not option_data:
-                return {
-                    'can_place_order': False,
-                    'error': f'No {option_type} option data available',
-                    'summary': 'Wait for market data to load',
-                    'action_required': 'none'
-                }
-            
-            option_price = option_data.get("Ask", 0)
-            if option_price <= 0:
-                return {
-                    'can_place_order': False,
-                    'error': f'Invalid {option_type} option price: ${option_price:.2f}',
-                    'summary': 'Wait for valid pricing data',
-                    'action_required': 'none'
-                }
-            
-            # Get capacity information
-            capacity_info = self.calculate_max_affordable_quantity(option_price)
-            
-            # Check position rule
-            # Clear any positions with size 0 (closed positions) first
-            self._clear_closed_positions()
-            
-            with self._position_lock:
-                has_existing_position = len(self._active_positions) > 0
-            
-            if has_existing_position:
-                return {
-                    'can_place_order': False,
-                    'error': 'One active position rule: Cannot place new order while position exists',
-                    'summary': 'Close or sell the current position first',
-                    'action_required': 'close_existing_position',
-                    'existing_positions': list(self._active_positions.keys()),
-                    'capacity_info': capacity_info
-                }
-            
-            if not capacity_info.get('can_afford'):
-                return {
-                    'can_place_order': False,
-                    'error': capacity_info.get('error', 'Cannot afford any contracts'),
-                    'summary': capacity_info.get('user_friendly_message', 'Insufficient capacity'),
-                    'action_required': 'increase_capacity',
-                    'capacity_info': capacity_info,
-                    'suggestions': [
-                        'Reduce max trade value in settings',
-                        'Wait for better pricing',
-                        'Check account value and PDT requirements'
-                    ]
-                }
-            
-            # Can place order
-            return {
-                'can_place_order': True,
-                'summary': capacity_info.get('user_friendly_message', 'Ready to place order'),
-                'action_required': 'ready',
-                'capacity_info': capacity_info,
-                'option_info': {
-                    'type': option_type,
-                    'price': option_price,
-                    'strike': option_data.get('Strike', 'N/A'),
-                    'expiration': option_data.get('Expiration', 'N/A')
-                },
-                'max_quantity': capacity_info['max_quantity'],
-                'total_cost': capacity_info['actual_trade_value'],
-                'limiting_factor': capacity_info['limiting_constraint']
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting order placement summary: {e}")
-            return {
-                'can_place_order': False,
-                'error': f'Error: {str(e)}',
-                'summary': 'Unable to determine order placement status',
-                'action_required': 'error'
-            }

@@ -95,6 +95,9 @@ class IBDataCollector:
             self._current_expiration = None
             self._cached_option_contracts = {}
             self._available_expirations = []
+            # Reset closed trades when switching symbols
+            logger.info("Resetting closed_trades for new symbol")
+            self.closed_trades = []
 
             # Notify trading manager to clear its expirations cache
             try:
@@ -1246,6 +1249,8 @@ class IBDataCollector:
                     else:
                         logger.debug("PnL results unchanged, skipping emit")
 
+                if hasattr(self.trading_manager, 'update_active_contract_items'):
+                    self.trading_manager.update_active_contract_items(self.pos)
 
             except Exception as e:
                 logger.warning(f"Error processing position: {e}")
@@ -1558,6 +1563,9 @@ class IBDataCollector:
         multiplier_default = 100
         today = date.today()
         
+        # Initialize closed_trades as a list if it's None
+        self._ensure_closed_trades_initialized()
+        
         contract = trade.contract
         exec = fill.execution
 
@@ -1604,7 +1612,7 @@ class IBDataCollector:
                 match_qty = min(opener['qty'], remain_to_match)
                 pnl = (price - opener['price']) * match_qty * multiplier
 
-                self.closed_trades.append({
+                trade_data = {
                     'contract': contract,
                     'qty': match_qty,
                     'buy_price': opener['price'],
@@ -1612,7 +1620,9 @@ class IBDataCollector:
                     'pnl': pnl,
                     'buy_time': opener['time'],
                     'sell_time': time_filled
-                })
+                }
+                self.closed_trades.append(trade_data)
+                logger.debug(f"Added closed trade: {trade_data}")
 
                 logger.info(f"Closed Trade: {match_qty}x {symbol_key} P&L = {pnl:.2f}")
 
@@ -1627,20 +1637,34 @@ class IBDataCollector:
         wins = []
         losses = []
 
-        for trade in self.closed_trades:
-            try:
-                pnl = trade['pnl']
+        # Ensure closed_trades is a list before iterating
+        self._ensure_closed_trades_initialized()
+        
+        try:
+            for trade in self.closed_trades:
+                try:
+                    if not isinstance(trade, dict):
+                        logger.warning(f"Trade is not a dict: {type(trade)}, skipping")
+                        continue
+                        
+                    pnl = trade.get('pnl')
+                    if pnl is None:
+                        logger.warning(f"Trade missing 'pnl' key: {trade}")
+                        continue
 
-                if pnl > 0:
-                    wins.append(pnl)
-                elif pnl < 0:
-                    losses.append(abs(pnl))
+                    if pnl > 0:
+                        wins.append(pnl)
+                    elif pnl < 0:
+                        losses.append(abs(pnl))
 
-            except Exception as e:
-                logger.warning(f"Error calculating P&L for trade: {e}")
-                continue
+                except Exception as e:
+                    logger.warning(f"Error calculating P&L for trade: {e}")
+                    continue
+        except Exception as e:
+            logger.error(f"Error iterating over closed_trades: {e}")
+            return self._create_empty_stats()
 
-            # Calculate statistics
+        # Calculate statistics
         total_trades = len(wins) + len(losses)
         if total_trades == 0:
             return self._create_empty_stats()
@@ -1668,23 +1692,38 @@ class IBDataCollector:
             # Get completed orders
             all_trades = await self.get_today_option_executions(self.underlying_symbol)
             self.closed_trades = await self.match_trades_and_calculate_pnl(all_trades)
+            logger.info(f"Retrieved {len(self.closed_trades) if isinstance(self.closed_trades, list) else 'unknown'} closed trades")
         
             # Calculate statistics
             wins = []
             losses = []
             
-            for trade in self.closed_trades:
-                try:
-                    pnl = trade['pnl']
-                    
-                    if pnl > 0:
-                        wins.append(pnl)
-                    elif pnl < 0:
-                        losses.append(abs(pnl))
+            # Ensure closed_trades is a list before iterating
+            self._ensure_closed_trades_initialized()
+            
+            try:
+                for trade in self.closed_trades:
+                    try:
+                        if not isinstance(trade, dict):
+                            logger.warning(f"Trade is not a dict: {type(trade)}, skipping")
+                            continue
+                            
+                        pnl = trade.get('pnl')
+                        if pnl is None:
+                            logger.warning(f"Trade missing 'pnl' key: {trade}")
+                            continue
                         
-                except Exception as e:
-                    logger.warning(f"Error calculating P&L for trade: {e}")
-                    continue
+                        if pnl > 0:
+                            wins.append(pnl)
+                        elif pnl < 0:
+                            losses.append(abs(pnl))
+                            
+                    except Exception as e:
+                        logger.warning(f"Error calculating P&L for trade: {e}")
+                        continue
+            except Exception as e:
+                logger.error(f"Error iterating over closed_trades: {e}")
+                return self._create_empty_stats()
             
             # Calculate statistics
             total_trades = len(wins) + len(losses)
@@ -2198,6 +2237,17 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting best available expiration: {e}")
             return None
+
+    def _ensure_closed_trades_initialized(self):
+        """Ensure closed_trades is initialized as a list"""
+        if self.closed_trades is None:
+            self.closed_trades = []
+            logger.debug("Initialized closed_trades as empty list")
+        elif not isinstance(self.closed_trades, list):
+            logger.warning(f"closed_trades is not a list: {type(self.closed_trades)}, reinitializing")
+            self.closed_trades = []
+        else:
+            logger.debug(f"closed_trades is already a list with {len(self.closed_trades)} items")
 
     def _notify_trading_manager_expirations(self, expirations: List[str]):
         """Notify trading manager about available expirations"""

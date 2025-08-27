@@ -377,8 +377,17 @@ QGroupBox::title {
          <string>Option Information</string>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_option_info">
+         <property name="spacing">
+          <number>0</number>
+         </property>
          <item>
           <layout class="QHBoxLayout" name="horizontalLayout_strike_exp">
+           <property name="leftMargin">
+            <number>10</number>
+           </property>
+           <property name="rightMargin">
+            <number>10</number>
+           </property>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_strike">
              <item>
@@ -441,6 +450,12 @@ QGroupBox::title {
           <layout class="QHBoxLayout" name="horizontalLayout_puts_calls">
            <item>
             <layout class="QVBoxLayout" name="verticalLayout_puts">
+             <property name="spacing">
+              <number>2</number>
+             </property>
+             <property name="leftMargin">
+              <number>10</number>
+             </property>
              <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_puts_title">
                <property name="font">
@@ -617,6 +632,12 @@ QGroupBox::title {
            </item>
            <item>
             <layout class="QVBoxLayout" name="verticalLayout_calls">
+             <property name="spacing">
+              <number>2</number>
+             </property>
+             <property name="leftMargin">
+              <number>10</number>
+             </property>
              <item alignment="Qt::AlignmentFlag::AlignHCenter">
               <widget class="QLabel" name="label_calls_title">
                <property name="font">
