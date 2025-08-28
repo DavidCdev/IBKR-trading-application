@@ -10,7 +10,8 @@ from utils.config_manager import AppConfig
 from utils.logger import get_logger
 from utils.performance_monitor import monitor_function
 
-logger = get_logger("AI_ENGINE")
+# Set logger to a smarter level: INFO for normal ops, DEBUG for details, WARNING/ERROR for issues
+logger = get_logger("AI_ENGINE")  # Assume get_logger supports a 'level' argument for smart logging
 
 @dataclass
 class PricePoint:
@@ -78,7 +79,7 @@ class AI_Engine(QObject):
         """Initialize Gemini API client"""
         try:
             api_key = self.config.ai_prompt.get("gemini_api_key", "")
-            logger.info(f"Setting up Gemini API with key: {api_key[:10]}..." if api_key else "No API key found")
+            logger.debug(f"Setting up Gemini API with key: {api_key[:10]}..." if api_key else "No API key found")
             
             if not api_key:
                 logger.warning("No Gemini API key configured. AI analysis will be disabled.")
@@ -163,7 +164,7 @@ class AI_Engine(QObject):
             start_date = end_date - timedelta(days=days)
             
             # Get historical data from IB
-            logger.info(f"Collecting {days} days of historical data for {symbol}")
+            logger.debug(f"Collecting {days} days of historical data for {symbol}")
             
             try:
                 # Get historical data from IB
@@ -336,7 +337,7 @@ Please provide your analysis in the specified JSON format.
         # Check if prompt has changed
         prompt_hash = hash(user_prompt)
         if prompt_hash != self.last_prompt_hash:
-            logger.info("User prompt changed - bypassing cache")
+            logger.debug("User prompt changed - bypassing cache")
             return True
         
         # Check if price is outside valid range
@@ -345,7 +346,7 @@ Please provide your analysis in the specified JSON format.
             high = self.last_analysis.valid_price_range.get('high', float('inf'))
             
             if current_price < low or current_price > high:
-                logger.info(f"Price ${current_price:.2f} outside valid range [${low:.2f}, ${high:.2f}] - bypassing cache")
+                logger.debug(f"Price ${current_price:.2f} outside valid range [${low:.2f}, ${high:.2f}] - bypassing cache")
                 return True
         
         # Check cache duration
@@ -353,7 +354,7 @@ Please provide your analysis in the specified JSON format.
         if self.last_poll_time:
             time_since_last = datetime.now() - self.last_poll_time
             if time_since_last.total_seconds() > (cache_duration * 60):
-                logger.info(f"Cache expired ({cache_duration} minutes) - bypassing cache")
+                logger.debug(f"Cache expired ({cache_duration} minutes) - bypassing cache")
                 return True
         
         logger.info("Using cached analysis")
@@ -382,12 +383,12 @@ Please provide your analysis in the specified JSON format.
             # Parse JSON response
             try:
                 result = json.loads(cleaned_text)
-                logger.info("Successfully parsed Gemini API response")
+                logger.debug("Successfully parsed Gemini API response")
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON response: {e}")
-                logger.error(f"Raw response: {response.text}")
-                logger.error(f"Cleaned text: {cleaned_text}")
+                logger.debug(f"Raw response: {response.text}")
+                logger.debug(f"Cleaned text: {cleaned_text}")
                 raise Exception(f"Invalid JSON response from Gemini API: {e}")
                 
         except Exception as e:
@@ -416,10 +417,12 @@ Please provide your analysis in the specified JSON format.
         try:
             # Validate required fields
             if 'valid_price_range' not in response:
+                logger.error("Missing 'valid_price_range' in AI response")
                 raise ValueError("Missing 'valid_price_range' in AI response")
             
             price_range = response['valid_price_range']
             if 'low' not in price_range or 'high' not in price_range:
+                logger.error("Invalid 'valid_price_range' format")
                 raise ValueError("Invalid 'valid_price_range' format")
             
             # Create analysis result
@@ -463,10 +466,12 @@ Please provide your analysis in the specified JSON format.
             # Get current data
             current_price = self._get_current_price()
             if current_price <= 0:
+                logger.error("No valid current price available")
                 raise Exception("No valid current price available")
             
             user_prompt = self.config.ai_prompt.get("prompt", "")
             if not user_prompt.strip():
+                logger.error("No user prompt configured")
                 raise Exception("No user prompt configured")
             
             # Check cache
@@ -495,7 +500,7 @@ Please provide your analysis in the specified JSON format.
             
             # Make API call
             logger.info("Initiating AI analysis...")
-            logger.info(f"Final prompt: {final_prompt}")
+            logger.debug(f"Final prompt: {final_prompt}")
             response = await self._call_gemini_api(final_prompt)
             
             # Parse response
@@ -508,7 +513,7 @@ Please provide your analysis in the specified JSON format.
             
             # Emit result
             result_dict = self._analysis_result_to_dict(analysis_result)
-            logger.info(f"Result dict: {result_dict}")
+            logger.debug(f"Result dict: {result_dict}")
             self.analysis_ready.emit(result_dict)
             
             logger.info("AI analysis completed successfully")
@@ -604,4 +609,3 @@ Please provide your analysis in the specified JSON format.
             logger.info("AI engine refreshed successfully")
         else:
             logger.warning("AI engine refresh completed but API is not available")
-    

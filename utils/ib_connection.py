@@ -72,7 +72,7 @@ class IBDataCollector:
                     self.ib.cancelMktData(contract)
                     contracts_to_remove.add(contract)
                 except Exception as e:
-                    logger.warning(f"Error canceling market data for {contract}: {e}")
+                    logger.error(f"Error canceling market data for {contract}: {e}")
             if contracts_to_remove:
                 self._active_subscriptions.difference_update(contracts_to_remove)
                 logger.info(f"Cancelled {len(contracts_to_remove)} market data subscriptions")
@@ -110,7 +110,7 @@ class IBDataCollector:
                     if hasattr(self.trading_manager, 'update_trading_config'):
                         self.trading_manager.update_trading_config({'underlying_symbol': symbol})
             except Exception as tm_err:
-                logger.debug(f"Could not notify trading manager about expiration reset: {tm_err}")
+                logger.info(f"Could not notify trading manager about expiration reset: {tm_err}")
 
             # Obtain new price stream and resubscribe to options for the new symbol
             await self.get_underlying_symbol_price(symbol)
@@ -135,7 +135,7 @@ class IBDataCollector:
             # Ensure we have a valid strike (whole number)
             valid_strike = int(rounded_strike)
             
-            # logger.info(f"Strike calculation: Price=${price:.2f} -> Rounded=${rounded_strike} -> Valid Strike={valid_strike}")
+            # logger.debug(f"Strike calculation: Price=${price:.2f} -> Rounded=${rounded_strike} -> Valid Strike={valid_strike}")
             
             return valid_strike
             
@@ -154,7 +154,7 @@ class IBDataCollector:
         try:
             # Basic validation
             if not isinstance(strike, (int, float)) or strike <= 0:
-                logger.warning(f"Invalid strike price: {strike}")
+                logger.error(f"Invalid strike price: {strike}")
                 return False
             
             # For now, assume strikes in $1 increments are valid
@@ -175,7 +175,7 @@ class IBDataCollector:
             est_now = datetime.now(self._est_timezone)
             return est_now.hour == 12 and est_now.minute == 0 and est_now.second == 0
         except Exception as e:
-            logger.warning(f"Error checking expiration switch time: {e}")
+            logger.error(f"Error checking expiration switch time: {e}")
             return False
 
     def _should_switch_expiration_smart(self) -> bool:
@@ -200,7 +200,7 @@ class IBDataCollector:
                     current_exp_str = self._current_expiration
                 current_exp_date = datetime.strptime(current_exp_str, "%Y%m%d").date()
             except Exception as e:
-                logger.warning(f"Could not parse current expiration {self._current_expiration}: {e}")
+                logger.error(f"Could not parse current expiration {self._current_expiration}: {e}")
                 return self._should_switch_to_next_expiration()
             
             # Check if current expiration is today and it's after 12:00 PM
@@ -211,7 +211,7 @@ class IBDataCollector:
             
             # Check if current expiration is in the past
             if current_exp_date < current_date:
-                logger.warning(f"Current expiration {self._current_expiration} is in the past - switching required")
+                logger.error(f"Current expiration {self._current_expiration} is in the past - switching required")
                 return True
             
             # Check if there's a better expiration available
@@ -266,7 +266,7 @@ class IBDataCollector:
                         return True
                         
                 except Exception as e:
-                    logger.warning(f"Could not parse expiration {exp_str}: {e}")
+                    logger.error(f"Could not parse expiration {exp_str}: {e}")
                     continue
             
             return False
@@ -307,7 +307,7 @@ class IBDataCollector:
                 return f"{days_to_expiry}DTE"
                 
         except Exception as e:
-            logger.warning(f"Error determining expiration type: {e}")
+            logger.error(f"Error determining expiration type: {e}")
             return "Unknown"
 
     def _register_ib_callbacks(self):
@@ -323,8 +323,8 @@ class IBDataCollector:
         logger.info("Account event handlers registered successfully")
         
         # Test if the event handlers are properly attached
-        logger.info(f"Account summary event handler count: {len(self.ib.accountSummaryEvent)}")
-        logger.info(f"P&L event handler count: {len(self.ib.pnlEvent)}")
+        logger.debug(f"Account summary event handler count: {len(self.ib.accountSummaryEvent)}")
+        logger.debug(f"P&L event handler count: {len(self.ib.pnlEvent)}")
 
         logger.debug("IB event callbacks registered")
 
@@ -345,7 +345,7 @@ class IBDataCollector:
                 'client_id': self.clientId,
                 'timestamp': datetime.now().isoformat()
             }
-            logger.info(f"Connection data: {connection_data}")
+            logger.debug(f"Connection data: {connection_data}")
             
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_success'):
                 self.data_worker.connection_success.emit({
@@ -372,7 +372,7 @@ class IBDataCollector:
             # Subscribe to P&L updates
             try:
                 pnl = self.ib.reqPnL(account)
-                logger.info(f"P&L subscription set up: {pnl}")
+                logger.debug(f"P&L subscription set up: {pnl}")
             except Exception as e:
                 logger.warning(f"Could not set up P&L subscription: {e}")
             
@@ -382,7 +382,7 @@ class IBDataCollector:
                 # Use the specific account for the request
                 account_summary = await self.ib.accountSummaryAsync(account)
                 if account_summary:
-                    logger.info(f"Initial account summary received: {len(account_summary)} items")
+                    logger.debug(f"Initial account summary received: {len(account_summary)} items")
                     # Process the initial account summary to set current account value
                     for item in account_summary:
                         if item.tag == 'NetLiquidation':
@@ -393,7 +393,7 @@ class IBDataCollector:
                                 # Update trading manager with initial account value
                                 if hasattr(self, 'trading_manager'):
                                     self.trading_manager.update_market_data(account_value=initial_value)
-                                    logger.info(f"Trading manager updated with initial account value: {initial_value}")
+                                    logger.debug(f"Trading manager updated with initial account value: {initial_value}")
                             break
                 logger.info("Account summary subscription set up successfully")
                 
@@ -405,10 +405,10 @@ class IBDataCollector:
                 
             # Fallback: Try to get account value from account download
             try:
-                logger.info("Attempting fallback account value retrieval...")
+                logger.debug("Attempting fallback account value retrieval...")
                 account_values = await self.ib.accountSummaryAsync(account)
                 if account_values:
-                    logger.info(f"Account download received: {len(account_values)} values")
+                    logger.debug(f"Account download received: {len(account_values)} values")
                     for item in account_values:
                         if item.tag == 'NetLiquidation':
                             fallback_value = float(item.value)
@@ -418,17 +418,17 @@ class IBDataCollector:
                                 # Update trading manager with fallback account value
                                 if hasattr(self, 'trading_manager'):
                                     self.trading_manager.update_market_data(account_value=fallback_value)
-                                    logger.info(f"Trading manager updated with fallback account value: {fallback_value}")
+                                    logger.debug(f"Trading manager updated with fallback account value: {fallback_value}")
                             break
             except Exception as fallback_e:
                 logger.warning(f"Fallback account value retrieval also failed: {fallback_e}")
                 
             # Additional fallback: Try to manually request account summary
             try:
-                logger.info("Attempting manual account summary request...")
+                logger.debug("Attempting manual account summary request...")
                 manual_summary = await self.ib.accountSummaryAsync(account)
                 if manual_summary:
-                    logger.info(f"Manual account summary received: {len(manual_summary)} items")
+                    logger.debug(f"Manual account summary received: {len(manual_summary)} items")
                     for item in manual_summary:
                         if item.tag == 'NetLiquidation':
                             manual_value = float(item.value)
@@ -438,7 +438,7 @@ class IBDataCollector:
                                 # Update trading manager with manual account value
                                 if hasattr(self, 'trading_manager'):
                                     self.trading_manager.update_market_data(account_value=manual_value)
-                                    logger.info(f"Trading manager updated with manual account value: {manual_value}")
+                                    logger.debug(f"Trading manager updated with manual account value: {manual_value}")
                             break
             except Exception as manual_e:
                 logger.warning(f"Manual account summary request also failed: {manual_e}")
@@ -460,7 +460,7 @@ class IBDataCollector:
                 return False
                 
             account = managed_accounts[0]
-            logger.info(f"Refreshing account value for: {account}")
+            logger.debug(f"Refreshing account value for: {account}")
             
             # Try account summary first
             try:
@@ -475,7 +475,7 @@ class IBDataCollector:
                                 # Update trading manager
                                 if hasattr(self, 'trading_manager'):
                                     self.trading_manager.update_market_data(account_value=refresh_value)
-                                    logger.info(f"Trading manager updated with refreshed account value: {refresh_value}")
+                                    logger.debug(f"Trading manager updated with refreshed account value: {refresh_value}")
                                 return True
             except Exception as e:
                 logger.warning(f"Account summary refresh failed: {e}")
@@ -493,7 +493,7 @@ class IBDataCollector:
                                 # Update trading manager
                                 if hasattr(self, 'trading_manager'):
                                     self.trading_manager.update_market_data(account_value=refresh_value)
-                                    logger.info(f"Trading manager updated with refreshed account value: {refresh_value}")
+                                    logger.debug(f"Trading manager updated with refreshed account value: {refresh_value}")
                                 return True
             except Exception as e:
                 logger.warning(f"Account download refresh failed: {e}")
@@ -544,7 +544,7 @@ class IBDataCollector:
         try:
             # Only refresh if we don't have a valid account value
             if self.account_liquidation <= 0:
-                logger.info("Periodic refresh: Account value is 0, attempting refresh...")
+                logger.debug("Periodic refresh: Account value is 0, attempting refresh...")
                 await self.refresh_account_value()
             else:
                 logger.debug("Periodic refresh: Account value is valid, skipping refresh")
@@ -565,7 +565,7 @@ class IBDataCollector:
                 'client_id': self.clientId,
                 'timestamp': datetime.now().isoformat()
             }
-            logger.info(f"Disconnection data: {disconnection_data}")
+            logger.debug(f"Disconnection data: {disconnection_data}")
             if hasattr(self, 'data_worker') and hasattr(self.data_worker, 'connection_disconnected'):
                 self.data_worker.connection_disconnected.emit({
                     'status': 'Disconnected',
@@ -744,7 +744,6 @@ class IBDataCollector:
 
         except Exception as e:
             logger.error(f"Error in price update callback: {e}")
-
 
 
     async def get_fx_ratio(self):

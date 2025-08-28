@@ -63,7 +63,30 @@ class TradingManager:
         # Optional UI notify callback set by UI layer (callable: (message: str, success: bool) -> None)
         self.ui_notify = None
         
+        # Reference to hotkey manager for submission state coordination
+        self.hotkey_manager = None
+        
         logger.info("Trading Manager initialized")
+    
+    def set_hotkey_manager(self, hotkey_manager):
+        """Set reference to hotkey manager for submission state coordination"""
+        try:
+            self.hotkey_manager = hotkey_manager
+            logger.info("Hotkey manager reference set in trading manager")
+        except Exception as e:
+            logger.error(f"Error setting hotkey manager reference: {e}")
+    
+    def _notify_hotkey_manager(self, submission_state: bool):
+        """Notify hotkey manager about order submission state changes"""
+        try:
+            if self.hotkey_manager and hasattr(self.hotkey_manager, 'set_submission_state'):
+                self.hotkey_manager.set_submission_state(submission_state)
+                if submission_state:
+                    logger.info("Notified hotkey manager: submission LOCKED")
+                else:
+                    logger.info("Notified hotkey manager: submission UNLOCKED")
+        except Exception as e:
+            logger.error(f"Error notifying hotkey manager: {e}")
     
     def update_trading_config(self, trading_config: Dict[str, Any]):
         """Update trading configuration at runtime so calculations reflect GUI changes immediately"""
@@ -644,6 +667,9 @@ class TradingManager:
                     self._last_action_message = "Cannot BUY: an active position already exists. Close or sell the current position first."
                     return False
             
+            # Notify hotkey manager that submission is starting
+            self._notify_hotkey_manager(True)
+            
             # Get current option data
             option_data = self._current_call_option if option_type.upper() == "CALL" else self._current_put_option
             if not option_data:
@@ -717,6 +743,9 @@ class TradingManager:
                 # Place bracket orders for risk management
                 await self._place_bracket_orders(trade.order.orderId, contract, quantity, option_price, option_type)
                 
+                # Notify hotkey manager that submission is complete and successful
+                self._notify_hotkey_manager(False)
+                
                 return True
             else:
                 logger.error(f"BUY {option_type} order failed: {trade.orderStatus.status}")
@@ -730,16 +759,24 @@ class TradingManager:
                 symbol = f"{self.underlying_symbol} {option_type}"
                 await self._cleanup_failed_order(trade.order.orderId, symbol)
                 
+                # Notify hotkey manager that submission is complete (failed)
+                self._notify_hotkey_manager(False)
+                
                 return False
                 
         except Exception as e:
             logger.error(f"Error placing BUY {option_type} order: {e}")
             self._last_action_message = f"BUY {option_type} error: {str(e)}"
+            # Ensure hotkey manager is notified of submission completion on error
+            self._notify_hotkey_manager(False)
             return False
     
     async def place_sell_order(self, use_chase_logic: bool = True) -> bool:
         """Place a SELL order for any open position using chase logic if specified"""
         try:
+            # Notify hotkey manager that submission is starting
+            self._notify_hotkey_manager(True)
+            
             logger.info(f"_Active Position after clear: {self._active_positions}")
 
             # Get current positions
@@ -873,6 +910,10 @@ class TradingManager:
                 
                 logger.info(f"SELL order submitted with chase logic: {sell_quantity} contracts at ${limit_price:.2f}")
                 self._last_action_message = f"SELL submitted (chase): {sell_quantity} contracts at ${limit_price:.2f}."
+                
+                # Notify hotkey manager that submission is complete and successful
+                self._notify_hotkey_manager(False)
+                
                 return True
             else:
                 # Create contract
@@ -896,16 +937,25 @@ class TradingManager:
 
                 logger.info(f"SELL order submitted: {sell_quantity} contracts at market")
                 self._last_action_message = f"SELL submitted: {sell_quantity} contracts at market."
+                
+                # Notify hotkey manager that submission is complete and successful
+                self._notify_hotkey_manager(False)
+                
                 return True
                 
         except Exception as e:
             logger.error(f"Error placing SELL order: {e}")
             self._last_action_message = f"SELL error: {str(e)}"
+            # Ensure hotkey manager is notified of submission completion on error
+            self._notify_hotkey_manager(False)
             return False
     
     async def panic_button(self) -> bool:
         """Panic button: Flatten all risk for the underlying"""
         try:
+            # Notify hotkey manager that submission is starting
+            self._notify_hotkey_manager(True)
+            
             logger.warning("PANIC BUTTON ACTIVATED - Flattening all risk")
             
             # Step 1: Place Market Order to sell 100% of any open options position
@@ -920,10 +970,16 @@ class TradingManager:
                 if sell_success else
                 "PANIC attempted but no active positions were found. All open orders cancelled."
             )
+            
+            # Notify hotkey manager that submission is complete
+            self._notify_hotkey_manager(False)
+            
             return sell_success
             
         except Exception as e:
             logger.error(f"Error executing panic button: {e}")
+            # Ensure hotkey manager is notified of submission completion on error
+            self._notify_hotkey_manager(False)
             return False
     
     async def _cancel_all_orders(self):

@@ -3,9 +3,11 @@ from utils.config_manager import AppConfig
 from utils.ib_connection import IBDataCollector
 import asyncio
 import random
+import logging
 from .logger import get_logger
 
 logger = get_logger("DATA_COLLECTOR")
+logger.setLevel(logging.WARNING)
 
 class DataCollectorWorker(QObject):
     """Worker class for data collection in a separate thread"""

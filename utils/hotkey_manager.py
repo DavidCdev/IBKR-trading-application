@@ -25,6 +25,10 @@ class HotkeyManager(QObject):
         self._hotkey_shortcuts = {}
         self._global_listener = None
         
+        # Submission state tracking to prevent duplicate orders
+        self._submission_in_progress = False
+        self._submission_lock = False  # Additional safety lock
+        
         # Platform-specific hotkey handling
         self.system = platform.system().lower()
         if self.system == "darwin":  # macOS
@@ -51,6 +55,33 @@ class HotkeyManager(QObject):
             logger.info("Hotkey Manager stopped")
         except Exception as e:
             logger.error(f"Error stopping Hotkey Manager: {e}")
+    
+    def set_submission_state(self, in_progress: bool):
+        """Set the submission state to prevent duplicate hotkey submissions"""
+        try:
+            self._submission_in_progress = in_progress
+            self._submission_lock = in_progress
+            if in_progress:
+                logger.info("Hotkey submission state: LOCKED (order submission in progress)")
+            else:
+                logger.info("Hotkey submission state: UNLOCKED (ready for new submissions)")
+        except Exception as e:
+            logger.error(f"Error setting submission state: {e}")
+    
+    def is_submission_allowed(self) -> bool:
+        """Check if hotkey submissions are currently allowed"""
+        try:
+            # Check submission state - if an order is being submitted, block new submissions
+            submission_ok = not self._submission_in_progress and not self._submission_lock
+            
+            if not submission_ok:
+                logger.debug("Hotkey submission blocked: order submission in progress")
+            
+            return submission_ok
+            
+        except Exception as e:
+            logger.error(f"Error checking submission allowance: {e}")
+            return False
     
     def _setup_hotkeys(self):
         """Setup global hotkeys"""
@@ -81,10 +112,10 @@ class HotkeyManager(QObject):
                 return
 
             hotkeys = {
-                '<cmd>+<alt>+p': lambda: self.hotkey_buy_put.emit(),
-                '<cmd>+<alt>+c': lambda: self.hotkey_buy_call.emit(),
-                '<cmd>+<alt>+x': lambda: self.hotkey_sell_position.emit(),
-                '<cmd>+<alt>+f': lambda: self.hotkey_panic_button.emit(),
+                '<cmd>+<alt>+p': lambda: self._safe_hotkey_trigger(self.hotkey_buy_put),
+                '<cmd>+<alt>+c': lambda: self._safe_hotkey_trigger(self.hotkey_buy_call),
+                '<cmd>+<alt>+x': lambda: self._safe_hotkey_trigger(self.hotkey_sell_position),
+                '<cmd>+<alt>+f': lambda: self._safe_hotkey_trigger(self.hotkey_panic_button),
             }
 
             # Stop any existing listener first
@@ -113,10 +144,10 @@ class HotkeyManager(QObject):
                 return
 
             hotkeys = {
-                '<ctrl>+<alt>+p': lambda: self.hotkey_buy_put.emit(),
-                '<ctrl>+<alt>+c': lambda: self.hotkey_buy_call.emit(),
-                '<ctrl>+<alt>+x': lambda: self.hotkey_sell_position.emit(),
-                '<ctrl>+<alt>+f': lambda: self.hotkey_panic_button.emit(),
+                '<ctrl>+<alt>+p': lambda: self._safe_hotkey_trigger(self.hotkey_buy_put),
+                '<ctrl>+<alt>+c': lambda: self._safe_hotkey_trigger(self.hotkey_buy_call),
+                '<ctrl>+<alt>+x': lambda: self._safe_hotkey_trigger(self.hotkey_sell_position),
+                '<ctrl>+<alt>+f': lambda: self._safe_hotkey_trigger(self.hotkey_panic_button),
             }
 
             # Stop any existing listener first
@@ -133,6 +164,36 @@ class HotkeyManager(QObject):
             
         except Exception as e:
             logger.error(f"Error setting up Windows/Linux hotkeys: {e}")
+    
+    def _safe_hotkey_trigger(self, signal):
+        """Safely trigger a hotkey signal with submission state checking"""
+        try:
+            if self.is_submission_allowed():
+                signal.emit()
+            else:
+                logger.warning("Hotkey blocked: submission in progress or trading constraints not met")
+                self._show_blocked_message()
+        except Exception as e:
+            logger.error(f"Error in safe hotkey trigger: {e}")
+    
+    def _show_blocked_message(self):
+        """Show a message when hotkey is blocked"""
+        try:
+            parent = self.parent_window if self.parent_window is not None else None
+            msg_box = QMessageBox(parent)
+            msg_box.setWindowTitle("Hotkey Blocked")
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setText("Order submission in progress. Please wait for confirmation before placing another order.")
+            
+            # Force the notification to stay on top
+            try:
+                msg_box.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+            except Exception:
+                pass
+            
+            msg_box.exec()
+        except Exception as e:
+            logger.error(f"Error showing blocked message: {e}")
     
     def _cleanup_hotkeys(self):
         """Cleanup hotkey registrations"""
@@ -160,7 +221,13 @@ class HotkeyManager(QObject):
     def _execute_buy_call(self):
         """Execute buy call order"""
         try:
+            # Check submission state before proceeding
+            if not self.is_submission_allowed():
+                logger.warning("Buy call hotkey blocked: submission not allowed")
+                return
+            
             logger.info("Hotkey: BUY CALL triggered")
+            
             if self.trading_manager:
                 import asyncio
                 # Run in event loop
@@ -171,7 +238,6 @@ class HotkeyManager(QObject):
                         self._show_action_result(ok)
                     asyncio.create_task(_run())
                 else:
-                    # If loop is not running, run it and then show
                     ok = loop.run_until_complete(self.trading_manager.place_buy_order("CALL"))
                     self._show_action_result(ok)
         except Exception as e:
@@ -180,7 +246,13 @@ class HotkeyManager(QObject):
     def _execute_buy_put(self):
         """Execute buy put order"""
         try:
+            # Check submission state before proceeding
+            if not self.is_submission_allowed():
+                logger.warning("Buy put hotkey blocked: submission not allowed")
+                return
+            
             logger.info("Hotkey: BUY PUT triggered")
+            
             if self.trading_manager:
                 import asyncio
                 # Run in event loop
@@ -199,7 +271,13 @@ class HotkeyManager(QObject):
     def _execute_sell_position(self):
         """Execute sell position order with chase logic"""
         try:
+            # Check submission state before proceeding
+            if not self.is_submission_allowed():
+                logger.warning("Sell position hotkey blocked: submission not allowed")
+                return
+            
             logger.info("Hotkey: SELL POSITION triggered")
+            
             if self.trading_manager:
                 import asyncio
                 # Run in event loop
@@ -218,7 +296,13 @@ class HotkeyManager(QObject):
     def _execute_panic_button(self):
         """Execute panic button"""
         try:
+            # Check submission state before proceeding
+            if not self.is_submission_allowed():
+                logger.warning("Panic button hotkey blocked: submission not allowed")
+                return
+            
             logger.warning("Hotkey: PANIC BUTTON triggered")
+            
             if self.trading_manager:
                 import asyncio
                 # Run in event loop
@@ -275,38 +359,38 @@ class HotkeyManager(QObject):
             
             # Check for hotkey combinations
             if self._is_hotkey_combination(key, modifiers, "Ctrl+Alt+P"):
-                self.hotkey_buy_put.emit()
+                self._safe_hotkey_trigger(self.hotkey_buy_put)
                 event.accept()
                 return
             elif self._is_hotkey_combination(key, modifiers, "Ctrl+Alt+C"):
-                self.hotkey_buy_call.emit()
+                self._safe_hotkey_trigger(self.hotkey_buy_call)
                 event.accept()
                 return
             elif self._is_hotkey_combination(key, modifiers, "Ctrl+Alt+X"):
-                self.hotkey_sell_position.emit()
+                self._safe_hotkey_trigger(self.hotkey_sell_position)
                 event.accept()
                 return
             elif self._is_hotkey_combination(key, modifiers, "Ctrl+Alt+F"):
-                self.hotkey_panic_button.emit()
+                self._safe_hotkey_trigger(self.hotkey_panic_button)
                 event.accept()
                 return
             
             # Handle macOS Command key equivalents
             if self.system == "darwin":
                 if self._is_hotkey_combination(key, modifiers, "Cmd+Alt+P"):
-                    self.hotkey_buy_put.emit()
+                    self._safe_hotkey_trigger(self.hotkey_buy_put)
                     event.accept()
                     return
                 elif self._is_hotkey_combination(key, modifiers, "Cmd+Alt+C"):
-                    self.hotkey_buy_call.emit()
+                    self._safe_hotkey_trigger(self.hotkey_buy_call)
                     event.accept()
                     return
                 elif self._is_hotkey_combination(key, modifiers, "Cmd+Alt+X"):
-                    self.hotkey_sell_position.emit()
+                    self._safe_hotkey_trigger(self.hotkey_sell_position)
                     event.accept()
                     return
                 elif self._is_hotkey_combination(key, modifiers, "Cmd+Alt+F"):
-                    self.hotkey_panic_button.emit()
+                    self._safe_hotkey_trigger(self.hotkey_panic_button)
                     event.accept()
                     return
             

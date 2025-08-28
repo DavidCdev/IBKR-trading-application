@@ -30,7 +30,7 @@ def format_currency(value) -> str:
 try:
     from PyQt6.QtWidgets import QMainWindow, QMessageBox
     from PyQt6.QtCore import QThread, QTimer
-    logger.info("PyQt6 imports successful")
+    logger.debug("PyQt6 imports successful")
 except ImportError as e:
     logger.error(f"PyQt6 import failed: {e}")
     raise
@@ -69,11 +69,11 @@ class IB_Trading_APP(QMainWindow):
         self.connection_status = 'disconnected'
         # Initialize data collector worker
         try:
-            logger.info("Initializing data collector worker...")
+            logger.debug("Initializing data collector worker...")
             self.data_worker = DataCollectorWorker(self.config)
             self.worker_thread = QThread()
             self.data_worker.moveToThread(self.worker_thread)
-            logger.info("Data collector worker initialized successfully")
+            logger.debug("Data collector worker initialized successfully")
         except Exception as e2:
             logger.error(f"Failed to initialize data collector worker: {e2}")
             self.data_worker = None
@@ -99,7 +99,7 @@ class IB_Trading_APP(QMainWindow):
                 # Connect thread signals
                 self.worker_thread.started.connect(self.data_worker.start_collection)
                 self.worker_thread.finished.connect(self.data_worker.cleanup)
-                logger.info("Data worker signals connected successfully")
+                logger.debug("Data worker signals connected successfully")
             except Exception as e3:
                 logger.error(f"Failed to connect data worker signals: {e3}")
         else:
@@ -110,7 +110,7 @@ class IB_Trading_APP(QMainWindow):
         
         # Initialize UI forms with error handling
         try:
-            logger.info("Initializing Settings_Form...")
+            logger.debug("Initializing Settings_Form...")
             # Check if required UI files exist
             import os
             ui_file_path = os.path.join(os.path.dirname(__file__), '..', 'ui', 'settings_gui.py')
@@ -125,9 +125,9 @@ class IB_Trading_APP(QMainWindow):
                 raise FileNotFoundError(f"Main UI file not found: {main_ui_file_path}")
             
             self.setting_ui = Settings_Form(self.config, self.connection_status, self.data_worker)
-            logger.info("Settings_Form initialized successfully")
+            logger.debug("Settings_Form initialized successfully")
             
-            logger.info("Initializing AIPrompt_Form...")
+            logger.debug("Initializing AIPrompt_Form...")
             # Check if required AI prompt UI file exists
             ai_ui_file_path = os.path.join(os.path.dirname(__file__), '..', 'ui', 'ai_prompt_gui.py')
             if not os.path.exists(ai_ui_file_path):
@@ -135,7 +135,7 @@ class IB_Trading_APP(QMainWindow):
                 raise FileNotFoundError(f"AI Prompt UI file not found: {ai_ui_file_path}")
             
             self.ai_prompt_ui = AI_Prompt_Form(self.config, self.refresh_ai)
-            logger.info("AIPrompt_Form initialized successfully")
+            logger.debug("AIPrompt_Form initialized successfully")
             
             # Connect form signals
             if hasattr(self.setting_ui.ui, 'cancelButton'):
@@ -163,7 +163,7 @@ class IB_Trading_APP(QMainWindow):
                             self.setting_ui.log_connection_event(message, "Info")
                     
                     def on_error(msg):
-                        logger.info(f"Main app: Error signal received: {msg}")
+                        logger.warning(f"Main app: Error signal received: {msg}")
                         self.setting_ui.update_connection_status("Error")
                         if hasattr(self.setting_ui, 'log_connection_event'):
                             self.setting_ui.log_connection_event(msg, "Error")
@@ -171,7 +171,7 @@ class IB_Trading_APP(QMainWindow):
                     self.data_worker.connection_success.connect(on_connection_success)
                     self.data_worker.connection_disconnected.connect(on_connection_disconnected)
                     self.data_worker.error_occurred.connect(on_error)
-                    logger.info("Settings form signal connections established")
+                    logger.debug("Settings form signal connections established")
                 except Exception as e3:
                     logger.error(f"Failed to connect settings form signals: {e3}")
                 
@@ -196,9 +196,9 @@ class IB_Trading_APP(QMainWindow):
             logger.warning("Data collection thread not available")
 
         try:
-            logger.info("Initializing AI engine...")
+            logger.debug("Initializing AI engine...")
             self.ai_engine = AI_Engine(self.config, self.data_worker)
-            logger.info("AI engine initialized successfully")
+            logger.debug("AI engine initialized successfully")
             
             # Connect AI engine signals
             if self.ai_engine:
@@ -206,14 +206,14 @@ class IB_Trading_APP(QMainWindow):
                 self.ai_engine.analysis_error.connect(self.on_ai_analysis_error)
                 self.ai_engine.polling_status.connect(self.on_ai_polling_status)
                 self.ai_engine.cache_status.connect(self.on_ai_cache_status)
-                logger.info("AI engine signals connected successfully")
+                logger.debug("AI engine signals connected successfully")
         except Exception as e3:
             logger.error(f"Failed to initialize AI engine: {e3}")
             self.ai_engine = None
         
         # Initialize hotkey manager
         try:
-            logger.info("Initializing hotkey manager...")
+            logger.debug("Initializing hotkey manager...")
             if self.data_worker and self.data_worker.collector:
                 self.hotkey_manager = HotkeyManager(self.data_worker.collector.trading_manager, parent_window=self)
                 # Provide UI notify hook to trading manager for asynchronous notifications (e.g., chase convert)
@@ -236,7 +236,7 @@ class IB_Trading_APP(QMainWindow):
                 except Exception as _e:
                     logger.warning(f"Failed to attach UI notify hook: {_e}")
                 self.hotkey_manager.start()
-                logger.info("Hotkey manager initialized and started successfully")
+                logger.debug("Hotkey manager initialized and started successfully")
             else:
                 logger.warning("Data worker not available, skipping hotkey manager initialization")
                 self.hotkey_manager = None
