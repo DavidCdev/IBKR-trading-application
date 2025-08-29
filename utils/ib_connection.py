@@ -1251,24 +1251,16 @@ class IBDataCollector:
         if new_account_liquidation > 0 and new_account_liquidation != self.account_liquidation:
             self.account_liquidation = new_account_liquidation
             starting_value = self.account_liquidation - self.daily_pnl
-            # Treat high_water_mark as a value in currency units consistently
-            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
-            logger.info(f"High water mark: {high_water_mark}")
-
-            if high_water_mark is None:
-                high_water_mark = self.account_liquidation
-            else:
-                try:
-                    high_water_mark = float(high_water_mark)
-                except Exception:
-                    # If persisted as string previously, coerce to float
-                    high_water_mark = self.account_liquidation
-
-            if self.account_liquidation > high_water_mark:
-                high_water_mark = self.account_liquidation
-                if self.account_config is not None:
-                    self.account_config['high_water_mark'] = high_water_mark
-                logger.info(f"High water mark updated to {high_water_mark}")
+            
+            # Check if it's a new trading day and reset high water mark if needed
+            if self._is_new_trading_day():
+                self._reset_high_water_mark()
+            
+            # Update high water mark if current value is higher
+            self._update_high_water_mark(self.account_liquidation)
+            
+            # Get current high water mark for metrics
+            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else self.account_liquidation
 
             # Create DataFrame with common metrics
             metrics = {
@@ -1351,24 +1343,15 @@ class IBDataCollector:
                 self.account_liquidation = 0
                 starting_value = 0
 
-            # Treat high_water_mark as a value in currency units consistently
-            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else None
-            logger.info(f"High water mark: {high_water_mark}")
-
-            if high_water_mark is None:
-                high_water_mark = self.account_liquidation
-            else:
-                try:
-                    high_water_mark = float(high_water_mark)
-                except Exception:
-                    # If persisted as string previously, coerce to float
-                    high_water_mark = self.account_liquidation
-
-            if self.account_liquidation > high_water_mark:
-                high_water_mark = self.account_liquidation
-                if self.account_config is not None:
-                    self.account_config['high_water_mark'] = high_water_mark
-                logger.info(f"High water mark updated to {high_water_mark}")
+            # Check if it's a new trading day and reset high water mark if needed
+            if self._is_new_trading_day():
+                self._reset_high_water_mark()
+            
+            # Update high water mark if current value is higher
+            self._update_high_water_mark(self.account_liquidation)
+            
+            # Get current high water mark for metrics
+            high_water_mark = self.account_config.get('high_water_mark') if self.account_config else self.account_liquidation
 
             # Create DataFrame with common metrics
             metrics = {
@@ -2234,4 +2217,109 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting expiration status: {e}")
             return {'error': str(e)}
+    
+    def _is_new_trading_day(self) -> bool:
+        """Check if it's a new trading day and high water mark should be reset"""
+        if not self.account_config:
+            return True
+            
+        check_date_str = self.account_config.get('high_water_mark_check_date')
+        if not check_date_str:
+            return True
+            
+        try:
+            # Parse the stored date
+            stored_date = datetime.strptime(check_date_str, '%Y-%m-%d').date()
+            today = date.today()
+            
+            # Reset if it's a different date
+            return stored_date != today
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Error parsing high water mark check date '{check_date_str}': {e}")
+            return True
+
+    def _reset_high_water_mark(self):
+        """Reset high water mark to current account value for new trading day"""
+        if not self.account_config:
+            return
+            
+        today = date.today().strftime('%Y-%m-%d')
+        self.account_config['high_water_mark'] = self.account_liquidation
+        self.account_config['high_water_mark_check_date'] = today
         
+        logger.info(f"High water mark reset to {self.account_liquidation} for new trading day {today}")
+        
+        # Save config to file
+        try:
+            from utils.config_manager import AppConfig
+            config = AppConfig.load_from_file()
+            config.account = self.account_config
+            config.save_to_file()
+        except Exception as e:
+            logger.error(f"Failed to save updated config: {e}")
+
+    def _update_high_water_mark(self, new_value: float):
+        """Update high water mark if new value is higher"""
+        if not self.account_config:
+            return
+            
+        current_hwm = self.account_config.get('high_water_mark')
+        if current_hwm is None or new_value > float(current_hwm):
+            self.account_config['high_water_mark'] = new_value
+            today = date.today().strftime('%Y-%m-%d')
+            self.account_config['high_water_mark_check_date'] = today
+            
+            logger.info(f"High water mark updated to {new_value} on {today}")
+            
+            # Save config to file
+            try:
+                from utils.config_manager import AppConfig
+                config = AppConfig.load_from_file()
+                config.account = self.account_config
+                config.save_to_file()
+            except Exception as e:
+                logger.error(f"Failed to save updated config: {e}")
+
+    def reset_high_water_mark_manually(self):
+        """Manually reset high water mark to current account value"""
+        if not self.account_config:
+            logger.warning("No account config available for manual reset")
+            return False
+            
+        self._reset_high_water_mark()
+        logger.info("High water mark manually reset")
+        return True
+
+    def get_daily_drawdown(self) -> float:
+        """Get the current daily drawdown as a percentage"""
+        if not self.account_config:
+            return 0.0
+            
+        high_water_mark = self.account_config.get('high_water_mark')
+        if not high_water_mark:
+            return 0.0
+            
+        try:
+            high_water_mark = float(high_water_mark)
+            if high_water_mark <= 0:
+                return 0.0
+                
+            current_value = self.account_liquidation
+            drawdown = ((high_water_mark - current_value) / high_water_mark) * 100
+            return max(0.0, drawdown)  # Ensure non-negative
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error calculating daily drawdown: {e}")
+            return 0.0
+
+    def should_stop_trading(self, max_daily_loss_percent: float = 5.0) -> bool:
+        """Check if trading should be stopped based on daily loss threshold"""
+        daily_drawdown = self.get_daily_drawdown()
+        should_stop = daily_drawdown >= max_daily_loss_percent
+        
+        if should_stop:
+            logger.warning(f"Daily drawdown {daily_drawdown:.2f}% exceeds threshold {max_daily_loss_percent}%. Trading should be stopped.")
+        else:
+            logger.info(f"Daily drawdown: {daily_drawdown:.2f}% (threshold: {max_daily_loss_percent}%)")
+            
+        return should_stop
+

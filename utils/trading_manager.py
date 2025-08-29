@@ -7,7 +7,6 @@ from threading import Thread, Event, Lock
 import time
 import math
 from .logger import get_logger
-from .tick_size_validator import validate_and_round_price, TickSizeValidator
 
 logger = get_logger("TRADING_MANAGER")
 
@@ -868,14 +867,7 @@ class TradingManager:
             
             if use_chase_logic:
                 # Chase logic: Start with limit order at (midpoint - trade_delta)
-                # CRITICAL FIX: Validate and round limit price to conform to IBKR tick size requirements
-                raw_limit_price = mid_price - self.trade_delta
-                limit_price = validate_and_round_price(raw_limit_price, f"SELL limit order for {symbol}")
-                
-                # Log the price adjustment for debugging
-                if raw_limit_price != limit_price:
-                    logger.info(f"Adjusted limit price from ${raw_limit_price:.4f} to ${limit_price:.2f} for tick size compliance")
-                
+                limit_price = mid_price - self.trade_delta
                 order = self._create_adaptive_order("SELL", sell_quantity, limit_price)
                 
                 # Create contract (reuse from position if available)
@@ -904,19 +896,14 @@ class TradingManager:
                 
                 # Track for chase logic
                 with self._order_lock:
-                    chase_order_data = {
+                    self._chase_orders[trade.order.orderId] = {
                         'trade': trade,
                         'contract': contract,
                         'original_quantity': sell_quantity,
                         'remaining_quantity': sell_quantity,
                         'start_time': time.time(),
-                        'limit_price': limit_price,
-                        'order_id': trade.order.orderId,
-                        'last_status_check': time.time()
+                        'limit_price': limit_price
                     }
-                    self._chase_orders[trade.order.orderId] = chase_order_data
-                    logger.info(f"Chase order {trade.order.orderId} initialized with contract: {getattr(contract, 'symbol', 'N/A')}, quantity: {sell_quantity}")
-                    logger.debug(f"Full chase order data: {chase_order_data}")
                 
                 # Start chase monitoring
                 self._start_chase_monitoring()
@@ -946,17 +933,7 @@ class TradingManager:
                             return False
                 
                 # Ensure routing fields are set and submit market order
-                contract = self._ensure_contract_routable(contract)
-                
-                # CRITICAL FIX: Actually submit the market order to IB
-                market_order = self._create_adaptive_order("SELL", sell_quantity)
-                try:
-                    trade = self.ib.placeOrder(contract, market_order)
-                    logger.info(f"Market order submitted to IB: {sell_quantity} contracts, order ID: {trade.order.orderId}")
-                except Exception as submit_error:
-                    logger.error(f"Failed to submit market order to IB: {submit_error}")
-                    self._last_action_message = f"Failed to submit market order: {str(submit_error)}"
-                    return False
+                logger.info(f"Submitting market order: {sell_quantity} contracts")
 
                 logger.info(f"SELL order submitted: {sell_quantity} contracts at market")
                 self._last_action_message = f"SELL submitted: {sell_quantity} contracts at market."
@@ -1037,135 +1014,34 @@ class TradingManager:
             
             # Clear chase orders
             with self._order_lock:
-                chase_count = len(self._chase_orders)
-                if chase_count > 0:
-                    logger.info(f"Clearing {chase_count} chase orders during panic button execution")
-                    for order_id, chase_data in self._chase_orders.items():
-                        logger.debug(f"Clearing chase order {order_id}: {chase_data}")
-                    self._chase_orders.clear()
-                else:
-                    logger.debug("No chase orders to clear")
+                self._chase_orders.clear()
             
         except Exception as e:
             logger.error(f"Error cancelling all orders: {e}")
     
-    def cancel_chase_order(self, order_id: int):
-        """Cancel a specific chase order and remove it from monitoring"""
-        try:
-            with self._order_lock:
-                if order_id in self._chase_orders:
-                    chase_data = self._chase_orders[order_id]
-                    trade = chase_data.get('trade')
-                    
-                    if trade and hasattr(trade, 'order'):
-                        try:
-                            self.ib.cancelOrder(trade.order)
-                            logger.info(f"Cancelled chase order {order_id}")
-                        except Exception as e:
-                            logger.error(f"Error cancelling chase order {order_id}: {e}")
-                    
-                    # Remove from chase monitoring
-                    removed_data = self._chase_orders.pop(order_id)
-                    logger.info(f"Removed cancelled chase order {order_id} from monitoring: {removed_data}")
-                else:
-                    logger.warning(f"Chase order {order_id} not found for cancellation")
-            
-        except Exception as e:
-            logger.error(f"Error cancelling chase order {order_id}: {e}")
-    
     def _start_chase_monitoring(self):
         """Start monitoring chase orders"""
         if self._chase_thread and self._chase_thread.is_alive():
-            logger.debug("Chase monitoring already active")
             return
         
-        logger.info("Starting chase monitoring thread")
         self._stop_chase.clear()
         self._chase_thread = Thread(target=self._chase_monitor_loop, daemon=True)
         self._chase_thread.start()
-        logger.info("Chase monitoring thread started successfully")
-    
-    def _check_chase_order_status(self, order_id: int, chase_data: Dict[str, Any]) -> bool:
-        """Check if a chase order is still active (not filled/cancelled)"""
-        try:
-            trade = chase_data.get('trade')
-            if not trade or not hasattr(trade, 'orderStatus'):
-                return False
-            
-            order_status = trade.orderStatus
-            status = order_status.status.upper()
-            
-            # Order is no longer active if it's filled, cancelled, or in error state
-            if status in ['FILLED', 'CANCELLED', 'INACTIVE', 'ERROR']:
-                logger.info(f"Chase order {order_id} no longer active: {status}")
-                return False
-            
-            # Update last status check time
-            chase_data['last_status_check'] = time.time()
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error checking chase order {order_id} status: {e}")
-            return False
-    
-    def handle_order_status_update(self, order_id: int, status: str, filled: float = 0, remaining: float = 0, avg_fill_price: float = 0):
-        """Handle order status updates from IB callbacks and clean up chase monitoring"""
-        try:
-            logger.info(f"Order status update: Order {order_id}, Status: {status}, Filled: {filled}, Remaining: {remaining}")
-            
-            # Check if this is a chase order
-            with self._order_lock:
-                if order_id in self._chase_orders:
-                    chase_data = self._chase_orders[order_id]
-                    
-                    # If order is filled, remove from chase monitoring immediately
-                    if status.upper() == 'FILLED':
-                        removed_data = self._chase_orders.pop(order_id)
-                        logger.info(f"Chase order {order_id} filled, removed from monitoring: {removed_data}")
-                        
-                        # Update position tracking if this was a sell order
-                        if filled > 0 and avg_fill_price > 0:
-                            self._update_position_from_sell_fill({
-                                'option_type': 'CALL' if 'CALL' in str(chase_data.get('contract', '')) else 'PUT'
-                            }, filled, avg_fill_price)
-                    
-                    # If order is cancelled or in error state, remove from chase monitoring
-                    elif status.upper() in ['CANCELLED', 'INACTIVE', 'ERROR']:
-                        removed_data = self._chase_orders.pop(order_id)
-                        logger.info(f"Chase order {order_id} {status.lower()}, removed from monitoring: {removed_data}")
-            
-        except Exception as e:
-            logger.error(f"Error handling order status update for order {order_id}: {e}")
     
     def _chase_monitor_loop(self):
         """Monitor chase orders and convert to market orders after 10 seconds"""
-        logger.info("Chase monitor loop started")
         while not self._stop_chase.is_set():
             try:
                 current_time = time.time()
                 orders_to_convert = []
                 
                 with self._order_lock:
-                    chase_count = len(self._chase_orders)
-                    if chase_count > 0:
-                        logger.debug(f"Monitoring {chase_count} active chase orders")
-                    
-                    for order_id, chase_data in list(self._chase_orders.items()):
-                        # Check if order is still active (not filled/cancelled)
-                        if not self._check_chase_order_status(order_id, chase_data):
-                            logger.info(f"Chase order {order_id} no longer active, removing from monitoring")
-                            self._chase_orders.pop(order_id, None)
-                            continue
-                        
-                        time_elapsed = current_time - chase_data['start_time']
-                        logger.debug(f"Chase order {order_id}: {time_elapsed:.1f}s elapsed, threshold: 10s")
-                        if time_elapsed >= 10:  # 10 seconds
+                    for order_id, chase_data in self._chase_orders.items():
+                        if current_time - chase_data['start_time'] >= 10:  # 10 seconds
                             orders_to_convert.append(order_id)
-                            logger.info(f"Chase order {order_id} ready for conversion to market: {time_elapsed:.1f}s elapsed")
                 
                 # Convert orders to market orders
                 for order_id in orders_to_convert:
-                    logger.info(f"Converting chase order {order_id} to market order after 10 seconds")
                     asyncio.run(self._convert_to_market_order(order_id))
                 
                 time.sleep(1)  # Check every second
@@ -1173,8 +1049,6 @@ class TradingManager:
             except Exception as e:
                 logger.error(f"Error in chase monitor loop: {e}")
                 time.sleep(1)
-        
-        logger.info("Chase monitor loop stopped")
     
     async def _convert_to_market_order(self, order_id: int):
         """Convert a limit order to a market order"""
@@ -1195,31 +1069,9 @@ class TradingManager:
                 logger.info(f"Cancelled limit order {order_id} for chase logic")
             except Exception as e:
                 logger.error(f"Error cancelling limit order {order_id}: {e}")
-                # Continue with market order conversion even if cancellation fails
             
             # Create and submit market order
             market_order = self._create_adaptive_order("SELL", remaining_quantity)
-            
-            # CRITICAL FIX: Actually submit the market order to IB
-            contract = chase_data.get('contract')
-            if not contract:
-                logger.error(f"No contract available for market order conversion of order {order_id}")
-                logger.error(f"Chase data keys: {list(chase_data.keys())}")
-                logger.error(f"Chase data: {chase_data}")
-                return
-            
-            # Ensure contract is routable
-            contract = self._ensure_contract_routable(contract)
-            logger.info(f"Contract for market order conversion: {contract}, symbol: {getattr(contract, 'symbol', 'N/A')}")
-            
-            # Submit the market order to IB
-            try:
-                trade = self.ib.placeOrder(contract, market_order)
-                logger.info(f"Market order submitted to IB: {remaining_quantity} contracts, order ID: {trade.order.orderId}")
-            except Exception as submit_error:
-                logger.error(f"Failed to submit market order to IB: {submit_error}")
-                self._last_action_message = f"Failed to submit market order: {str(submit_error)}"
-                return
 
             logger.info(f"Converted to market order: {remaining_quantity} contracts")
             self._last_action_message = (
@@ -1233,24 +1085,10 @@ class TradingManager:
             
             # Remove from chase orders
             with self._order_lock:
-                if order_id in self._chase_orders:
-                    removed_data = self._chase_orders.pop(order_id)
-                    logger.info(f"Chase order {order_id} removed after market conversion: {removed_data}")
-                else:
-                    logger.warning(f"Chase order {order_id} not found during cleanup")
-            
-            logger.info(f"Successfully converted chase order {order_id} to market order")
+                self._chase_orders.pop(order_id, None)
             
         except Exception as e:
             logger.error(f"Error converting to market order: {e}")
-            # Try to clean up chase order even on error
-            try:
-                with self._order_lock:
-                    if order_id in self._chase_orders:
-                        self._chase_orders.pop(order_id)
-                        logger.info(f"Cleaned up chase order {order_id} after error")
-            except Exception as cleanup_error:
-                logger.error(f"Error cleaning up chase order {order_id} after conversion error: {cleanup_error}")
     
     async def _place_bracket_orders(self, parent_order_id: int, contract, quantity: int, entry_price: float, option_type: str):
         """Place bracket orders (stop loss and take profit) for risk management"""
@@ -1278,18 +1116,10 @@ class TradingManager:
             
             # Build orders (do not transmit yet) so we can set OCA if needed
             if stop_loss_percent:
-                raw_stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent))
-                # CRITICAL FIX: Validate and round stop loss price to conform to IBKR tick size requirements
-                stop_loss_price = validate_and_round_price(raw_stop_loss_price, f"Stop loss order for {option_type}")
-                if raw_stop_loss_price != stop_loss_price:
-                    logger.info(f"Adjusted stop loss price from ${raw_stop_loss_price:.4f} to ${stop_loss_price:.2f} for tick size compliance")
+                stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent))
                 stop_loss_order = self._create_stop_loss_order(quantity, stop_loss_price)
             if profit_gain_percent:
-                raw_take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent))
-                # CRITICAL FIX: Validate and round take profit price to conform to IBKR tick size requirements
-                take_profit_price = validate_and_round_price(raw_take_profit_price, f"Take profit order for {option_type}")
-                if raw_take_profit_price != take_profit_price:
-                    logger.info(f"Adjusted take profit price from ${raw_take_profit_price:.4f} to ${take_profit_price:.2f} for tick size compliance")
+                take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent))
                 take_profit_order = self._create_take_profit_order(quantity, take_profit_price)
             
             # If both exist, set OCA group so that one cancels the other at broker side
@@ -1583,64 +1413,12 @@ class TradingManager:
                     elif order_data['type'] == 'SELL':
                         # Update chase remaining quantity if this SELL is being chased
                         if order_id in self._chase_orders:
-                            old_quantity = self._chase_orders[order_id]['remaining_quantity']
                             self._chase_orders[order_id]['remaining_quantity'] = remaining_quantity
-                            logger.info(f"Updated chase order {order_id} remaining quantity: {old_quantity} -> {remaining_quantity}")
                             if remaining_quantity <= 0:
-                                removed_data = self._chase_orders.pop(order_id)
-                                logger.info(f"Chase order {order_id} removed due to complete fill: {removed_data}")
+                                self._chase_orders.pop(order_id, None)
             
         except Exception as e:
             logger.error(f"Error handling partial fill: {e}")
-    
-    def handle_order_fill(self, order_id: int, filled_quantity: int, fill_price: float):
-        """Handle complete order fill events and clean up chase monitoring"""
-        try:
-            logger.info(f"Order filled: Order {order_id}, Filled {filled_quantity} at ${fill_price:.2f}")
-            
-            # Immediately remove from chase monitoring if this was a chase order
-            with self._order_lock:
-                if order_id in self._chase_orders:
-                    removed_data = self._chase_orders.pop(order_id)
-                    logger.info(f"Chase order {order_id} removed from monitoring due to fill: {removed_data}")
-            
-            # Handle position updates for BUY orders
-            with self._order_lock:
-                if order_id in self._open_orders:
-                    order_data = self._open_orders[order_id]
-                    if order_data['type'] == 'BUY':
-                        self._update_position_from_fill(order_data, filled_quantity, fill_price)
-                    elif order_data['type'] == 'SELL':
-                        # For SELL orders, update position tracking
-                        self._update_position_from_sell_fill(order_data, filled_quantity, fill_price)
-            
-        except Exception as e:
-            logger.error(f"Error handling order fill: {e}")
-    
-    def _update_position_from_sell_fill(self, order_data: Dict[str, Any], filled_quantity: int, fill_price: float):
-        """Update position tracking when a sell order is filled"""
-        try:
-            symbol = f"{self.underlying_symbol} {order_data['option_type']}"
-            
-            with self._position_lock:
-                if symbol in self._active_positions:
-                    position = self._active_positions[symbol]
-                    current_size = position.get('position_size', 0)
-                    new_size = current_size - filled_quantity
-                    
-                    if new_size <= 0:
-                        # Position fully closed
-                        removed_position = self._active_positions.pop(symbol)
-                        logger.info(f"Position fully closed: {symbol}, {filled_quantity} contracts sold at ${fill_price:.2f}")
-                    else:
-                        # Partial position closed
-                        position['position_size'] = new_size
-                        logger.info(f"Partial position closed: {symbol}, {filled_quantity} contracts sold at ${fill_price:.2f}, remaining: {new_size}")
-                else:
-                    logger.warning(f"No active position found for sell fill: {symbol}")
-            
-        except Exception as e:
-            logger.error(f"Error updating position from sell fill: {e}")
     
     async def _adjust_bracket_order_quantity(self, parent_order_id: int, new_quantity: int):
         """Adjust bracket order quantities after partial fills"""
@@ -1778,54 +1556,13 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error generating user friendly message: {e}")
             return "Unable to calculate trading capacity."
-        
-    def cleanup(self):
-        """Cleanup resources"""
-        try:
-            self._stop_chase.set()
-            if self._chase_thread and self._chase_thread.is_alive():
-                self._chase_thread.join(timeout=5)
-            
-            logger.info("Trading Manager cleanup completed")
-        except Exception as e:
-            logger.error(f"Error during trading manager cleanup: {e}")
-
+    
     def get_last_action_message(self) -> str:
         """Return the last user-facing action message for UI notifications"""
         try:
             return str(self._last_action_message)
         except Exception:
             return ""
-    
-    def get_chase_order_status(self) -> Dict[str, Any]:
-        """Get current status of all chase orders for debugging and monitoring"""
-        try:
-            with self._order_lock:
-                chase_status = {}
-                for order_id, chase_data in self._chase_orders.items():
-                    trade = chase_data.get('trade')
-                    order_status = None
-                    if trade and hasattr(trade, 'orderStatus'):
-                        order_status = trade.orderStatus.status
-                    
-                    chase_status[order_id] = {
-                        'symbol': getattr(chase_data.get('contract'), 'symbol', 'N/A'),
-                        'quantity': chase_data.get('remaining_quantity', 0),
-                        'limit_price': chase_data.get('limit_price', 0),
-                        'start_time': chase_data.get('start_time', 0),
-                        'elapsed_time': time.time() - chase_data.get('start_time', time.time()),
-                        'order_status': order_status,
-                        'last_status_check': chase_data.get('last_status_check', 0)
-                    }
-                
-                return {
-                    'total_chase_orders': len(self._chase_orders),
-                    'chase_orders': chase_status
-                }
-            
-        except Exception as e:
-            logger.error(f"Error getting chase order status: {e}")
-            return {'error': str(e)}
 
     def manual_expiration_switch(self, target_expiration: str = None) -> bool:
         """Manually trigger expiration switching to a specific expiration or best available"""
@@ -1874,143 +1611,4 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error in trading manager get_expiration_status: {e}")
             return {'error': str(e)}
-    
-    def validate_option_price_for_ib(self, price: float, context: str = "") -> Dict[str, Any]:
-        """
-        Validate an option price for IBKR compliance and provide detailed feedback.
-        
-        Args:
-            price: The option price to validate
-            context: Context for the validation (e.g., "SELL order", "Stop loss")
-            
-        Returns:
-            Dictionary with validation results and suggestions
-        """
-        try:
-            from .tick_size_validator import get_tick_size_info
-            
-            # Get detailed tick size information
-            tick_info = get_tick_size_info(price)
-            
-            # Add context and recommendations
-            result = {
-                'context': context,
-                'original_price': price,
-                'is_valid': tick_info.get('is_valid', False),
-                'tick_size': tick_info.get('tick_size', 0),
-                'validation_message': tick_info.get('validation_message', ''),
-                'rounded_price': tick_info.get('rounded_price', price),
-                'price_adjusted': price != tick_info.get('rounded_price', price),
-                'recommendations': []
-            }
-            
-            # Add specific recommendations based on validation results
-            if not result['is_valid']:
-                result['recommendations'].append(f"Use ${result['rounded_price']:.2f} instead of ${price:.4f}")
-                result['recommendations'].append(f"Tick size for this price range is ${result['tick_size']:.2f}")
-                
-                if price < 3.00:
-                    result['recommendations'].append("Prices below $3.00 must be multiples of $0.05")
-                else:
-                    result['recommendations'].append("Prices $3.00 and above must be multiples of $0.10")
-            
-            # Add IBKR compliance note
-            result['ibkr_compliance'] = {
-                'error_110_prevention': result['is_valid'],
-                'tick_size_requirement': f"${result['tick_size']:.2f}",
-                'price_threshold': "$3.00"
-            }
-            
-            logger.info(f"Price validation for {context}: ${price:.4f} -> {'VALID' if result['is_valid'] else 'INVALID'} (tick size: ${result['tick_size']:.2f})")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error validating option price {price} for IBKR compliance: {e}")
-            return {
-                'context': context,
-                'original_price': price,
-                'is_valid': False,
-                'error': str(e),
-                'recommendations': ['Contact support for price validation assistance']
-            }
-    
-    def analyze_tick_size_compliance(self, prices: List[float], context: str = "") -> Dict[str, Any]:
-        """
-        Analyze multiple prices for IBKR tick size compliance.
-        
-        Args:
-            prices: List of prices to analyze
-            context: Context for the analysis
-            
-        Returns:
-            Dictionary with comprehensive compliance analysis
-        """
-        try:
-            from .tick_size_validator import TickSizeValidator
-            
-            analysis = {
-                'context': context,
-                'total_prices': len(prices),
-                'compliant_prices': 0,
-                'non_compliant_prices': 0,
-                'price_details': [],
-                'summary': {},
-                'recommendations': []
-            }
-            
-            validator = TickSizeValidator()
-            
-            for i, price in enumerate(prices):
-                if price <= 0:
-                    continue
-                    
-                tick_size = validator.get_tick_size(price)
-                is_valid, message = validator.validate_price(price)
-                rounded_price = validator.round_to_valid_tick(price)
-                
-                price_detail = {
-                    'index': i,
-                    'original_price': price,
-                    'tick_size': tick_size,
-                    'is_valid': is_valid,
-                    'validation_message': message,
-                    'rounded_price': rounded_price,
-                    'price_adjusted': price != rounded_price,
-                    'adjustment_amount': abs(price - rounded_price)
-                }
-                
-                analysis['price_details'].append(price_detail)
-                
-                if is_valid:
-                    analysis['compliant_prices'] += 1
-                else:
-                    analysis['non_compliant_prices'] += 1
-            
-            # Generate summary statistics
-            analysis['summary'] = {
-                'compliance_rate': (analysis['compliant_prices'] / len(prices)) * 100 if prices else 0,
-                'total_adjustments_needed': analysis['non_compliant_prices'],
-                'max_adjustment_amount': max([p['adjustment_amount'] for p in analysis['price_details']]) if analysis['price_details'] else 0,
-                'avg_adjustment_amount': sum([p['adjustment_amount'] for p in analysis['price_details']]) / len(analysis['price_details']) if analysis['price_details'] else 0
-            }
-            
-            # Generate recommendations
-            if analysis['non_compliant_prices'] > 0:
-                analysis['recommendations'].append(f"Fix {analysis['non_compliant_prices']} non-compliant prices to prevent IBKR Error 110")
-                analysis['recommendations'].append("Use the rounded prices provided in price_details")
-                analysis['recommendations'].append("Consider implementing automatic tick size validation in order placement")
-            
-            if analysis['summary']['max_adjustment_amount'] > 0.05:
-                analysis['recommendations'].append("Large price adjustments detected - review pricing logic")
-            
-            logger.info(f"Tick size compliance analysis for {context}: {analysis['compliant_prices']}/{len(prices)} prices compliant")
-            return analysis
-            
-        except Exception as e:
-            logger.error(f"Error analyzing tick size compliance for {context}: {e}")
-            return {
-                'context': context,
-                'error': str(e),
-                'recommendations': ['Contact support for compliance analysis assistance']
-            }
     

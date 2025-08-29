@@ -49,7 +49,7 @@
             "DATA_COLLECTOR": "WARN",
             "GUI": "ERROR",
             "IB_CONNECTION": "WARN",
-            "TRADING_MANAGER": "WARN",
+            "TRADING_MANAGER": "DEBUG",
             "SETTINGS": "ERROR",
             "LOGGER_MANAGER": "ERROR",
             "MAIN": "TRACE",
@@ -73,6 +73,7 @@
         "cache_duration_minutes": 15
     },
     "account": {
-        "high_water_mark": 998090.87
+        "high_water_mark": 984439.25,
+        "high_water_mark_check_date": "2025-08-29"
     }
 }
