@@ -217,6 +217,10 @@ class LoggerManager:
         if not self._config or not self._config.debug:
             return
         
+        # Check if master debug is enabled - if not, don't apply module configurations
+        if not self._config.debug.get("master_debug", False):
+            return
+        
         debug_config = self._config.debug
         modules_config = debug_config.get("modules", {})
         
@@ -229,12 +233,22 @@ class LoggerManager:
     def _set_module_log_level(self, module_name: str, level: str):
         """Set log level for a specific module"""
         try:
+            # Check if master debug is enabled - if not, force ERROR level
+            if self._config and self._config.debug and not self._config.debug.get("master_debug", False):
+                level = "ERROR"
+            
             # Convert level to Python logging level
             python_level = LogLevelEnum.get_python_level(level)
             
             # Get or create logger for the module
             logger = logging.getLogger(module_name)
             logger.setLevel(python_level)
+            
+            # If logging is disabled, prevent propagation and remove handlers
+            if self._config and self._config.debug and not self._config.debug.get("master_debug", False):
+                logger.propagate = False
+                for handler in logger.handlers[:]:
+                    logger.removeHandler(handler)
             
             # Store reference
             self._module_loggers[module_name] = {
@@ -260,6 +274,17 @@ class LoggerManager:
         """
         # Normalize module name to uppercase
         module_name = module_name.upper()
+        
+        # Check if master debug is enabled - if not, return a disabled logger
+        if self._config and self._config.debug and not self._config.debug.get("master_debug", False):
+            # Return a logger that only shows errors and doesn't propagate
+            logger = logging.getLogger(module_name)
+            logger.setLevel(logging.ERROR)
+            logger.propagate = False
+            # Remove any existing handlers
+            for handler in logger.handlers[:]:
+                logger.removeHandler(handler)
+            return logger
         
         # Ensure console handler is set up for immediate logging
         self._ensure_console_handler()
@@ -295,6 +320,12 @@ class LoggerManager:
             log_level_dict: Dictionary mapping module names to log levels
         """
         try:
+            # Check if master debug is enabled - if not, don't update levels
+            if self._config and self._config.debug and not self._config.debug.get("master_debug", False):
+                logger = logging.getLogger("LOGGER_MANAGER")
+                logger.warning("Cannot update log levels - master debug is disabled")
+                return
+            
             for module_name, level in log_level_dict.items():
                 if level in LogLevelEnum.get_available_levels():
                     self._set_module_log_level(module_name, level)
@@ -308,6 +339,16 @@ class LoggerManager:
                     )
         except Exception as e:
             logging.getLogger("LOGGER_MANAGER").error(f"Error updating log levels: {e}")
+    
+    def is_logging_enabled(self) -> bool:
+        """Check if logging is currently enabled (master_debug is True)"""
+        if not self._config or not self._config.debug:
+            return False
+        return self._config.debug.get("master_debug", False)
+    
+    def get_master_debug_status(self) -> bool:
+        """Get the current master debug status"""
+        return self.is_logging_enabled()
     
     def get_available_modules(self) -> List[str]:
         """Get list of all discovered modules"""
@@ -330,31 +371,109 @@ class LoggerManager:
     def refresh_configuration(self, config: 'AppConfig'):
         """Refresh configuration and reapply to all loggers"""
         self._config = config
+        
+        # Check if master debug has changed and apply logging control
+        self._apply_master_debug_control()
+        
+        # Apply module-specific configurations
         self._apply_config()
         
         logger = logging.getLogger("LOGGER_MANAGER")
         logger.info("Logger configuration refreshed")
     
+    def _apply_master_debug_control(self):
+        """Apply master debug control to enable/disable all logging"""
+        if not self._config or not self._config.debug:
+            return
+        
+        master_debug_enabled = self._config.debug.get("master_debug", False)
+        
+        # Get root logger
+        root_logger = logging.getLogger()
+        
+        if master_debug_enabled:
+            # Re-enable all logging by restoring handlers
+            self._setup_root_logger()
+            logging.getLogger("LOGGER_MANAGER").info("Master debug enabled - all logging restored")
+        else:
+            # Disable all logging by removing all handlers except errors
+            for handler in root_logger.handlers[:]:
+                # Keep only error handlers for critical issues
+                if not isinstance(handler, logging.handlers.RotatingFileHandler) or \
+                   not handler.baseFilename.endswith("errors.log"):
+                    root_logger.removeHandler(handler)
+            
+            # Set root logger level to ERROR to suppress all non-error messages
+            root_logger.setLevel(logging.ERROR)
+            
+            # Also disable all module loggers by setting their levels to ERROR
+            # and removing their handlers
+            for module_info in self._module_loggers.values():
+                if 'logger' in module_info:
+                    module_logger = module_info['logger']
+                    module_logger.setLevel(logging.ERROR)
+                    # Remove all handlers from module loggers
+                    for handler in module_logger.handlers[:]:
+                        module_logger.removeHandler(handler)
+            
+            # Disable propagation to root logger for all module loggers
+            for module_info in self._module_loggers.values():
+                if 'logger' in module_info:
+                    module_info['logger'].propagate = False
+            
+            logging.getLogger("LOGGER_MANAGER").info("Master debug disabled - logging stopped (errors only)")
+    
+    def force_logging_control(self, enable: bool):
+        """Force enable/disable logging (for testing purposes)"""
+        if enable:
+            # Re-enable all logging
+            self._setup_root_logger()
+            self._apply_config()
+            logging.getLogger("LOGGER_MANAGER").info("Logging force-enabled")
+        else:
+            # Disable all logging except errors
+            root_logger = logging.getLogger()
+            for handler in root_logger.handlers[:]:
+                if not isinstance(handler, logging.handlers.RotatingFileHandler) or \
+                   not handler.baseFilename.endswith("errors.log"):
+                    root_logger.removeHandler(handler)
+            
+            root_logger.setLevel(logging.ERROR)
+            
+            # Also disable all module loggers
+            for module_info in self._module_loggers.values():
+                if 'logger' in module_info:
+                    module_info['logger'].setLevel(logging.ERROR)
+            
+            logging.getLogger("LOGGER_MANAGER").info("Logging force-disabled (errors only)")
+    
     def log_performance(self, operation: str, duration: float, **kwargs):
         """Log performance metrics"""
+        if not self.is_logging_enabled():
+            return
         perf_logger = logging.getLogger("PERFORMANCE")
         context = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
         perf_logger.info(f"PERF: {operation} took {duration:.3f}s | {context}")
     
     def log_trade_event(self, event_type: str, symbol: str, quantity: int, price: float, **kwargs):
         """Log trading events with structured data"""
+        if not self.is_logging_enabled():
+            return
         trade_logger = logging.getLogger("TRADING")
         context = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
         trade_logger.info(f"TRADE: {event_type} | {symbol} | Qty: {quantity} | Price: ${price:.2f} | {context}")
     
     def log_connection_event(self, event_type: str, host: str, port: int, status: str, **kwargs):
         """Log connection events"""
+        if not self.is_logging_enabled():
+            return
         conn_logger = logging.getLogger("CONNECTION")
         context = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
         conn_logger.info(f"CONN: {event_type} | {host}:{port} | Status: {status} | {context}")
     
     def log_error_with_context(self, error: Exception, context: str = "", **kwargs):
         """Log errors with additional context"""
+        # Always log errors regardless of master_debug setting
         error_logger = logging.getLogger("ERRORS")
         context_data = " | ".join([f"{k}={v}" for k, v in kwargs.items()])
         error_logger.error(f"ERROR: {type(error).__name__}: {str(error)} | Context: {context} | {context_data}")
@@ -417,22 +536,44 @@ def refresh_logger_configuration(config: 'AppConfig'):
     _logger_manager.refresh_configuration(config)
 
 
+def is_logging_enabled() -> bool:
+    """Check if logging is currently enabled (master_debug is True)"""
+    return _logger_manager.is_logging_enabled()
+
+
+def force_logging_control(enable: bool):
+    """Force enable/disable logging (for testing purposes)"""
+    _logger_manager.force_logging_control(enable)
+
+
+def get_master_debug_status() -> bool:
+    """Get the current master debug status"""
+    return _logger_manager.get_master_debug_status()
+
+
 # Convenience functions for common logging operations
 def log_performance(operation: str, duration: float, **kwargs):
     """Log performance metrics"""
+    if not is_logging_enabled():
+        return
     _logger_manager.log_performance(operation, duration, **kwargs)
 
 
 def log_trade_event(event_type: str, symbol: str, quantity: int, price: float, **kwargs):
     """Log trading events"""
+    if not is_logging_enabled():
+        return
     _logger_manager.log_trade_event(event_type, symbol, quantity, price, **kwargs)
 
 
 def log_connection_event(event_type: str, host: str, port: int, status: str, **kwargs):
     """Log connection events"""
+    if not is_logging_enabled():
+        return
     _logger_manager.log_connection_event(event_type, host, port, status, **kwargs)
 
 
 def log_error_with_context(error: Exception, context: str = "", **kwargs):
     """Log errors with context"""
+    # Always log errors regardless of master_debug setting
     _logger_manager.log_error_with_context(error, context, **kwargs)

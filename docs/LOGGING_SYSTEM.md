@@ -12,6 +12,7 @@ The IB Trading Application now features a centralized, dynamically configurable 
 - **GUI Integration**: Control logging verbosity through the settings interface
 - **Performance Monitoring**: Built-in performance and trade event logging
 - **Log Rotation**: Automatic log file rotation with size limits
+- **Master Debug Control**: Complete logging enable/disable with master debug setting
 
 ## 🏗️ Architecture
 
@@ -74,33 +75,6 @@ from utils.logger import log_trade_event
 log_trade_event("BUY", "AAPL", 100, 150.50, order_id="12345")
 ```
 
-## ⚙️ Configuration
-
-### Configuration File (config.json)
-
-```json
-{
-  "debug": {
-    "master_debug": true,
-    "modules": {
-      "MAIN": "INFO",
-      "GUI": "DEBUG",
-      "IB_CONNECTION": "TRACE",
-      "DATA_COLLECTOR": "INFO",
-      "CONFIG_MANAGER": "TRACE",
-      "AI_ENGINE": "INFO",
-      "TRADING_MANAGER": "INFO"
-    }
-  }
-}
-```
-
-### Configuration Options
-
-- **master_debug**: Enable/disable debug logging globally
-- **modules**: Per-module log level configuration
-- **Log Levels**: TRACE, DEBUG, INFO, WARN, ERROR, FATAL
-
 ## 🔧 API Reference
 
 ### Core Functions
@@ -155,6 +129,26 @@ Get current log level for a specific module.
 **Returns:**
 - Current log level as string
 
+### Master Debug Control Functions
+
+#### `is_logging_enabled()`
+Check if logging is currently enabled (master_debug is True).
+
+**Returns:**
+- Boolean indicating if logging is enabled
+
+#### `get_master_debug_status()`
+Get the current master debug status.
+
+**Returns:**
+- Boolean indicating master debug status
+
+#### `force_logging_control(enable)`
+Force enable/disable logging (for testing purposes).
+
+**Parameters:**
+- `enable`: Boolean to enable (True) or disable (False) logging
+
 ### Convenience Functions
 
 #### `log_performance(operation, duration, **kwargs)`
@@ -168,6 +162,83 @@ Log connection events.
 
 #### `log_error_with_context(error, context, **kwargs)`
 Log errors with additional context.
+
+## ⚙️ Configuration
+
+### Configuration File (config.json)
+
+```json
+{
+  "debug": {
+    "master_debug": true,
+    "modules": {
+      "MAIN": "INFO",
+      "GUI": "DEBUG",
+      "IB_CONNECTION": "TRACE",
+      "DATA_COLLECTOR": "INFO",
+      "CONFIG_MANAGER": "TRACE",
+      "AI_ENGINE": "INFO",
+      "TRADING_MANAGER": "INFO"
+    }
+  }
+}
+```
+
+### Configuration Options
+
+- **master_debug**: Enable/disable debug logging globally
+- **modules**: Per-module log level configuration
+- **Log Levels**: TRACE, DEBUG, INFO, WARN, ERROR, FATAL
+
+## 🔧 Master Debug Control
+
+The logging system includes a master debug control feature that allows you to completely enable or disable all logging (except critical errors) through the `master_debug` setting.
+
+### How It Works
+
+When `master_debug` is set to `false`:
+- All logging is immediately stopped
+- Only critical error messages are preserved
+- All log handlers (except error handlers) are removed
+- Module log level changes are ignored
+- Performance, trade, and connection event logging is disabled
+
+When `master_debug` is set to `true`:
+- All logging is restored to previous levels
+- Module-specific log levels are reapplied
+- All logging handlers are restored
+
+### Usage
+
+```python
+from utils.logger import is_logging_enabled, get_master_debug_status
+
+# Check if logging is currently enabled
+if is_logging_enabled():
+    logger.info("Logging is active")
+else:
+    print("Logging is disabled")
+
+# Get the current master debug status
+status = get_master_debug_status()
+print(f"Master debug is {'enabled' if status else 'disabled'}")
+```
+
+### Force Control (Advanced)
+
+For testing or emergency situations, you can force enable/disable logging:
+
+```python
+from utils.logger import force_logging_control
+
+# Force disable all logging
+force_logging_control(False)
+
+# Force enable all logging
+force_logging_control(True)
+```
+
+**Note**: Force control bypasses the configuration and should be used sparingly.
 
 ## 🖥️ GUI Integration
 
