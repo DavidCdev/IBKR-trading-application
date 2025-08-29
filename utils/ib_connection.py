@@ -1,4 +1,5 @@
 import asyncio
+import csv
 from typing import Optional, Dict, Any, List
 from ib_async import IB, Stock, Option, Forex
 import pandas as pd
@@ -9,6 +10,7 @@ import time
 from .logger import get_logger, log_connection_event, log_error_with_context
 from .performance_monitor import monitor_function, monitor_async_function
 from .trading_manager import TradingManager
+from .csv_logger import CSVTradeLogger
 from collections import defaultdict, deque
 
 logger = get_logger("IB_CONNECTION")
@@ -66,6 +68,9 @@ class IBDataCollector:
 
         # Initialize trading manager
         self.trading_manager = TradingManager(self.ib, trading_config, account_config)
+
+        # Initialize CSV logger for trade and account logging
+        self.csv_logger = CSVTradeLogger()
 
         self._register_ib_callbacks()
         # Event loop used for scheduling coroutines from background threads
@@ -1220,6 +1225,27 @@ class IBDataCollector:
             # Update trading manager with daily PnL data
             if hasattr(self, 'trading_manager'):
                 self.trading_manager.update_market_data(daily_pnl_percent=daily_pnl_percent)
+            
+            # Update CSV with daily PnL if account liquidation is available
+            if self.account_liquidation > 0:
+                try:
+                    today = date.today()
+                    starting_value = self.account_liquidation - self.daily_pnl
+                    high_water_mark = self.account_config.get('high_water_mark') if self.account_config else self.account_liquidation
+                    
+                    account_csv_data = {
+                        'NetLiquidation': self.account_liquidation,
+                        'DailyPnL': self.daily_pnl,
+                        'StartingValue': starting_value,
+                        'HighWaterMark': high_water_mark,
+                        'ProfitableTrades': 0,  # Will be updated when trades are closed
+                        'ProfitAmount': 0,      # Will be updated when trades are closed
+                        'LossTrades': 0,        # Will be updated when trades are closed
+                        'LossAmount': 0         # Will be updated when trades are closed
+                    }
+                    self.csv_logger.log_account_summary(account_csv_data, today)
+                except Exception as e:
+                    logger.error(f"Failed to update CSV with daily PnL: {e}")
 
     def on_account_summary_update(self, account_summary, *args, **kwargs):
         logger.debug(f"Account summary update received: {len(account_summary) if account_summary else 0} items")
@@ -1270,6 +1296,23 @@ class IBDataCollector:
             }
             logger.info(f"Updated Account Metrics: {metrics}")
             self.data_worker.account_summary_update.emit(metrics)
+            
+            # Log account summary to CSV
+            try:
+                today = date.today()
+                account_csv_data = {
+                    'NetLiquidation': self.account_liquidation,
+                    'DailyPnL': self.daily_pnl,
+                    'StartingValue': starting_value,
+                    'HighWaterMark': high_water_mark,
+                    'ProfitableTrades': 0,  # Will be updated when trades are closed
+                    'ProfitAmount': 0,      # Will be updated when trades are closed
+                    'LossTrades': 0,        # Will be updated when trades are closed
+                    'LossAmount': 0         # Will be updated when trades are closed
+                }
+                self.csv_logger.log_account_summary(account_csv_data, today)
+            except Exception as e:
+                logger.error(f"Failed to log account summary to CSV: {e}")
             
             # Update trading manager with account value
             if hasattr(self, 'trading_manager'):
@@ -1455,12 +1498,13 @@ class IBDataCollector:
         contract = trade.contract
         exec = fill.execution
 
-        # Filter only options trades (calls/puts) and only today's trades
+        # Filter only options trades (calls/puts) and only today's trades on the primary underlying symbol
         if (
                 contract.secType != 'OPT' or
                 contract.right not in ['C', 'P'] or
                 contract.symbol != self.underlying_symbol
         ):
+            logger.debug(f"Skipping non-options trade or non-primary symbol: {contract.secType} {contract.symbol} {contract.right}")
             return
 
         symbol_key = (
@@ -1487,6 +1531,25 @@ class IBDataCollector:
             'price': price,
             'multiplier': multiplier,
         }
+        
+        # Log trade execution to CSV
+        try:
+            trade_log_data = {
+                'timestamp': time_filled,
+                'trade_type': 'BUY' if side == 'BOT' else 'SELL',
+                'right': contract.right,
+                'con_id': contract.conId,
+                'strike': contract.strike,
+                'expiry': contract.lastTradeDateOrContractMonth,
+                'quantity': fill_qty,
+                'price': price,
+                'pnl': 0,  # Will be calculated when trade is closed
+                'outcome': '',  # Will be set when trade is closed
+                'order_id': exec.orderId
+            }
+            self.csv_logger.log_trade(trade_log_data)
+        except Exception as e:
+            logger.error(f"Failed to log trade to CSV: {e}")
 
         if side == 'BOT':
             open_positions[symbol_key].append(fill_data)
@@ -1511,6 +1574,14 @@ class IBDataCollector:
                 logger.debug(f"Added closed trade: {trade_data}")
 
                 logger.info(f"Closed Trade: {match_qty}x {symbol_key} P&L = {pnl:.2f}")
+                
+                # Update CSV log with closed trade PnL and outcome
+                try:
+                    # Find the corresponding BUY trade in the CSV and update it
+                    outcome = 'Profit' if pnl > 0 else 'Loss'
+                    self._update_csv_trade_outcome(contract.conId, opener['time'], match_qty, pnl, outcome)
+                except Exception as e:
+                    logger.error(f"Failed to update CSV trade outcome: {e}")
 
                 # Adjust remaining qtys
                 opener['qty'] -= match_qty
@@ -1570,6 +1641,84 @@ class IBDataCollector:
         }
         logger.info(f"Closed trades stats before dataworker:{stats}")
         self.data_worker.closed_trades_update.emit(stats)
+        
+        # Log closed trades summary to CSV
+        try:
+            self.csv_logger.log_closed_trades_summary(stats, today)
+        except Exception as e:
+            logger.error(f"Failed to log closed trades summary to CSV: {e}")
+    
+    def _update_csv_trade_outcome(self, con_id: int, buy_time: datetime, qty: float, pnl: float, outcome: str):
+        """
+        Update the CSV trade log with PnL and outcome for a closed trade.
+        This method finds the corresponding BUY trade and updates it with the results.
+        """
+        try:
+            # Get today's date
+            today = date.today()
+            
+            # Read the daily trade log
+            daily_trades = self.csv_logger.get_daily_trades(today)
+            
+            # Find the BUY trade that matches this closed trade
+            for trade in daily_trades:
+                if (trade['ConId'] == str(con_id) and 
+                    trade['Trade Type'] == 'BUY' and 
+                    trade['Quantity'] == str(qty) and
+                    trade['PnL'] == '0' and  # Unclosed trade
+                    trade['Outcome'] == ''):  # No outcome yet
+                    
+                    # Update the trade with PnL and outcome
+                    self._update_csv_trade_row(trade, pnl, outcome)
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Failed to update CSV trade outcome: {e}")
+    
+    def _update_csv_trade_row(self, trade: Dict[str, str], pnl: float, outcome: str):
+        """
+        Update a specific row in the daily trade log CSV file.
+        """
+        try:
+            today = date.today()
+            daily_log_file = self.csv_logger.daily_logs_dir / self.csv_logger._get_daily_log_filename(today)
+            
+            if not daily_log_file.exists():
+                logger.warning(f"Daily log file doesn't exist: {daily_log_file}")
+                return
+            
+            # Read all rows
+            rows = []
+            with open(daily_log_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                headers = next(reader)  # Skip headers
+                rows.append(headers)
+                
+                for row in reader:
+                    # Check if this is the row to update
+                    if (row[2] == trade['Right'] and  # Right
+                        row[3] == trade['ConId'] and   # ConId
+                        row[4] == trade['Strike'] and  # Strike
+                        row[5] == trade['Expiry'] and  # Expiry
+                        row[6] == trade['Quantity'] and # Quantity
+                        row[7] == trade['Price'] and   # Price
+                        row[8] == '0' and              # PnL (unclosed)
+                        row[9] == ''):                 # Outcome (empty)
+                        
+                        # Update PnL and outcome
+                        row[8] = str(pnl)
+                        row[9] = outcome
+                        logger.debug(f"Updated CSV trade row: PnL={pnl}, Outcome={outcome}")
+                    
+                    rows.append(row)
+            
+            # Write updated data back to file
+            with open(daily_log_file, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerows(rows)
+                
+        except Exception as e:
+            logger.error(f"Failed to update CSV trade row: {e}")
         
     async def get_trade_statistics(self) -> pd.DataFrame:
         """Get trade statistics with improved error handling"""

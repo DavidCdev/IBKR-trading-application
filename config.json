@@ -53,7 +53,8 @@
             "SETTINGS": "ERROR",
             "LOGGER_MANAGER": "ERROR",
             "MAIN": "TRACE",
-            "AI_ENGINE": "ERROR"
+            "AI_ENGINE": "ERROR",
+            "CSV_LOGGER": "DEBUG"
         },
         "external_loggers": {
             "ib_async.wrapper": "WARN",
