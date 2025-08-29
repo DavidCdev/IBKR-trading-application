@@ -1778,7 +1778,18 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error generating user friendly message: {e}")
             return "Unable to calculate trading capacity."
-    
+        
+    def cleanup(self):
+        """Cleanup resources"""
+        try:
+            self._stop_chase.set()
+            if self._chase_thread and self._chase_thread.is_alive():
+                self._chase_thread.join(timeout=5)
+            
+            logger.info("Trading Manager cleanup completed")
+        except Exception as e:
+            logger.error(f"Error during trading manager cleanup: {e}")
+
     def get_last_action_message(self) -> str:
         """Return the last user-facing action message for UI notifications"""
         try:
