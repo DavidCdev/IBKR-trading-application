@@ -148,6 +148,7 @@ class CSVTradeLogger:
             
             # Prepare new summary row
             date_str = trading_date.strftime('%Y-%m-%d')
+            logger.debug(f"Account Data: {account_data}")
             new_summary = {
                 'Date': date_str,
                 'Total Balance (CAD)': account_data.get('NetLiquidation', 0),
@@ -172,42 +173,6 @@ class CSVTradeLogger:
             
         except Exception as e:
             logger.error(f"Failed to log account summary to CSV: {e}")
-    
-    def log_closed_trades_summary(self, trades_summary: Dict[str, Any], trading_date: date):
-        """
-        Update the trading summary with closed trades information.
-        
-        Args:
-            trades_summary: Dictionary containing trade statistics
-            trading_date: Date for the summary entry
-        """
-        try:
-            # Read existing summary data
-            if not self.summary_file.exists():
-                logger.warning("Trading summary file doesn't exist, cannot update trades summary")
-                return
-            
-            df = pd.read_csv(self.summary_file)
-            
-            # Find the row for the trading date
-            date_str = trading_date.strftime('%Y-%m-%d')
-            mask = df['Date'] == date_str
-            
-            if mask.any():
-                # Update existing row
-                df.loc[mask, 'Profitable Trades'] = trades_summary.get('Total_Wins_Count', 0)
-                df.loc[mask, 'Profit Amount'] = trades_summary.get('Total_Wins_Sum', 0)
-                df.loc[mask, 'Loss Trades'] = trades_summary.get('Total_Losses_Count', 0)
-                df.loc[mask, 'Loss Amount'] = trades_summary.get('Total_Losses_Sum', 0)
-                
-                # Write updated data back
-                df.to_csv(self.summary_file, index=False)
-                logger.info(f"Updated trades summary for {date_str}")
-            else:
-                logger.warning(f"No existing summary entry found for {date_str}")
-                
-        except Exception as e:
-            logger.error(f"Failed to update trades summary in CSV: {e}")
     
     def get_daily_trades(self, trading_date: date) -> List[Dict[str, Any]]:
         """

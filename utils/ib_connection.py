@@ -44,12 +44,20 @@ class IBDataCollector:
         self.underlying_symbol_price = 0
         self.daily_pnl = 0
         self.account_liquidation = 0
+        self.starting_value = 0
+        self.high_water_mark = 0
+        self.profitable_trades = 0
+        self.profit_amount = 0
+        self.loss_trades = 0
+        self.loss_amount = 0
+
         self.fx_ratio = 0
         self.option_strike = 0
         self._active_subscriptions = set()  # Track active market data subscriptions
         self.pos = None
         self.pos_type = ""
-        self.closed_trades = None
+        self.closed_trades = []
+        self.open_positions = defaultdict(deque)  # key: contract id tuple -> deque of opens
         self._last_pnl_payload = None
         
         self.option_p_mark = 0
@@ -1236,12 +1244,12 @@ class IBDataCollector:
                     account_csv_data = {
                         'NetLiquidation': self.account_liquidation,
                         'DailyPnL': self.daily_pnl,
-                        'StartingValue': starting_value,
-                        'HighWaterMark': high_water_mark,
-                        'ProfitableTrades': 0,  # Will be updated when trades are closed
-                        'ProfitAmount': 0,      # Will be updated when trades are closed
-                        'LossTrades': 0,        # Will be updated when trades are closed
-                        'LossAmount': 0         # Will be updated when trades are closed
+                        'StartingValue': self.starting_value,
+                        'HighWaterMark': self.high_water_mark,
+                        'ProfitableTrades': self.profitable_trades,
+                        'ProfitAmount': self.profit_amount,
+                        'LossTrades': self.loss_trades,
+                        'LossAmount': self.loss_amount
                     }
                     self.csv_logger.log_account_summary(account_csv_data, today)
                 except Exception as e:
@@ -1296,19 +1304,20 @@ class IBDataCollector:
             }
             logger.info(f"Updated Account Metrics: {metrics}")
             self.data_worker.account_summary_update.emit(metrics)
-            
+            self.starting_value = starting_value
+            self.high_water_mark = high_water_mark
             # Log account summary to CSV
             try:
                 today = date.today()
                 account_csv_data = {
                     'NetLiquidation': self.account_liquidation,
                     'DailyPnL': self.daily_pnl,
-                    'StartingValue': starting_value,
-                    'HighWaterMark': high_water_mark,
-                    'ProfitableTrades': 0,  # Will be updated when trades are closed
-                    'ProfitAmount': 0,      # Will be updated when trades are closed
-                    'LossTrades': 0,        # Will be updated when trades are closed
-                    'LossAmount': 0         # Will be updated when trades are closed
+                    'StartingValue': self.starting_value,
+                    'HighWaterMark': self.high_water_mark,
+                    'ProfitableTrades': self.profitable_trades,  # Will be updated when trades are closed
+                    'ProfitAmount': self.profit_amount,      # Will be updated when trades are closed
+                    'LossTrades': self.loss_trades,        # Will be updated when trades are closed
+                    'LossAmount': self.loss_amount        # Will be updated when trades are closed
                 }
                 self.csv_logger.log_account_summary(account_csv_data, today)
             except Exception as e:
@@ -1402,7 +1411,8 @@ class IBDataCollector:
                 'StartingValue': starting_value,
                 'HighWaterMark': high_water_mark,
             }
-
+            self.starting_value = starting_value
+            self.high_water_mark = high_water_mark
             df = pd.DataFrame([metrics])
             logger.info("Account metrics retrieved successfully")
             return df
@@ -1453,7 +1463,23 @@ class IBDataCollector:
                 'side': side,
                 'qty': quantity,
                 'price': price,
-                'contract': contract
+                'contract': contract,
+                'execId': exec.execId,
+                'acctNumber': exec.acctNumber,
+                'exchange': exec.exchange,
+                'shares': exec.shares,
+                'permId': exec.permId,
+                'clientId': exec.clientId,
+                'orderId': exec.orderId,
+                'liquidation': exec.liquidation,
+                'cumQty': exec.cumQty,
+                'avgPrice': exec.avgPrice,
+                'orderRef': exec.orderRef,
+                'evRule': exec.evRule,
+                'evMultiplier': exec.evMultiplier,
+                'modelCode': exec.modelCode,
+                'lastLiquidity': exec.lastLiquidity,
+                'pendingPriceRevision': exec.pendingPriceRevision
             }
 
             if side == 'BOT':
@@ -1474,7 +1500,39 @@ class IBDataCollector:
                         'buy_price': buy_trade['price'],
                         'sell_price': price,
                         'qty': match_qty,
-                        'pnl': pnl
+                        'pnl': pnl,
+                        'buy_execId': buy_trade['execId'],
+                        'sell_execId': exec.execId,
+                        'buy_acctNumber': buy_trade['acctNumber'],
+                        'sell_acctNumber': exec.acctNumber,
+                        'buy_exchange': buy_trade['exchange'],
+                        'sell_exchange': exec.exchange,
+                        'buy_shares': buy_trade['shares'],
+                        'sell_shares': exec.shares,
+                        'buy_permId': buy_trade['permId'],
+                        'sell_permId': exec.permId,
+                        'buy_clientId': buy_trade['clientId'],
+                        'sell_clientId': exec.clientId,
+                        'buy_orderId': buy_trade['orderId'],
+                        'sell_orderId': exec.orderId,
+                        'buy_liquidation': buy_trade['liquidation'],
+                        'sell_liquidation': exec.liquidation,
+                        'buy_cumQty': buy_trade['cumQty'],
+                        'sell_cumQty': exec.cumQty,
+                        'buy_avgPrice': buy_trade['avgPrice'],
+                        'sell_avgPrice': exec.avgPrice,
+                        'buy_orderRef': buy_trade['orderRef'],
+                        'sell_orderRef': exec.orderRef,
+                        'buy_evRule': buy_trade['evRule'],
+                        'sell_evRule': exec.evRule,
+                        'buy_evMultiplier': buy_trade['evMultiplier'],
+                        'sell_evMultiplier': exec.evMultiplier,
+                        'buy_modelCode': buy_trade['modelCode'],
+                        'sell_modelCode': exec.modelCode,
+                        'buy_lastLiquidity': buy_trade['lastLiquidity'],
+                        'sell_lastLiquidity': exec.lastLiquidity,
+                        'buy_pendingPriceRevision': buy_trade['pendingPriceRevision'],
+                        'sell_pendingPriceRevision': exec.pendingPriceRevision
                     })
 
                     # Adjust unmatched quantities
@@ -1488,12 +1546,8 @@ class IBDataCollector:
         return closed_trades
 
     def on_exec_details(self, trade, fill):
-        open_positions = defaultdict(deque)  # key: contract id tuple -> deque of opens
         multiplier_default = 100
         today = date.today()
-        
-        # Initialize closed_trades as a list if it's None
-        self._ensure_closed_trades_initialized()
         
         contract = trade.contract
         exec = fill.execution
@@ -1552,12 +1606,12 @@ class IBDataCollector:
             logger.error(f"Failed to log trade to CSV: {e}")
 
         if side == 'BOT':
-            open_positions[symbol_key].append(fill_data)
+            self.open_positions[symbol_key].append(fill_data)
         elif side == 'SLD':
             # match to existing buys FIFO
             remain_to_match = fill_qty
-            while remain_to_match > 0 and open_positions[symbol_key]:
-                opener = open_positions[symbol_key][0]
+            while remain_to_match > 0 and self.open_positions[symbol_key]:
+                opener = self.open_positions[symbol_key][0]
                 match_qty = min(opener['qty'], remain_to_match)
                 pnl = (price - opener['price']) * match_qty * multiplier
 
@@ -1588,15 +1642,12 @@ class IBDataCollector:
                 remain_to_match -= match_qty
 
                 if opener['qty'] == 0:
-                    open_positions[symbol_key].popleft()
+                    self.open_positions[symbol_key].popleft()
 
         # Calculate statistics
         wins = []
         losses = []
 
-        # Ensure closed_trades is a list before iterating
-        self._ensure_closed_trades_initialized()
-        
         try:
             for trade in self.closed_trades:
                 try:
@@ -1639,12 +1690,28 @@ class IBDataCollector:
             'Average_Loss': sum(losses) / len(losses) if losses else 0,
             'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
         }
+        self.profitable_trades = stats.get('Total_Wins_Count', 0)
+        self.profit_amount = stats.get('Total_Wins_Sum', 0)
+        self.loss_trades = stats.get('Total_Losses_Count', 0)
+        self.loss_amount = stats.get('Total_Losses_Sum', 0)
+
         logger.info(f"Closed trades stats before dataworker:{stats}")
         self.data_worker.closed_trades_update.emit(stats)
         
         # Log closed trades summary to CSV
         try:
-            self.csv_logger.log_closed_trades_summary(stats, today)
+            account_csv_data = {
+                'NetLiquidation': self.account_liquidation,
+                'DailyPnL': self.daily_pnl,
+                'StartingValue': self.starting_value,
+                'HighWaterMark': self.high_water_mark,
+                'ProfitableTrades': self.profitable_trades,
+                'ProfitAmount': self.profit_amount,
+                'LossTrades': self.loss_trades,
+                'LossAmount': self.loss_amount
+            }
+
+            self.csv_logger.log_account_summary(account_csv_data, today)
         except Exception as e:
             logger.error(f"Failed to log closed trades summary to CSV: {e}")
     
@@ -1733,9 +1800,6 @@ class IBDataCollector:
             wins = []
             losses = []
             
-            # Ensure closed_trades is a list before iterating
-            self._ensure_closed_trades_initialized()
-            
             try:
                 for trade in self.closed_trades:
                     try:
@@ -1778,6 +1842,11 @@ class IBDataCollector:
                 'Average_Loss': sum(losses) / len(losses) if losses else 0,
                 'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
             }
+            self.profitable_trades = stats.get('Total_Wins_Count', 0)
+            self.profit_amount = stats.get('Total_Wins_Sum', 0)
+            self.loss_trades = stats.get('Total_Losses_Count', 0)
+            self.loss_amount = stats.get('Total_Losses_Sum', 0)
+
             self.ib.execDetailsEvent += self.on_exec_details
             logger.info(f"Trade statistics calculated: {total_trades} trades, {win_rate:.2f}% win rate")
             return pd.DataFrame([stats])
@@ -2253,17 +2322,6 @@ class IBDataCollector:
         except Exception as e:
             logger.error(f"Error getting best available expiration: {e}")
             return None
-
-    def _ensure_closed_trades_initialized(self):
-        """Ensure closed_trades is initialized as a list"""
-        if self.closed_trades is None:
-            self.closed_trades = []
-            logger.debug("Initialized closed_trades as empty list")
-        elif not isinstance(self.closed_trades, list):
-            logger.warning(f"closed_trades is not a list: {type(self.closed_trades)}, reinitializing")
-            self.closed_trades = []
-        else:
-            logger.debug(f"closed_trades is already a list with {len(self.closed_trades)} items")
 
     def _notify_trading_manager_expirations(self, expirations: List[str]):
         """Notify trading manager about available expirations"""
