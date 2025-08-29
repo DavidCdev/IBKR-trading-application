@@ -7,6 +7,7 @@ from threading import Thread, Event, Lock
 import time
 import math
 from .logger import get_logger
+from .tick_size_validator import validate_and_round_price, TickSizeValidator
 
 logger = get_logger("TRADING_MANAGER")
 
@@ -867,7 +868,14 @@ class TradingManager:
             
             if use_chase_logic:
                 # Chase logic: Start with limit order at (midpoint - trade_delta)
-                limit_price = mid_price - self.trade_delta
+                # CRITICAL FIX: Validate and round limit price to conform to IBKR tick size requirements
+                raw_limit_price = mid_price - self.trade_delta
+                limit_price = validate_and_round_price(raw_limit_price, f"SELL limit order for {symbol}")
+                
+                # Log the price adjustment for debugging
+                if raw_limit_price != limit_price:
+                    logger.info(f"Adjusted limit price from ${raw_limit_price:.4f} to ${limit_price:.2f} for tick size compliance")
+                
                 order = self._create_adaptive_order("SELL", sell_quantity, limit_price)
                 
                 # Create contract (reuse from position if available)
@@ -1116,10 +1124,18 @@ class TradingManager:
             
             # Build orders (do not transmit yet) so we can set OCA if needed
             if stop_loss_percent:
-                stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent))
+                raw_stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent))
+                # CRITICAL FIX: Validate and round stop loss price to conform to IBKR tick size requirements
+                stop_loss_price = validate_and_round_price(raw_stop_loss_price, f"Stop loss order for {option_type}")
+                if raw_stop_loss_price != stop_loss_price:
+                    logger.info(f"Adjusted stop loss price from ${raw_stop_loss_price:.4f} to ${stop_loss_price:.2f} for tick size compliance")
                 stop_loss_order = self._create_stop_loss_order(quantity, stop_loss_price)
             if profit_gain_percent:
-                take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent))
+                raw_take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent))
+                # CRITICAL FIX: Validate and round take profit price to conform to IBKR tick size requirements
+                take_profit_price = validate_and_round_price(raw_take_profit_price, f"Take profit order for {option_type}")
+                if raw_take_profit_price != take_profit_price:
+                    logger.info(f"Adjusted take profit price from ${raw_take_profit_price:.4f} to ${take_profit_price:.2f} for tick size compliance")
                 take_profit_order = self._create_take_profit_order(quantity, take_profit_price)
             
             # If both exist, set OCA group so that one cancels the other at broker side
@@ -1611,4 +1627,143 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error in trading manager get_expiration_status: {e}")
             return {'error': str(e)}
+    
+    def validate_option_price_for_ib(self, price: float, context: str = "") -> Dict[str, Any]:
+        """
+        Validate an option price for IBKR compliance and provide detailed feedback.
+        
+        Args:
+            price: The option price to validate
+            context: Context for the validation (e.g., "SELL order", "Stop loss")
+            
+        Returns:
+            Dictionary with validation results and suggestions
+        """
+        try:
+            from .tick_size_validator import get_tick_size_info
+            
+            # Get detailed tick size information
+            tick_info = get_tick_size_info(price)
+            
+            # Add context and recommendations
+            result = {
+                'context': context,
+                'original_price': price,
+                'is_valid': tick_info.get('is_valid', False),
+                'tick_size': tick_info.get('tick_size', 0),
+                'validation_message': tick_info.get('validation_message', ''),
+                'rounded_price': tick_info.get('rounded_price', price),
+                'price_adjusted': price != tick_info.get('rounded_price', price),
+                'recommendations': []
+            }
+            
+            # Add specific recommendations based on validation results
+            if not result['is_valid']:
+                result['recommendations'].append(f"Use ${result['rounded_price']:.2f} instead of ${price:.4f}")
+                result['recommendations'].append(f"Tick size for this price range is ${result['tick_size']:.2f}")
+                
+                if price < 3.00:
+                    result['recommendations'].append("Prices below $3.00 must be multiples of $0.05")
+                else:
+                    result['recommendations'].append("Prices $3.00 and above must be multiples of $0.10")
+            
+            # Add IBKR compliance note
+            result['ibkr_compliance'] = {
+                'error_110_prevention': result['is_valid'],
+                'tick_size_requirement': f"${result['tick_size']:.2f}",
+                'price_threshold': "$3.00"
+            }
+            
+            logger.info(f"Price validation for {context}: ${price:.4f} -> {'VALID' if result['is_valid'] else 'INVALID'} (tick size: ${result['tick_size']:.2f})")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error validating option price {price} for IBKR compliance: {e}")
+            return {
+                'context': context,
+                'original_price': price,
+                'is_valid': False,
+                'error': str(e),
+                'recommendations': ['Contact support for price validation assistance']
+            }
+    
+    def analyze_tick_size_compliance(self, prices: List[float], context: str = "") -> Dict[str, Any]:
+        """
+        Analyze multiple prices for IBKR tick size compliance.
+        
+        Args:
+            prices: List of prices to analyze
+            context: Context for the analysis
+            
+        Returns:
+            Dictionary with comprehensive compliance analysis
+        """
+        try:
+            from .tick_size_validator import TickSizeValidator
+            
+            analysis = {
+                'context': context,
+                'total_prices': len(prices),
+                'compliant_prices': 0,
+                'non_compliant_prices': 0,
+                'price_details': [],
+                'summary': {},
+                'recommendations': []
+            }
+            
+            validator = TickSizeValidator()
+            
+            for i, price in enumerate(prices):
+                if price <= 0:
+                    continue
+                    
+                tick_size = validator.get_tick_size(price)
+                is_valid, message = validator.validate_price(price)
+                rounded_price = validator.round_to_valid_tick(price)
+                
+                price_detail = {
+                    'index': i,
+                    'original_price': price,
+                    'tick_size': tick_size,
+                    'is_valid': is_valid,
+                    'validation_message': message,
+                    'rounded_price': rounded_price,
+                    'price_adjusted': price != rounded_price,
+                    'adjustment_amount': abs(price - rounded_price)
+                }
+                
+                analysis['price_details'].append(price_detail)
+                
+                if is_valid:
+                    analysis['compliant_prices'] += 1
+                else:
+                    analysis['non_compliant_prices'] += 1
+            
+            # Generate summary statistics
+            analysis['summary'] = {
+                'compliance_rate': (analysis['compliant_prices'] / len(prices)) * 100 if prices else 0,
+                'total_adjustments_needed': analysis['non_compliant_prices'],
+                'max_adjustment_amount': max([p['adjustment_amount'] for p in analysis['price_details']]) if analysis['price_details'] else 0,
+                'avg_adjustment_amount': sum([p['adjustment_amount'] for p in analysis['price_details']]) / len(analysis['price_details']) if analysis['price_details'] else 0
+            }
+            
+            # Generate recommendations
+            if analysis['non_compliant_prices'] > 0:
+                analysis['recommendations'].append(f"Fix {analysis['non_compliant_prices']} non-compliant prices to prevent IBKR Error 110")
+                analysis['recommendations'].append("Use the rounded prices provided in price_details")
+                analysis['recommendations'].append("Consider implementing automatic tick size validation in order placement")
+            
+            if analysis['summary']['max_adjustment_amount'] > 0.05:
+                analysis['recommendations'].append("Large price adjustments detected - review pricing logic")
+            
+            logger.info(f"Tick size compliance analysis for {context}: {analysis['compliant_prices']}/{len(prices)} prices compliant")
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Error analyzing tick size compliance for {context}: {e}")
+            return {
+                'context': context,
+                'error': str(e),
+                'recommendations': ['Contact support for compliance analysis assistance']
+            }
     

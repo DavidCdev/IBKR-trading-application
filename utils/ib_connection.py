@@ -1081,18 +1081,23 @@ class IBDataCollector:
             return results
 
         # Calculate PnL
-        try:
-            if is_long:
-                price_diff = current_price - avg_cost
-                pnl_dollar = position_size * price_diff
-                pnl_percent = (price_diff / avg_cost) * 100 if avg_cost else 0
-            else:
-                price_diff = avg_cost - current_price
-                pnl_dollar = position_size * price_diff
-                pnl_percent = (price_diff / avg_cost) * 100 if avg_cost else 0
-        except ZeroDivisionError:
+        if (option_c_mark != -1.0) & (option_p_mark != -1.0):
+            try:
+                if is_long:
+                    price_diff = current_price - avg_cost
+                    pnl_dollar = position_size * price_diff
+                    pnl_percent = (price_diff / avg_cost) * 100 if avg_cost else 0
+                else:
+                    price_diff = avg_cost - current_price
+                    pnl_dollar = position_size * price_diff
+                    pnl_percent = (price_diff / avg_cost) * 100 if avg_cost else 0
+            except ZeroDivisionError:
+                pnl_dollar = 0
+                pnl_percent = 0
+
+        else:
             pnl_dollar = 0
-            pnl_percent = 0
+            pnl_percent = -1
 
         # Symbol resolution
         symbol = getattr(pos.contract, 'localSymbol', None) or contract_symbol or 'USDCAD'
