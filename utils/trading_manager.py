@@ -904,7 +904,7 @@ class TradingManager:
                 
                 # Track for chase logic
                 with self._order_lock:
-                    self._chase_orders[trade.order.orderId] = {
+                    chase_order_data = {
                         'trade': trade,
                         'contract': contract,
                         'original_quantity': sell_quantity,
@@ -912,6 +912,9 @@ class TradingManager:
                         'start_time': time.time(),
                         'limit_price': limit_price
                     }
+                    self._chase_orders[trade.order.orderId] = chase_order_data
+                    logger.info(f"Chase order {trade.order.orderId} initialized with contract: {getattr(contract, 'symbol', 'N/A')}, quantity: {sell_quantity}")
+                    logger.debug(f"Full chase order data: {chase_order_data}")
                 
                 # Start chase monitoring
                 self._start_chase_monitoring()
@@ -941,7 +944,17 @@ class TradingManager:
                             return False
                 
                 # Ensure routing fields are set and submit market order
-                logger.info(f"Submitting market order: {sell_quantity} contracts")
+                contract = self._ensure_contract_routable(contract)
+                
+                # CRITICAL FIX: Actually submit the market order to IB
+                market_order = self._create_adaptive_order("SELL", sell_quantity)
+                try:
+                    trade = self.ib.placeOrder(contract, market_order)
+                    logger.info(f"Market order submitted to IB: {sell_quantity} contracts, order ID: {trade.order.orderId}")
+                except Exception as submit_error:
+                    logger.error(f"Failed to submit market order to IB: {submit_error}")
+                    self._last_action_message = f"Failed to submit market order: {str(submit_error)}"
+                    return False
 
                 logger.info(f"SELL order submitted: {sell_quantity} contracts at market")
                 self._last_action_message = f"SELL submitted: {sell_quantity} contracts at market."
@@ -1022,7 +1035,14 @@ class TradingManager:
             
             # Clear chase orders
             with self._order_lock:
-                self._chase_orders.clear()
+                chase_count = len(self._chase_orders)
+                if chase_count > 0:
+                    logger.info(f"Clearing {chase_count} chase orders during panic button execution")
+                    for order_id, chase_data in self._chase_orders.items():
+                        logger.debug(f"Clearing chase order {order_id}: {chase_data}")
+                    self._chase_orders.clear()
+                else:
+                    logger.debug("No chase orders to clear")
             
         except Exception as e:
             logger.error(f"Error cancelling all orders: {e}")
@@ -1030,26 +1050,38 @@ class TradingManager:
     def _start_chase_monitoring(self):
         """Start monitoring chase orders"""
         if self._chase_thread and self._chase_thread.is_alive():
+            logger.debug("Chase monitoring already active")
             return
         
+        logger.info("Starting chase monitoring thread")
         self._stop_chase.clear()
         self._chase_thread = Thread(target=self._chase_monitor_loop, daemon=True)
         self._chase_thread.start()
+        logger.info("Chase monitoring thread started successfully")
     
     def _chase_monitor_loop(self):
         """Monitor chase orders and convert to market orders after 10 seconds"""
+        logger.info("Chase monitor loop started")
         while not self._stop_chase.is_set():
             try:
                 current_time = time.time()
                 orders_to_convert = []
                 
                 with self._order_lock:
+                    chase_count = len(self._chase_orders)
+                    if chase_count > 0:
+                        logger.debug(f"Monitoring {chase_count} active chase orders")
+                    
                     for order_id, chase_data in self._chase_orders.items():
-                        if current_time - chase_data['start_time'] >= 10:  # 10 seconds
+                        time_elapsed = current_time - chase_data['start_time']
+                        logger.debug(f"Chase order {order_id}: {time_elapsed:.1f}s elapsed, threshold: 10s")
+                        if time_elapsed >= 10:  # 10 seconds
                             orders_to_convert.append(order_id)
+                            logger.info(f"Chase order {order_id} ready for conversion to market: {time_elapsed:.1f}s elapsed")
                 
                 # Convert orders to market orders
                 for order_id in orders_to_convert:
+                    logger.info(f"Converting chase order {order_id} to market order after 10 seconds")
                     asyncio.run(self._convert_to_market_order(order_id))
                 
                 time.sleep(1)  # Check every second
@@ -1057,6 +1089,8 @@ class TradingManager:
             except Exception as e:
                 logger.error(f"Error in chase monitor loop: {e}")
                 time.sleep(1)
+        
+        logger.info("Chase monitor loop stopped")
     
     async def _convert_to_market_order(self, order_id: int):
         """Convert a limit order to a market order"""
@@ -1077,9 +1111,31 @@ class TradingManager:
                 logger.info(f"Cancelled limit order {order_id} for chase logic")
             except Exception as e:
                 logger.error(f"Error cancelling limit order {order_id}: {e}")
+                # Continue with market order conversion even if cancellation fails
             
             # Create and submit market order
             market_order = self._create_adaptive_order("SELL", remaining_quantity)
+            
+            # CRITICAL FIX: Actually submit the market order to IB
+            contract = chase_data.get('contract')
+            if not contract:
+                logger.error(f"No contract available for market order conversion of order {order_id}")
+                logger.error(f"Chase data keys: {list(chase_data.keys())}")
+                logger.error(f"Chase data: {chase_data}")
+                return
+            
+            # Ensure contract is routable
+            contract = self._ensure_contract_routable(contract)
+            logger.info(f"Contract for market order conversion: {contract}, symbol: {getattr(contract, 'symbol', 'N/A')}")
+            
+            # Submit the market order to IB
+            try:
+                trade = self.ib.placeOrder(contract, market_order)
+                logger.info(f"Market order submitted to IB: {remaining_quantity} contracts, order ID: {trade.order.orderId}")
+            except Exception as submit_error:
+                logger.error(f"Failed to submit market order to IB: {submit_error}")
+                self._last_action_message = f"Failed to submit market order: {str(submit_error)}"
+                return
 
             logger.info(f"Converted to market order: {remaining_quantity} contracts")
             self._last_action_message = (
@@ -1093,10 +1149,24 @@ class TradingManager:
             
             # Remove from chase orders
             with self._order_lock:
-                self._chase_orders.pop(order_id, None)
+                if order_id in self._chase_orders:
+                    removed_data = self._chase_orders.pop(order_id)
+                    logger.info(f"Chase order {order_id} removed after market conversion: {removed_data}")
+                else:
+                    logger.warning(f"Chase order {order_id} not found during cleanup")
+            
+            logger.info(f"Successfully converted chase order {order_id} to market order")
             
         except Exception as e:
             logger.error(f"Error converting to market order: {e}")
+            # Try to clean up chase order even on error
+            try:
+                with self._order_lock:
+                    if order_id in self._chase_orders:
+                        self._chase_orders.pop(order_id)
+                        logger.info(f"Cleaned up chase order {order_id} after error")
+            except Exception as cleanup_error:
+                logger.error(f"Error cleaning up chase order {order_id} after conversion error: {cleanup_error}")
     
     async def _place_bracket_orders(self, parent_order_id: int, contract, quantity: int, entry_price: float, option_type: str):
         """Place bracket orders (stop loss and take profit) for risk management"""
@@ -1429,9 +1499,12 @@ class TradingManager:
                     elif order_data['type'] == 'SELL':
                         # Update chase remaining quantity if this SELL is being chased
                         if order_id in self._chase_orders:
+                            old_quantity = self._chase_orders[order_id]['remaining_quantity']
                             self._chase_orders[order_id]['remaining_quantity'] = remaining_quantity
+                            logger.info(f"Updated chase order {order_id} remaining quantity: {old_quantity} -> {remaining_quantity}")
                             if remaining_quantity <= 0:
-                                self._chase_orders.pop(order_id, None)
+                                removed_data = self._chase_orders.pop(order_id)
+                                logger.info(f"Chase order {order_id} removed due to complete fill: {removed_data}")
             
         except Exception as e:
             logger.error(f"Error handling partial fill: {e}")
