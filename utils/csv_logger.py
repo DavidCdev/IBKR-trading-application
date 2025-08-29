@@ -62,8 +62,8 @@ class CSVTradeLogger:
             # Create file with headers if it doesn't exist
             if not self._daily_trade_log_file.exists():
                 headers = [
-                    'Timestamp', 'Trade Type', 'Right', 'ConId', 'Strike', 'Expiry',
-                    'Quantity', 'Price', 'PnL', 'Outcome', 'OrderId'
+                    'Buy Time', 'Sell Time', 'Symbol', 'Expiry', 'Strike', 'Option Type',
+                    'Buy Price', 'Sell Price', 'Quantity', 'PnL'
                 ]
                 
                 try:
@@ -75,46 +75,28 @@ class CSVTradeLogger:
                     logger.error(f"Failed to create daily trade log file: {e}")
     
     def log_trade(self, trade_data: Dict[str, Any]):
-        """
-        Log a trade execution to the daily trade log.
-        
-        Args:
-            trade_data: Dictionary containing trade information with keys:
-                - timestamp: datetime of trade execution
-                - trade_type: 'BUY' or 'SELL'
-                - right: 'C' for call, 'P' for put
-                - con_id: Contract ID
-                - strike: Strike price
-                - expiry: Expiration date (YYYYMMDD format)
-                - quantity: Number of contracts
-                - price: Execution price
-                - pnl: Profit/Loss (0 for buys)
-                - outcome: 'Profit', 'Loss', or empty string
-                - order_id: Order ID
-        """
         try:
             # Extract trading date from timestamp
-            if isinstance(trade_data['timestamp'], str):
+            if isinstance(trade_data['buy_time'], str):
                 trading_date = datetime.fromisoformat(trade_data['timestamp']).date()
             else:
-                trading_date = trade_data['timestamp'].date()
+                trading_date = trade_data['buy_time'].date()
             
             # Ensure daily log file exists
             self._ensure_daily_log_file(trading_date)
-            
+            tmp_contract = trade_data['contract']
             # Prepare row data
             row = [
-                trade_data.get('timestamp', ''),
-                trade_data.get('trade_type', ''),
-                trade_data.get('right', ''),
-                trade_data.get('con_id', ''),
-                trade_data.get('strike', ''),
-                trade_data.get('expiry', ''),
-                trade_data.get('quantity', ''),
-                trade_data.get('price', ''),
+                trade_data.get('buy_time', ''),
+                trade_data.get('sell_time', ''),
+                tmp_contract.symbol,
+                tmp_contract.lastTradeDateOrContractMonth,
+                tmp_contract.strike,
+                tmp_contract.right,
+                trade_data.get('buy_price', ''),
+                trade_data.get('sell_price', ''),
+                trade_data.get('qty', ''),
                 trade_data.get('pnl', ''),
-                trade_data.get('outcome', ''),
-                trade_data.get('order_id', '')
             ]
             
             # Write to daily log

@@ -1479,7 +1479,6 @@ class IBDataCollector:
                 'evMultiplier': exec.evMultiplier,
                 'modelCode': exec.modelCode,
                 'lastLiquidity': exec.lastLiquidity,
-                'pendingPriceRevision': exec.pendingPriceRevision
             }
 
             if side == 'BOT':
@@ -1501,38 +1500,6 @@ class IBDataCollector:
                         'sell_price': price,
                         'qty': match_qty,
                         'pnl': pnl,
-                        'buy_execId': buy_trade['execId'],
-                        'sell_execId': exec.execId,
-                        'buy_acctNumber': buy_trade['acctNumber'],
-                        'sell_acctNumber': exec.acctNumber,
-                        'buy_exchange': buy_trade['exchange'],
-                        'sell_exchange': exec.exchange,
-                        'buy_shares': buy_trade['shares'],
-                        'sell_shares': exec.shares,
-                        'buy_permId': buy_trade['permId'],
-                        'sell_permId': exec.permId,
-                        'buy_clientId': buy_trade['clientId'],
-                        'sell_clientId': exec.clientId,
-                        'buy_orderId': buy_trade['orderId'],
-                        'sell_orderId': exec.orderId,
-                        'buy_liquidation': buy_trade['liquidation'],
-                        'sell_liquidation': exec.liquidation,
-                        'buy_cumQty': buy_trade['cumQty'],
-                        'sell_cumQty': exec.cumQty,
-                        'buy_avgPrice': buy_trade['avgPrice'],
-                        'sell_avgPrice': exec.avgPrice,
-                        'buy_orderRef': buy_trade['orderRef'],
-                        'sell_orderRef': exec.orderRef,
-                        'buy_evRule': buy_trade['evRule'],
-                        'sell_evRule': exec.evRule,
-                        'buy_evMultiplier': buy_trade['evMultiplier'],
-                        'sell_evMultiplier': exec.evMultiplier,
-                        'buy_modelCode': buy_trade['modelCode'],
-                        'sell_modelCode': exec.modelCode,
-                        'buy_lastLiquidity': buy_trade['lastLiquidity'],
-                        'sell_lastLiquidity': exec.lastLiquidity,
-                        'buy_pendingPriceRevision': buy_trade['pendingPriceRevision'],
-                        'sell_pendingPriceRevision': exec.pendingPriceRevision
                     })
 
                     # Adjust unmatched quantities
@@ -1548,7 +1515,7 @@ class IBDataCollector:
     def on_exec_details(self, trade, fill):
         multiplier_default = 100
         today = date.today()
-        
+
         contract = trade.contract
         exec = fill.execution
 
@@ -1586,24 +1553,6 @@ class IBDataCollector:
             'multiplier': multiplier,
         }
         
-        # Log trade execution to CSV
-        try:
-            trade_log_data = {
-                'timestamp': time_filled,
-                'trade_type': 'BUY' if side == 'BOT' else 'SELL',
-                'right': contract.right,
-                'con_id': contract.conId,
-                'strike': contract.strike,
-                'expiry': contract.lastTradeDateOrContractMonth,
-                'quantity': fill_qty,
-                'price': price,
-                'pnl': 0,  # Will be calculated when trade is closed
-                'outcome': '',  # Will be set when trade is closed
-                'order_id': exec.orderId
-            }
-            self.csv_logger.log_trade(trade_log_data)
-        except Exception as e:
-            logger.error(f"Failed to log trade to CSV: {e}")
 
         if side == 'BOT':
             self.open_positions[symbol_key].append(fill_data)
@@ -1615,15 +1564,18 @@ class IBDataCollector:
                 match_qty = min(opener['qty'], remain_to_match)
                 pnl = (price - opener['price']) * match_qty * multiplier
 
+
                 trade_data = {
+                    'buy_time': opener['time'],
+                    'sell_time': time_filled,
                     'contract': contract,
-                    'qty': match_qty,
                     'buy_price': opener['price'],
                     'sell_price': price,
+                    'qty': match_qty,
                     'pnl': pnl,
-                    'buy_time': opener['time'],
-                    'sell_time': time_filled
                 }
+                self.csv_logger.log_trade(trade_data)
+
                 self.closed_trades.append(trade_data)
                 logger.debug(f"Added closed trade: {trade_data}")
 
@@ -1794,8 +1746,9 @@ class IBDataCollector:
             # Get completed orders
             all_trades = await self.get_today_option_executions(self.underlying_symbol)
             self.closed_trades = await self.match_trades_and_calculate_pnl(all_trades)
+
             logger.info(f"Retrieved {len(self.closed_trades) if isinstance(self.closed_trades, list) else 'unknown'} closed trades")
-        
+
             # Calculate statistics
             wins = []
             losses = []
@@ -1803,6 +1756,8 @@ class IBDataCollector:
             try:
                 for trade in self.closed_trades:
                     try:
+                        self.csv_logger.log_trade(trade)
+
                         if not isinstance(trade, dict):
                             logger.warning(f"Trade is not a dict: {type(trade)}, skipping")
                             continue
