@@ -910,7 +910,9 @@ class TradingManager:
                         'original_quantity': sell_quantity,
                         'remaining_quantity': sell_quantity,
                         'start_time': time.time(),
-                        'limit_price': limit_price
+                        'limit_price': limit_price,
+                        'order_id': trade.order.orderId,
+                        'last_status_check': time.time()
                     }
                     self._chase_orders[trade.order.orderId] = chase_order_data
                     logger.info(f"Chase order {trade.order.orderId} initialized with contract: {getattr(contract, 'symbol', 'N/A')}, quantity: {sell_quantity}")
@@ -1047,6 +1049,30 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error cancelling all orders: {e}")
     
+    def cancel_chase_order(self, order_id: int):
+        """Cancel a specific chase order and remove it from monitoring"""
+        try:
+            with self._order_lock:
+                if order_id in self._chase_orders:
+                    chase_data = self._chase_orders[order_id]
+                    trade = chase_data.get('trade')
+                    
+                    if trade and hasattr(trade, 'order'):
+                        try:
+                            self.ib.cancelOrder(trade.order)
+                            logger.info(f"Cancelled chase order {order_id}")
+                        except Exception as e:
+                            logger.error(f"Error cancelling chase order {order_id}: {e}")
+                    
+                    # Remove from chase monitoring
+                    removed_data = self._chase_orders.pop(order_id)
+                    logger.info(f"Removed cancelled chase order {order_id} from monitoring: {removed_data}")
+                else:
+                    logger.warning(f"Chase order {order_id} not found for cancellation")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling chase order {order_id}: {e}")
+    
     def _start_chase_monitoring(self):
         """Start monitoring chase orders"""
         if self._chase_thread and self._chase_thread.is_alive():
@@ -1058,6 +1084,58 @@ class TradingManager:
         self._chase_thread = Thread(target=self._chase_monitor_loop, daemon=True)
         self._chase_thread.start()
         logger.info("Chase monitoring thread started successfully")
+    
+    def _check_chase_order_status(self, order_id: int, chase_data: Dict[str, Any]) -> bool:
+        """Check if a chase order is still active (not filled/cancelled)"""
+        try:
+            trade = chase_data.get('trade')
+            if not trade or not hasattr(trade, 'orderStatus'):
+                return False
+            
+            order_status = trade.orderStatus
+            status = order_status.status.upper()
+            
+            # Order is no longer active if it's filled, cancelled, or in error state
+            if status in ['FILLED', 'CANCELLED', 'INACTIVE', 'ERROR']:
+                logger.info(f"Chase order {order_id} no longer active: {status}")
+                return False
+            
+            # Update last status check time
+            chase_data['last_status_check'] = time.time()
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking chase order {order_id} status: {e}")
+            return False
+    
+    def handle_order_status_update(self, order_id: int, status: str, filled: float = 0, remaining: float = 0, avg_fill_price: float = 0):
+        """Handle order status updates from IB callbacks and clean up chase monitoring"""
+        try:
+            logger.info(f"Order status update: Order {order_id}, Status: {status}, Filled: {filled}, Remaining: {remaining}")
+            
+            # Check if this is a chase order
+            with self._order_lock:
+                if order_id in self._chase_orders:
+                    chase_data = self._chase_orders[order_id]
+                    
+                    # If order is filled, remove from chase monitoring immediately
+                    if status.upper() == 'FILLED':
+                        removed_data = self._chase_orders.pop(order_id)
+                        logger.info(f"Chase order {order_id} filled, removed from monitoring: {removed_data}")
+                        
+                        # Update position tracking if this was a sell order
+                        if filled > 0 and avg_fill_price > 0:
+                            self._update_position_from_sell_fill({
+                                'option_type': 'CALL' if 'CALL' in str(chase_data.get('contract', '')) else 'PUT'
+                            }, filled, avg_fill_price)
+                    
+                    # If order is cancelled or in error state, remove from chase monitoring
+                    elif status.upper() in ['CANCELLED', 'INACTIVE', 'ERROR']:
+                        removed_data = self._chase_orders.pop(order_id)
+                        logger.info(f"Chase order {order_id} {status.lower()}, removed from monitoring: {removed_data}")
+            
+        except Exception as e:
+            logger.error(f"Error handling order status update for order {order_id}: {e}")
     
     def _chase_monitor_loop(self):
         """Monitor chase orders and convert to market orders after 10 seconds"""
@@ -1072,7 +1150,13 @@ class TradingManager:
                     if chase_count > 0:
                         logger.debug(f"Monitoring {chase_count} active chase orders")
                     
-                    for order_id, chase_data in self._chase_orders.items():
+                    for order_id, chase_data in list(self._chase_orders.items()):
+                        # Check if order is still active (not filled/cancelled)
+                        if not self._check_chase_order_status(order_id, chase_data):
+                            logger.info(f"Chase order {order_id} no longer active, removing from monitoring")
+                            self._chase_orders.pop(order_id, None)
+                            continue
+                        
                         time_elapsed = current_time - chase_data['start_time']
                         logger.debug(f"Chase order {order_id}: {time_elapsed:.1f}s elapsed, threshold: 10s")
                         if time_elapsed >= 10:  # 10 seconds
@@ -1509,6 +1593,55 @@ class TradingManager:
         except Exception as e:
             logger.error(f"Error handling partial fill: {e}")
     
+    def handle_order_fill(self, order_id: int, filled_quantity: int, fill_price: float):
+        """Handle complete order fill events and clean up chase monitoring"""
+        try:
+            logger.info(f"Order filled: Order {order_id}, Filled {filled_quantity} at ${fill_price:.2f}")
+            
+            # Immediately remove from chase monitoring if this was a chase order
+            with self._order_lock:
+                if order_id in self._chase_orders:
+                    removed_data = self._chase_orders.pop(order_id)
+                    logger.info(f"Chase order {order_id} removed from monitoring due to fill: {removed_data}")
+            
+            # Handle position updates for BUY orders
+            with self._order_lock:
+                if order_id in self._open_orders:
+                    order_data = self._open_orders[order_id]
+                    if order_data['type'] == 'BUY':
+                        self._update_position_from_fill(order_data, filled_quantity, fill_price)
+                    elif order_data['type'] == 'SELL':
+                        # For SELL orders, update position tracking
+                        self._update_position_from_sell_fill(order_data, filled_quantity, fill_price)
+            
+        except Exception as e:
+            logger.error(f"Error handling order fill: {e}")
+    
+    def _update_position_from_sell_fill(self, order_data: Dict[str, Any], filled_quantity: int, fill_price: float):
+        """Update position tracking when a sell order is filled"""
+        try:
+            symbol = f"{self.underlying_symbol} {order_data['option_type']}"
+            
+            with self._position_lock:
+                if symbol in self._active_positions:
+                    position = self._active_positions[symbol]
+                    current_size = position.get('position_size', 0)
+                    new_size = current_size - filled_quantity
+                    
+                    if new_size <= 0:
+                        # Position fully closed
+                        removed_position = self._active_positions.pop(symbol)
+                        logger.info(f"Position fully closed: {symbol}, {filled_quantity} contracts sold at ${fill_price:.2f}")
+                    else:
+                        # Partial position closed
+                        position['position_size'] = new_size
+                        logger.info(f"Partial position closed: {symbol}, {filled_quantity} contracts sold at ${fill_price:.2f}, remaining: {new_size}")
+                else:
+                    logger.warning(f"No active position found for sell fill: {symbol}")
+            
+        except Exception as e:
+            logger.error(f"Error updating position from sell fill: {e}")
+    
     async def _adjust_bracket_order_quantity(self, parent_order_id: int, new_quantity: int):
         """Adjust bracket order quantities after partial fills"""
         try:
@@ -1652,6 +1785,36 @@ class TradingManager:
             return str(self._last_action_message)
         except Exception:
             return ""
+    
+    def get_chase_order_status(self) -> Dict[str, Any]:
+        """Get current status of all chase orders for debugging and monitoring"""
+        try:
+            with self._order_lock:
+                chase_status = {}
+                for order_id, chase_data in self._chase_orders.items():
+                    trade = chase_data.get('trade')
+                    order_status = None
+                    if trade and hasattr(trade, 'orderStatus'):
+                        order_status = trade.orderStatus.status
+                    
+                    chase_status[order_id] = {
+                        'symbol': getattr(chase_data.get('contract'), 'symbol', 'N/A'),
+                        'quantity': chase_data.get('remaining_quantity', 0),
+                        'limit_price': chase_data.get('limit_price', 0),
+                        'start_time': chase_data.get('start_time', 0),
+                        'elapsed_time': time.time() - chase_data.get('start_time', time.time()),
+                        'order_status': order_status,
+                        'last_status_check': chase_data.get('last_status_check', 0)
+                    }
+                
+                return {
+                    'total_chase_orders': len(self._chase_orders),
+                    'chase_orders': chase_status
+                }
+            
+        except Exception as e:
+            logger.error(f"Error getting chase order status: {e}")
+            return {'error': str(e)}
 
     def manual_expiration_switch(self, target_expiration: str = None) -> bool:
         """Manually trigger expiration switching to a specific expiration or best available"""
