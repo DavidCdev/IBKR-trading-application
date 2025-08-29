@@ -49,11 +49,17 @@
             "DATA_COLLECTOR": "WARN",
             "GUI": "ERROR",
             "IB_CONNECTION": "WARN",
-            "TRADING_MANAGER": "DEBUG",
+            "TRADING_MANAGER": "WARN",
             "SETTINGS": "ERROR",
             "LOGGER_MANAGER": "ERROR",
             "MAIN": "TRACE",
             "AI_ENGINE": "ERROR"
+        },
+        "external_loggers": {
+            "ib_async.wrapper": "WARN",
+            "ib_async": "WARN",
+            "urllib3.connectionpool": "WARN",
+            "requests.packages.urllib3.connectionpool": "WARN"
         }
     },
     "ai_prompt": {

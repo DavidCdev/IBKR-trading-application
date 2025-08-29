@@ -13,6 +13,14 @@ from collections import defaultdict, deque
 
 logger = get_logger("IB_CONNECTION")
 
+# Suppress ib_async.wrapper logs by default to reduce noise
+try:
+    from .logger import suppress_external_logger
+    suppress_external_logger("ib_async.wrapper", suppress=True)
+    logger.debug("Suppressed ib_async.wrapper logs by default")
+except Exception as e:
+    logger.warning(f"Could not suppress ib_async.wrapper logs: {e}")
+
 
 class IBDataCollector:
     """

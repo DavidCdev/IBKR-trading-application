@@ -214,21 +214,18 @@ class LoggerManager:
     
     def _apply_config(self):
         """Apply configuration to all loggers"""
-        if not self._config or not self._config.debug:
-            return
-        
-        # Check if master debug is enabled - if not, don't apply module configurations
-        if not self._config.debug.get("master_debug", False):
-            return
-        
-        debug_config = self._config.debug
-        modules_config = debug_config.get("modules", {})
-        
-        # Apply configuration to discovered modules
-        for module_name in self._discovered_modules:
-            # Get configured level or default to INFO
-            configured_level = modules_config.get(module_name, "INFO")
-            self._set_module_log_level(module_name, configured_level)
+        try:
+            if self._config and self._config.debug:
+                # Apply module log levels
+                if self._config.debug.get("modules"):
+                    self.update_log_levels(self._config.debug["modules"])
+                
+                # Apply external logger levels
+                if self._config.debug.get("external_loggers"):
+                    self._refresh_external_logger_config(self._config.debug["external_loggers"])
+                    
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(f"Error applying config: {e}")
     
     def _set_module_log_level(self, module_name: str, level: str):
         """Set log level for a specific module"""
@@ -260,6 +257,64 @@ class LoggerManager:
         except Exception as e:
             logging.getLogger("LOGGER_MANAGER").error(
                 f"Error setting log level for module {module_name}: {e}"
+            )
+    
+    def set_external_logger_level(self, logger_name: str, level: str):
+        """Set log level for external/third-party loggers"""
+        try:
+            # Convert level to Python logging level
+            python_level = LogLevelEnum.get_python_level(level)
+            
+            # Get the external logger
+            external_logger = logging.getLogger(logger_name)
+            external_logger.setLevel(python_level)
+            
+            # Store reference for external loggers
+            if not hasattr(self, '_external_loggers'):
+                self._external_loggers = {}
+            
+            self._external_loggers[logger_name] = {
+                'logger': external_logger,
+                'level': level,
+                'python_level': python_level
+            }
+            
+            # Log the change
+            logger = logging.getLogger("LOGGER_MANAGER")
+            logger.info(f"Set external logger {logger_name} to level: {level}")
+            
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(
+                f"Error setting log level for external logger {logger_name}: {e}"
+            )
+    
+    def suppress_external_logger(self, logger_name: str, suppress: bool = True):
+        """Suppress or enable an external logger"""
+        try:
+            external_logger = logging.getLogger(logger_name)
+            
+            if suppress:
+                # Suppress the logger by setting to ERROR level and preventing propagation
+                external_logger.setLevel(logging.ERROR)
+                external_logger.propagate = False
+                
+                # Remove any existing handlers
+                for handler in external_logger.handlers[:]:
+                    external_logger.removeHandler(handler)
+                
+                logger = logging.getLogger("LOGGER_MANAGER")
+                logger.info(f"Suppressed external logger: {logger_name}")
+            else:
+                # Re-enable the logger by allowing propagation and setting to INFO
+                external_logger.setLevel(logging.INFO)
+                external_logger.propagate = True
+                
+                logger = logging.getLogger("LOGGER_MANAGER")
+                logger.info(f"Re-enabled external logger: {logger_name}")
+                
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(
+                f"Error {'suppressing' if suppress else 'enabling'} external logger {logger_name}: {e}"
             )
     
     def get_logger(self, module_name: str) -> logging.Logger:
@@ -356,10 +411,30 @@ class LoggerManager:
     
     def get_all_log_levels(self) -> Dict[str, str]:
         """Get current log level for each module"""
-        return {
-            module: info['level'] 
-            for module, info in self._module_loggers.items()
-        }
+        try:
+            levels = {}
+            for module_name, logger_info in self._module_loggers.items():
+                levels[module_name] = logger_info['level']
+            
+            # Include external loggers if any
+            if hasattr(self, '_external_loggers'):
+                for logger_name, logger_info in self._external_loggers.items():
+                    levels[f"EXTERNAL_{logger_name}"] = logger_info['level']
+            
+            return levels
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(f"Error getting all log levels: {e}")
+            return {}
+    
+    def get_external_loggers(self) -> Dict[str, str]:
+        """Get current log levels for external loggers"""
+        try:
+            if hasattr(self, '_external_loggers'):
+                return {name: info['level'] for name, info in self._external_loggers.items()}
+            return {}
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(f"Error getting external loggers: {e}")
+            return {}
     
     def get_module_log_level(self, module_name: str) -> str:
         """Get current log level for a specific module"""
@@ -369,59 +444,69 @@ class LoggerManager:
         return "INFO"  # Default level
     
     def refresh_configuration(self, config: 'AppConfig'):
-        """Refresh configuration and reapply to all loggers"""
-        self._config = config
-        
-        # Check if master debug has changed and apply logging control
-        self._apply_master_debug_control()
-        
-        # Apply module-specific configurations
-        self._apply_config()
-        
-        logger = logging.getLogger("LOGGER_MANAGER")
-        logger.info("Logger configuration refreshed")
+        """Refresh logger configuration from config"""
+        try:
+            self._config = config
+            
+            # Check if master debug has changed and apply logging control
+            self._apply_master_debug_control()
+            
+            # Update module log levels
+            if config.debug and config.debug.get("modules"):
+                self.update_log_levels(config.debug["modules"])
+            
+            # Update external logger levels if configured
+            if config.debug and config.debug.get("external_loggers"):
+                self._refresh_external_logger_config(config.debug["external_loggers"])
+                
+            logger = logging.getLogger("LOGGER_MANAGER")
+            logger.info("Logger configuration refreshed")
+                
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(f"Error refreshing logger configuration: {e}")
+    
+    def _refresh_external_logger_config(self, external_logger_config: Dict[str, str]):
+        """Refresh external logger configuration"""
+        try:
+            for logger_name, level in external_logger_config.items():
+                if level in LogLevelEnum.get_available_levels():
+                    self.set_external_logger_level(logger_name, level)
+                else:
+                    logging.getLogger("LOGGER_MANAGER").warning(
+                        f"Invalid log level '{level}' for external logger {logger_name}"
+                    )
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(f"Error refreshing external logger config: {e}")
     
     def _apply_master_debug_control(self):
-        """Apply master debug control to enable/disable all logging"""
-        if not self._config or not self._config.debug:
-            return
-        
-        master_debug_enabled = self._config.debug.get("master_debug", False)
-        
-        # Get root logger
-        root_logger = logging.getLogger()
-        
-        if master_debug_enabled:
-            # Re-enable all logging by restoring handlers
-            self._setup_root_logger()
-            logging.getLogger("LOGGER_MANAGER").info("Master debug enabled - all logging restored")
-        else:
-            # Disable all logging by removing all handlers except errors
-            for handler in root_logger.handlers[:]:
-                # Keep only error handlers for critical issues
-                if not isinstance(handler, logging.handlers.RotatingFileHandler) or \
-                   not handler.baseFilename.endswith("errors.log"):
-                    root_logger.removeHandler(handler)
-            
-            # Set root logger level to ERROR to suppress all non-error messages
-            root_logger.setLevel(logging.ERROR)
-            
-            # Also disable all module loggers by setting their levels to ERROR
-            # and removing their handlers
-            for module_info in self._module_loggers.values():
-                if 'logger' in module_info:
-                    module_logger = module_info['logger']
-                    module_logger.setLevel(logging.ERROR)
-                    # Remove all handlers from module loggers
-                    for handler in module_logger.handlers[:]:
-                        module_logger.removeHandler(handler)
-            
-            # Disable propagation to root logger for all module loggers
-            for module_info in self._module_loggers.values():
-                if 'logger' in module_info:
-                    module_info['logger'].propagate = False
-            
-            logging.getLogger("LOGGER_MANAGER").info("Master debug disabled - logging stopped (errors only)")
+        """Apply master debug control to all loggers"""
+        try:
+            if self._config and self._config.debug:
+                master_debug = self._config.debug.get("master_debug", False)
+                
+                if not master_debug:
+                    # Disable all logging except errors
+                    root_logger = logging.getLogger()
+                    root_logger.setLevel(logging.ERROR)
+                    
+                    # Disable all module loggers
+                    for module_name, logger_info in self._module_loggers.items():
+                        logger = logger_info['logger']
+                        logger.setLevel(logging.ERROR)
+                        logger.propagate = False
+                        
+                    # Disable all external loggers
+                    if hasattr(self, '_external_loggers'):
+                        for logger_name, logger_info in self._external_loggers.items():
+                            logger = logger_info['logger']
+                            logger.setLevel(logging.ERROR)
+                            logger.propagate = False
+                else:
+                    # Re-enable logging based on config
+                    self._apply_config()
+                    
+        except Exception as e:
+            logging.getLogger("LOGGER_MANAGER").error(f"Error applying master debug control: {e}")
     
     def force_logging_control(self, enable: bool):
         """Force enable/disable logging (for testing purposes)"""
@@ -526,6 +611,11 @@ def get_all_log_levels() -> Dict[str, str]:
     return _logger_manager.get_all_log_levels()
 
 
+def get_external_loggers() -> Dict[str, str]:
+    """Get current log levels for external loggers"""
+    return _logger_manager.get_external_loggers()
+
+
 def get_module_log_level(module_name: str) -> str:
     """Get current log level for a specific module"""
     return _logger_manager.get_module_log_level(module_name)
@@ -549,6 +639,16 @@ def force_logging_control(enable: bool):
 def get_master_debug_status() -> bool:
     """Get the current master debug status"""
     return _logger_manager.get_master_debug_status()
+
+
+def set_external_logger_level(logger_name: str, level: str):
+    """Set log level for external/third-party loggers"""
+    _logger_manager.set_external_logger_level(logger_name, level)
+
+
+def suppress_external_logger(logger_name: str, suppress: bool = True):
+    """Suppress or enable an external logger"""
+    _logger_manager.suppress_external_logger(logger_name, suppress)
 
 
 # Convenience functions for common logging operations
