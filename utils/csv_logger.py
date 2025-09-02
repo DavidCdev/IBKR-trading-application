@@ -30,6 +30,9 @@ class CSVTradeLogger:
         self._current_trading_day = None
         self._daily_trade_log_file = None
         
+        # Track logged trades to prevent duplicates within the same session
+        self._logged_trades = set()
+        
         logger.info(f"CSV Logger initialized. Daily logs: {self.daily_logs_dir}, Summary: {self.summary_file}")
     
     def _initialize_summary_file(self):
@@ -74,8 +77,28 @@ class CSVTradeLogger:
                 except Exception as e:
                     logger.error(f"Failed to create daily trade log file: {e}")
     
+    def _generate_trade_key(self, trade_data: Dict[str, Any]) -> str:
+        """Generate a unique key for a trade to prevent duplicates."""
+        try:
+            tmp_contract = trade_data['contract']
+            # Create a unique identifier based on trade characteristics
+            trade_key = f"{trade_data.get('buy_time', '')}_{tmp_contract.symbol}_{tmp_contract.lastTradeDateOrContractMonth}_{tmp_contract.strike}_{tmp_contract.right}_{trade_data.get('buy_price', '')}_{trade_data.get('sell_price', '')}_{trade_data.get('qty', '')}"
+            return trade_key
+        except Exception as e:
+            logger.warning(f"Could not generate trade key: {e}")
+            # Fallback to a simpler key
+            return f"{trade_data.get('buy_time', '')}_{trade_data.get('sell_time', '')}_{trade_data.get('qty', '')}"
+    
     def log_trade(self, trade_data: Dict[str, Any]):
         try:
+            # Generate unique trade key
+            trade_key = self._generate_trade_key(trade_data)
+            
+            # Check if this trade has already been logged in this session
+            if trade_key in self._logged_trades:
+                logger.warning(f"Duplicate trade detected, skipping: {trade_key}")
+                return
+            
             # Extract trading date from timestamp
             if isinstance(trade_data['buy_time'], str):
                 trading_date = datetime.fromisoformat(trade_data['timestamp']).date()
@@ -85,6 +108,7 @@ class CSVTradeLogger:
             # Ensure daily log file exists
             self._ensure_daily_log_file(trading_date)
             tmp_contract = trade_data['contract']
+            
             # Prepare row data
             row = [
                 trade_data.get('buy_time', ''),
@@ -103,6 +127,9 @@ class CSVTradeLogger:
             with open(self._daily_trade_log_file, 'a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(row)
+            
+            # Add to logged trades set
+            self._logged_trades.add(trade_key)
             
             logger.debug(f"Logged trade to daily log: {trade_data.get('trade_type')} {trade_data.get('right')} {trade_data.get('strike')}")
             
@@ -200,3 +227,72 @@ class CSVTradeLogger:
         except Exception as e:
             logger.error(f"Failed to read trading summary: {e}")
             return pd.DataFrame()
+
+    def clean_duplicate_trades(self, trading_date: date):
+        """
+        Clean up duplicate trades in a daily log file.
+        
+        Args:
+            trading_date: Date of the log file to clean
+        """
+        try:
+            daily_log_file = self.daily_logs_dir / self._get_daily_log_filename(trading_date)
+            
+            if not daily_log_file.exists():
+                logger.info(f"No daily log file found for {trading_date}")
+                return
+            
+            # Read existing trades
+            trades = []
+            with open(daily_log_file, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                trades = list(reader)
+            
+            if not trades:
+                logger.info(f"No trades found in {daily_log_file}")
+                return
+            
+            # Remove duplicates based on all fields
+            seen_trades = set()
+            unique_trades = []
+            duplicate_count = 0
+            
+            for trade in trades:
+                # Create a tuple of all trade values for comparison
+                trade_tuple = tuple(trade.values())
+                if trade_tuple not in seen_trades:
+                    seen_trades.add(trade_tuple)
+                    unique_trades.append(trade)
+                else:
+                    duplicate_count += 1
+            
+            if duplicate_count > 0:
+                logger.info(f"Found {duplicate_count} duplicate trades, cleaning up...")
+                
+                # Write back unique trades
+                with open(daily_log_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=trades[0].keys())
+                    writer.writeheader()
+                    writer.writerows(unique_trades)
+                
+                logger.info(f"Cleaned up daily log file. Original: {len(trades)} trades, After cleanup: {len(unique_trades)} trades")
+            else:
+                logger.info("No duplicates found in daily log file")
+                
+        except Exception as e:
+            logger.error(f"Failed to clean duplicate trades: {e}")
+    
+    def clean_all_duplicate_trades(self):
+        """Clean up duplicate trades in all daily log files."""
+        try:
+            for log_file in self.daily_logs_dir.glob("TradingLog-*.csv"):
+                # Extract date from filename
+                date_str = log_file.stem.replace("TradingLog-", "")
+                try:
+                    trading_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                    self.clean_duplicate_trades(trading_date)
+                except ValueError as e:
+                    logger.warning(f"Could not parse date from filename {log_file.name}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to clean all duplicate trades: {e}")
