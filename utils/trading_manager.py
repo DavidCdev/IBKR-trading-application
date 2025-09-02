@@ -263,11 +263,19 @@ class TradingManager:
             with self._config_lock:
                 risk_levels_snapshot = list(self.risk_levels) if self.risk_levels else []
 
-            for risk_level in risk_levels_snapshot:
+            # Sort risk levels by loss_threshold in descending order (highest first)
+            # This ensures we find the highest threshold that P&L has NOT dropped below
+            sorted_risk_levels = sorted(risk_levels_snapshot, 
+                                      key=lambda x: float(x.get('loss_threshold', 0)), 
+                                      reverse=True)
+
+            for risk_level in sorted_risk_levels:
                 loss_threshold = float(risk_level.get('loss_threshold', 0))
                 account_trade_limit = float(risk_level.get('account_trade_limit', 100))
 
-                if current_pnl_percent >= loss_threshold:
+                # Find the highest threshold that P&L has NOT dropped below
+                # If current P&L loss is less than the threshold, we haven't breached this level yet
+                if current_pnl_percent < loss_threshold:
                     # Calculate trade limit as percentage of account value
                     if self._account_value > 0:
                         max_trade_value = (account_trade_limit / 100) * self._account_value
@@ -277,6 +285,16 @@ class TradingManager:
                     else:
                         logger.warning(f"Account value is {self._account_value}, cannot calculate tiered risk limit")
                         return 0.0
+
+            # If P&L has dropped below all thresholds, use the most restrictive (last) level
+            if sorted_risk_levels:
+                most_restrictive_level = sorted_risk_levels[-1]  # Lowest threshold (most restrictive)
+                account_trade_limit = float(most_restrictive_level.get('account_trade_limit', 100))
+                if self._account_value > 0:
+                    max_trade_value = (account_trade_limit / 100) * self._account_value
+                    logger.info(
+                        f"P&L {current_pnl_percent}% exceeded all thresholds, using most restrictive level: Limit={account_trade_limit}%, MaxValue=${max_trade_value:.2f}")
+                    return max_trade_value
 
             # If no risk level matches, use a conservative default
             # This ensures we don't bypass PDT buffer constraints
@@ -747,8 +765,8 @@ class TradingManager:
 
                 logger.info(f"Position immediately tracked as pending: {symbol}, {quantity} contracts")
 
-                # Place bracket orders for risk management
-                await self._place_bracket_orders(trade.order.orderId, contract, quantity, option_price, option_type)
+                # NOTE: Bracket orders will be placed AFTER the main entry order is filled
+                # This is handled in handle_order_fill() method
 
                 # Notify hotkey manager that submission is complete and successful
                 self._notify_hotkey_manager(False)
@@ -1360,17 +1378,26 @@ class TradingManager:
             with self._config_lock:
                 risk_levels_snapshot = list(self.risk_levels) if self.risk_levels else []
 
-            for risk_level in risk_levels_snapshot:
+            # Sort risk levels by loss_threshold in descending order (highest first)
+            # This ensures we find the highest threshold that P&L has NOT dropped below
+            sorted_risk_levels = sorted(risk_levels_snapshot, 
+                                      key=lambda x: float(x.get('loss_threshold', 0)), 
+                                      reverse=True)
+
+            for risk_level in sorted_risk_levels:
                 loss_threshold = float(risk_level.get('loss_threshold', 0))
 
-                if current_pnl_percent >= loss_threshold:
+                # Find the highest threshold that P&L has NOT dropped below
+                # If current P&L loss is less than the threshold, we haven't breached this level yet
+                if current_pnl_percent < loss_threshold:
                     logger.info(f"Selected risk level: PnL={current_pnl_percent}%, Threshold={loss_threshold}%")
                     return risk_level
 
-            # Return first risk level as default
-            if risk_levels_snapshot:
-                logger.info("Using default risk level")
-                return risk_levels_snapshot[0]
+            # If P&L has dropped below all thresholds, use the most restrictive (last) level
+            if sorted_risk_levels:
+                most_restrictive_level = sorted_risk_levels[-1]  # Lowest threshold (most restrictive)
+                logger.info(f"P&L {current_pnl_percent}% exceeded all thresholds, using most restrictive level")
+                return most_restrictive_level
 
             return None
 
@@ -1636,6 +1663,17 @@ class TradingManager:
                     order_data = self._open_orders[order_id]
                     if order_data['type'] == 'BUY':
                         self._update_position_from_fill(order_data, filled_quantity, fill_price)
+                        
+                        # CRITICAL: Place bracket orders AFTER the main entry order is filled
+                        # This ensures the entry price is accurate and the orders are properly linked
+                        asyncio.create_task(self._place_bracket_orders(
+                            order_id, 
+                            order_data['contract'], 
+                            filled_quantity, 
+                            fill_price, 
+                            order_data['option_type']
+                        ))
+                        
                     elif order_data['type'] == 'SELL':
                         # For SELL orders, update position tracking
                         self._update_position_from_sell_fill(order_data, filled_quantity, fill_price)
