@@ -184,6 +184,7 @@ class TradingManager:
             logger.info(f"Trading manager updating account value: {self._account_value} -> {account_value}")
             self._account_value = account_value
         if daily_pnl_percent is not None:
+            logger.info(f"Trading manager updating daily P&L: {self._daily_pnl_percent}% -> {daily_pnl_percent}%")
             self._daily_pnl_percent = daily_pnl_percent
 
     def _calculate_order_quantity(self, option_price: float) -> int:
@@ -260,6 +261,10 @@ class TradingManager:
         """Calculate maximum trade value based on current daily P&L and risk levels"""
         try:
             current_pnl_percent = abs(self._daily_pnl_percent)
+            
+            # DEBUG: Log current P&L data for troubleshooting
+            logger.info(f"Risk calculation - Daily P&L: {self._daily_pnl_percent}%, Account Value: ${self._account_value:.2f}")
+            
             with self._config_lock:
                 risk_levels_snapshot = list(self.risk_levels) if self.risk_levels else []
 
@@ -268,6 +273,8 @@ class TradingManager:
             sorted_risk_levels = sorted(risk_levels_snapshot, 
                                       key=lambda x: float(x.get('loss_threshold', 0)), 
                                       reverse=True)
+
+            logger.info(f"Available risk levels: {[(float(rl.get('loss_threshold', 0)), float(rl.get('account_trade_limit', 100))) for rl in sorted_risk_levels]}")
 
             for risk_level in sorted_risk_levels:
                 loss_threshold = float(risk_level.get('loss_threshold', 0))
@@ -862,27 +869,55 @@ class TradingManager:
                 sell_quantity = quantity
 
             # Get current pricing data for the position
+            # CRITICAL FIX: Use position contract for pricing, not tracked market data
             pricing_data = None
             try:
                 contract_obj = position.get('contract')
-                sec_type = getattr(contract_obj, 'secType', '').upper() if contract_obj else ''
-                right = getattr(contract_obj, 'right', '').upper() if contract_obj else ''
+                if not contract_obj:
+                    logger.error(f"No contract object in position data for {symbol}")
+                    self._last_action_message = f"Cannot SELL: invalid position contract for {symbol}."
+                    return False
+                
+                sec_type = getattr(contract_obj, 'secType', '').upper()
+                right = getattr(contract_obj, 'right', '').upper()
+                
+                # For options, we need to get pricing data for the SPECIFIC contract we own
+                # This ensures we're selling the exact contract in our position, not the currently tracked one
                 if sec_type == 'OPT':
+                    # Use the position's specific contract details to get pricing
+                    # This prevents the state mismatch bug where we'd use tracked contract instead of owned contract
+                    strike = getattr(contract_obj, 'strike', 0)
+                    expiration = getattr(contract_obj, 'lastTradeDateOrContractMonth', '')
+                    
+                    # Try to get pricing from the position's specific contract
+                    # If not available, use a conservative fallback
                     if right == 'C':
-                        pricing_data = self._current_call_option
+                        # Check if current call option matches our position's strike/expiration
+                        if (self._current_call_option and 
+                            self._current_call_option.get("Strike") == strike and
+                            self._current_call_option.get("Expiration") == expiration):
+                            pricing_data = self._current_call_option
                     elif right == 'P':
-                        pricing_data = self._current_put_option
-                # Fallbacks based on symbol string if contract info missing
+                        # Check if current put option matches our position's strike/expiration
+                        if (self._current_put_option and 
+                            self._current_put_option.get("Strike") == strike and
+                            self._current_put_option.get("Expiration") == expiration):
+                            pricing_data = self._current_put_option
+                
+                # Fallback pricing if we can't get specific contract pricing
                 if pricing_data is None:
-                    if "CALL" in symbol.upper():
-                        pricing_data = self._current_call_option
-                    elif "PUT" in symbol.upper():
-                        pricing_data = self._current_put_option
-                # Stock pricing fallback
-                if pricing_data is None:
-                    pricing_data = {"Bid": self._underlying_price * 0.999, "Ask": self._underlying_price * 1.001}
-            except Exception:
-                pricing_data = {"Bid": self._underlying_price * 0.999, "Ask": self._underlying_price * 1.001}
+                    # Use conservative pricing based on underlying
+                    if sec_type == 'OPT':
+                        # For options, use a conservative spread around underlying price
+                        pricing_data = {"Bid": self._underlying_price * 0.95, "Ask": self._underlying_price * 1.05}
+                    else:
+                        # For stocks, use tight spread
+                        pricing_data = {"Bid": self._underlying_price * 0.999, "Ask": self._underlying_price * 1.001}
+                        
+            except Exception as e:
+                logger.error(f"Error getting pricing data for position {symbol}: {e}")
+                # Conservative fallback
+                pricing_data = {"Bid": self._underlying_price * 0.95, "Ask": self._underlying_price * 1.05}
 
             if not pricing_data:
                 logger.error("No pricing data available for position")
@@ -907,23 +942,15 @@ class TradingManager:
                 order = self._create_adaptive_order("SELL", sell_quantity, limit_price)
 
                 # Create contract (reuse from position if available)
+                # CRITICAL FIX: Always use the exact contract from position data
                 contract = position.get('contract')
                 logger.info(f"Position contract: {contract}, type: {type(contract)}")
 
-                # Validate contract object
+                # Validate contract object - FAIL SAFELY if invalid
                 if not contract or not hasattr(contract, 'symbol'):
-                    logger.warning("Invalid contract object from position, attempting to recreate")
-                    if "CALL" in symbol.upper() or "PUT" in symbol.upper():
-                        # Option contract
-                        strike = pricing_data.get("Strike", self._underlying_price)
-                        option_type = "CALL" if "CALL" in symbol.upper() else "PUT"
-                        contract = self._create_option_contract(option_type, strike)
-                    else:
-                        # Stock contract - create stock contract
-                        contract = self._create_stock_contract(symbol)
-                        if not contract:
-                            logger.error(f"Failed to create stock contract for {symbol}")
-                            return False
+                    logger.error(f"Invalid contract object in position data for {symbol}")
+                    self._last_action_message = f"Cannot SELL: invalid position contract for {symbol}."
+                    return False
 
                 # Ensure routing fields are set and submit limit order
                 contract = self._ensure_contract_routable(contract)
@@ -959,20 +986,15 @@ class TradingManager:
                 return True
             else:
                 # Create contract
+                # CRITICAL FIX: Always use the exact contract from position data
                 contract = position.get('contract')
                 logger.info(f"Position contract: {contract}, type: {type(contract)}")
 
-                # Validate contract object
+                # Validate contract object - FAIL SAFELY if invalid
                 if not contract or not hasattr(contract, 'symbol'):
-                    logger.warning("Invalid contract object from position, attempting to recreate")
-                    if "CALL" in symbol.upper() or "PUT" in symbol.upper():
-                        pass
-                    else:
-                        # Stock contract - create stock contract
-                        contract = self._create_stock_contract(symbol)
-                        if not contract:
-                            logger.error(f"Failed to create stock contract for {symbol}")
-                            return False
+                    logger.error(f"Invalid contract object in position data for {symbol}")
+                    self._last_action_message = f"Cannot SELL: invalid position contract for {symbol}."
+                    return False
 
                 # Ensure routing fields are set and submit market order
                 contract = self._ensure_contract_routable(contract)
@@ -1586,6 +1608,7 @@ class TradingManager:
                     position.update({
                         'position_size': filled_quantity,
                         'entry_price': fill_price,
+                        'contract': order_data['contract'],  # CRITICAL: Store the exact contract
                         'status': 'active',  # Mark as active (filled)
                         'fill_time': datetime.now(),
                         'pnl_percent': 0.0
