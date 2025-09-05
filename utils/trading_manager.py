@@ -597,19 +597,23 @@ class TradingManager:
             elif action.upper() == "SELL":
                 if price:
                     # Limit order for sell
+                    logger.info(f"DEBUG: Creating SELL limit order with price: {price}")
                     order = Order(
                         action="SELL",
                         totalQuantity=quantity,
                         orderType="LMT",
                         lmtPrice=price
                     )
+                    logger.info(f"DEBUG: Order created - Type: {order.orderType}, LmtPrice: {getattr(order, 'lmtPrice', 'NOT SET')}")
                 else:
                     # Market order for sell
+                    logger.info(f"DEBUG: Creating SELL market order (no price provided)")
                     order = Order(
                         action="SELL",
                         totalQuantity=quantity,
                         orderType="MKT"
                     )
+                    logger.info(f"DEBUG: Market order created - Type: {order.orderType}")
             else:
                 raise ValueError(f"Invalid action: {action}")
 
@@ -927,6 +931,9 @@ class TradingManager:
             bid_price = pricing_data.get("Bid", 0)
             ask_price = pricing_data.get("Ask", 0)
             mid_price = (bid_price + ask_price) / 2
+            
+            logger.info(f"DEBUG: Midpoint calculation - Bid: ${bid_price:.4f}, Ask: ${ask_price:.4f}, Mid: ${mid_price:.4f}")
+            logger.info(f"DEBUG: Pricing data timestamp: {pricing_data.get('timestamp', 'N/A')}")
 
             if use_chase_logic:
                 # Chase logic: Start with limit order at (midpoint - trade_delta)
@@ -940,6 +947,11 @@ class TradingManager:
                         f"Adjusted limit price from ${raw_limit_price:.4f} to ${limit_price:.2f} for tick size compliance")
 
                 order = self._create_adaptive_order("SELL", sell_quantity, limit_price)
+                
+                # DEBUG: Log order details to identify limit price issue
+                logger.info(f"DEBUG: Created order type: {order.orderType}, limit price: {getattr(order, 'lmtPrice', 'NOT SET')}")
+                logger.info(f"DEBUG: Order action: {order.action}, quantity: {order.totalQuantity}")
+                logger.info(f"DEBUG: Full order object: {order}")
 
                 # Create contract (reuse from position if available)
                 # CRITICAL FIX: Always use the exact contract from position data
@@ -955,6 +967,7 @@ class TradingManager:
                 # Ensure routing fields are set and submit limit order
                 contract = self._ensure_contract_routable(contract)
                 logger.info(f"Submitting limit order: {sell_quantity} contracts at ${limit_price:.2f}")
+                logger.info(f"DEBUG: Final order before submission - Type: {order.orderType}, LmtPrice: {getattr(order, 'lmtPrice', 'NOT SET')}")
                 trade = self.ib.placeOrder(contract, order)
 
                 # Track for chase logic
@@ -996,22 +1009,27 @@ class TradingManager:
                     self._last_action_message = f"Cannot SELL: invalid position contract for {symbol}."
                     return False
 
-                # Ensure routing fields are set and submit market order
+                # Ensure routing fields are set and submit limit order
                 contract = self._ensure_contract_routable(contract)
 
-                # CRITICAL FIX: Actually submit the market order to IB
-                market_order = self._create_adaptive_order("SELL", sell_quantity)
+                # CRITICAL FIX: Use limit order even in non-chase mode for better execution
+                # Calculate limit price using midpoint - trade_delta
+                raw_limit_price = mid_price - self.trade_delta
+                limit_price = validate_and_round_price(raw_limit_price, f"SELL limit order for {symbol}")
+                
+                logger.info(f"DEBUG: Non-chase mode - Creating limit order at ${limit_price:.2f}")
+                limit_order = self._create_adaptive_order("SELL", sell_quantity, limit_price)
                 try:
-                    trade = self.ib.placeOrder(contract, market_order)
+                    trade = self.ib.placeOrder(contract, limit_order)
                     logger.info(
-                        f"Market order submitted to IB: {sell_quantity} contracts, order ID: {trade.order.orderId}")
+                        f"Limit order submitted to IB: {sell_quantity} contracts at ${limit_price:.2f}, order ID: {trade.order.orderId}")
                 except Exception as submit_error:
-                    logger.error(f"Failed to submit market order to IB: {submit_error}")
-                    self._last_action_message = f"Failed to submit market order: {str(submit_error)}"
+                    logger.error(f"Failed to submit limit order to IB: {submit_error}")
+                    self._last_action_message = f"Failed to submit limit order: {str(submit_error)}"
                     return False
 
-                logger.info(f"SELL order submitted: {sell_quantity} contracts at market")
-                self._last_action_message = f"SELL submitted: {sell_quantity} contracts at market."
+                logger.info(f"SELL order submitted: {sell_quantity} contracts at ${limit_price:.2f}")
+                self._last_action_message = f"SELL submitted: {sell_quantity} contracts at ${limit_price:.2f}."
 
                 # Notify hotkey manager that submission is complete and successful
                 self._notify_hotkey_manager(False)
@@ -1314,6 +1332,8 @@ class TradingManager:
         """Place bracket orders (stop loss and take profit) for risk management"""
         global stop_loss_price, take_profit_price
         try:
+            logger.info(f"DEBUG: Attempting to place bracket orders for order {parent_order_id}, entry price: {entry_price}")
+            
             # Get current risk level based on daily P&L
             current_risk_level = self._get_current_risk_level()
             if not current_risk_level:
@@ -1322,9 +1342,12 @@ class TradingManager:
 
             stop_loss_percent = current_risk_level.get('stop_loss')
             profit_gain_percent = current_risk_level.get('profit_gain')
+            
+            logger.info(f"DEBUG: Risk level - Stop Loss: '{stop_loss_percent}', Profit Gain: '{profit_gain_percent}'")
+            logger.info(f"DEBUG: Risk level type - Stop Loss: {type(stop_loss_percent)}, Profit Gain: {type(profit_gain_percent)}")
 
-            # If both are empty, no bracket orders needed
-            if not stop_loss_percent and not profit_gain_percent:
+            # If both are empty or empty strings, no bracket orders needed
+            if (not stop_loss_percent or stop_loss_percent == "") and (not profit_gain_percent or profit_gain_percent == ""):
                 logger.info("No stop loss or profit gain configured, skipping bracket orders")
                 return
 
@@ -1336,7 +1359,8 @@ class TradingManager:
             take_profit_order = None
 
             # Build orders (do not transmit yet) so we can set OCA if needed
-            if stop_loss_percent:
+            if stop_loss_percent and stop_loss_percent != "":
+                logger.info(f"DEBUG: Creating stop loss order with {stop_loss_percent}%")
                 raw_stop_loss_price = self._calculate_stop_loss_price(entry_price, float(stop_loss_percent))
                 # CRITICAL FIX: Validate and round stop loss price to conform to IBKR tick size requirements
                 stop_loss_price = validate_and_round_price(raw_stop_loss_price, f"Stop loss order for {option_type}")
@@ -1344,7 +1368,11 @@ class TradingManager:
                     logger.info(
                         f"Adjusted stop loss price from ${raw_stop_loss_price:.4f} to ${stop_loss_price:.2f} for tick size compliance")
                 stop_loss_order = self._create_stop_loss_order(quantity, stop_loss_price)
-            if profit_gain_percent:
+            else:
+                logger.info(f"DEBUG: Skipping stop loss order - value: '{stop_loss_percent}'")
+                
+            if profit_gain_percent and profit_gain_percent != "":
+                logger.info(f"DEBUG: Creating take profit order with {profit_gain_percent}%")
                 raw_take_profit_price = self._calculate_take_profit_price(entry_price, float(profit_gain_percent))
                 # CRITICAL FIX: Validate and round take profit price to conform to IBKR tick size requirements
                 take_profit_price = validate_and_round_price(raw_take_profit_price,
@@ -1353,6 +1381,8 @@ class TradingManager:
                     logger.info(
                         f"Adjusted take profit price from ${raw_take_profit_price:.4f} to ${take_profit_price:.2f} for tick size compliance")
                 take_profit_order = self._create_take_profit_order(quantity, take_profit_price)
+            else:
+                logger.info(f"DEBUG: Skipping take profit order - value: '{profit_gain_percent}'")
 
             # If both exist, set OCA group so that one cancels the other at broker side
             if stop_loss_order and take_profit_order:

@@ -44,19 +44,19 @@ class AppConfig:
                         "loss_threshold": "0",
                         "account_trade_limit": "30",
                         "stop_loss": "20",
-                        "profit_gain": ""
+                        "profit_gain": "30"
                     },
                     {
                         "loss_threshold": "15",
                         "account_trade_limit": "10",
                         "stop_loss": "15",
-                        "profit_gain": ""
+                        "profit_gain": "25"
                     },
                     {
                         "loss_threshold": "25",
                         "account_trade_limit": "5",
                         "stop_loss": "5",
-                        "profit_gain": ""
+                        "profit_gain": "20"
                     }
                 ],
                 "max_trade_value": 475.0,

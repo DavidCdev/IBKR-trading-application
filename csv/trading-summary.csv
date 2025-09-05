@@ -1,2 +1,3 @@
-Date,Total Balance (CAD),Daily PnL,Starting Balance,High water mark,Profitable Trades,Profit Amount,Loss Trades,Loss Amount
-2025-08-29,984233.15,-2013.7951048305704,0,0,0,0,0,0
+Total Balance (CAD),Daily PnL,Starting Balance,High water mark,Profitable Trades,Profit Amount,Loss Trades,Loss Amount,Date
+984233.15,-2013.7951048305704,0.0,0.0,0,0.0,0,0.0,
+986823.69,286.25285399649664,986534.6911025405,986823.69,1,20.99999999999995,36,53.99999999999885,2025-09-05

@@ -1601,6 +1601,7 @@ class IBDataCollector:
         losses = []
 
         try:
+            logger.info(f"DEBUG: Calculating statistics from {len(self.closed_trades)} closed trades")
             for trade in self.closed_trades:
                 try:
                     if not isinstance(trade, dict):
@@ -1786,6 +1787,9 @@ class IBDataCollector:
             
             win_rate = (len(wins) / total_trades) * 100 if total_trades > 0 else 0
             
+            logger.info(f"DEBUG: Statistics calculation - Wins: {len(wins)}, Losses: {len(losses)}, Total: {total_trades}")
+            logger.info(f"DEBUG: Win sum: {sum(wins):.2f}, Loss sum: {sum(losses):.2f}")
+            
             stats = {
                 'Win_Rate': win_rate,
                 'Total_Wins_Count': len(wins),
@@ -1797,6 +1801,8 @@ class IBDataCollector:
                 'Average_Loss': sum(losses) / len(losses) if losses else 0,
                 'Profit_Factor': sum(wins) / sum(losses) if losses else float('inf')
             }
+            
+            logger.info(f"DEBUG: Final statistics: {stats}")
             self.profitable_trades = stats.get('Total_Wins_Count', 0)
             self.profit_amount = stats.get('Total_Wins_Sum', 0)
             self.loss_trades = stats.get('Total_Losses_Count', 0)
