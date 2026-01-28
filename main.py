@@ -16,7 +16,7 @@ logger = get_logger("MAIN")
 
 
 def main():
-    """Main application entry point"""
+
     # Set up asyncio policy for Windows
     if sys.platform.startswith('win'):
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
